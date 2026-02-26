@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+/* 可選：你想要的全域底色（也可全部用 App 裡的 bg-neutral-950） */
+html, body, #root {
+  height: 100%;
+}
