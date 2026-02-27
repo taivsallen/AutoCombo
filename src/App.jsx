@@ -6,6 +6,7 @@ import pImg from './assets/p.png';
 import lImg from './assets/l.png';
 import dImg from './assets/d.png';
 import hImg from './assets/h.png';
+import logoImg from './assets/logo.png';
 
 const ORB_TYPES = {
   WATER: { id: 0, img: wImg },
@@ -1302,367 +1303,384 @@ const buildPathStringAndMarkers = (fullPath) => {
 };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white font-sans flex items-center justify-center p-4">
-       <div className="max-w-5xl w-full">
-        {/* 四組模式切換器 - 改為比例 2:2:1:1 */}
-        <div className="grid grid-cols-6 gap-1.5 mb-8 text-[14px]">
-          {/* 排向 - 佔 2/6 */}
-          <div className="col-span-2 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
-            <button onClick={() => setSolverMode('horizontal')} className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${solverMode === 'horizontal' ? 'bg-blue-600 text-white' : 'text-neutral-500 hover:bg-neutral-800'}`}>
-              <Rows size={14} /> 橫排
-            </button>
-            <button onClick={() => setSolverMode('vertical')} className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${solverMode === 'vertical' ? 'bg-indigo-600 text-white' : 'text-neutral-500 hover:bg-neutral-800'}`}>
-              直排 <Columns size={14} />
-            </button>
-          </div>
-          {/* 優先級 - 佔 2/6 */}
-          <div className="col-span-2 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
-            <button onClick={() => setPriorityMode('combo')} className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${priorityMode === 'combo' ? 'bg-emerald-600 text-white' : 'text-neutral-500 hover:bg-neutral-800'}`}>
-              <Trophy size={14} /> 消除
-            </button>
-            <button onClick={() => setPriorityMode('steps')} className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${priorityMode === 'steps' ? 'bg-amber-600 text-white' : 'text-neutral-500 hover:bg-neutral-800'}`}>
-              步數 <Footprints size={14} />
-            </button>
-          </div>
-          {/* 天降 - 佔 1/6 */}
-          <div className="col-span-1 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
-            <button onClick={() => setSkyfallEnabled(!skyfallEnabled)} className={`flex-1 flex items-center justify-center rounded-lg font-black transition-all ${skyfallEnabled ? 'bg-purple-600 text-white' : 'text-neutral-500 hover:bg-neutral-800'}`}>
-              天降 <CloudLightning size={14} />
-            </button>
-          </div>
-          {/* 斜轉 - 佔 1/6 */}
-          <div className="col-span-1 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
-            <button onClick={() => setDiagonalEnabled(!diagonalEnabled)} className={`flex-1 flex items-center justify-center rounded-lg font-black transition-all ${diagonalEnabled ? 'bg-rose-600 text-white' : 'text-neutral-500 hover:bg-neutral-800'}`}>
-              斜轉 {diagonalEnabled ? <MoveUpRight size={14} /> : <Move size={14} />}
-            </button>
-          </div>
-        </div>
+    <div className="min-h-screen bg-neutral-950 text-white font-sans">
+		<div className="sticky top-0 z-[3000] bg-neutral-900/95 backdrop-blur border-b border-white/10">
+		  <div className="mx-auto max-w-5xl w-full px-4 py-3 flex items-center justify-between">
+			<div className="flex items-center gap-3">
+			  {/* 左邊可以放你的 logo（可刪） */}
+			  <img src={logoImg} className="w-8 h-8" alt="" />
 
-        {/* 數據面板 */}
-        <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-4">
-
-		  <div className="bg-neutral-900/50 p-3 rounded-xl border border-neutral-800 flex items-center justify-center gap-2">
-			<span className="text-xs text-neutral-500 font-bold uppercase italic">
-			  上限組數:
-			</span>
-			<span className="text-2xl font-black text-white/40">
-			  {stats.theoreticalMax}
-			</span>
-		  </div>
-
-		  <div className="bg-blue-900/20 p-3 rounded-xl border border-blue-500/30 ring-1 ring-blue-500/20 flex items-center justify-center gap-2">
-			<span className="text-xs text-blue-400 font-bold uppercase italic">
-			  總消除組數:
-			</span>
-			<span className="text-2xl font-black text-blue-400">
-			  {stats.combos}
-			  {stats.skyfallCombos > 0 ? `+${stats.skyfallCombos}` : ''}
-			</span>
-		  </div>
-
-		  <div className="bg-indigo-900/20 p-3 rounded-xl border border-indigo-500/30 ring-1 ring-indigo-500/20 flex items-center justify-center gap-2">
-			<span className="text-xs text-indigo-400 font-bold uppercase italic">
-			  {solverMode === 'horizontal' ? '橫向:' : '直向:'}
-			</span>
-			<span className="text-2xl font-black text-indigo-400">
-			  {solverMode === 'horizontal'
-				? stats.horizontalCombos
-				: stats.verticalCombos}
-			</span>
-		  </div>
-
-		  <div className="bg-neutral-900/50 p-3 rounded-xl border border-neutral-800 flex items-center justify-center gap-2">
-			<span className="text-xs text-neutral-500 font-bold uppercase italic">
-			  消除符石數:
-			</span>
-			<span className="text-2xl font-black text-purple-400">
-			  {stats.clearedOrbs}
-			</span>
-		  </div>
-
-		  <div className="bg-neutral-900/50 p-3 rounded-xl border border-neutral-800 flex items-center justify-center gap-2">
-			<span className="text-xs text-neutral-500 font-bold uppercase italic">
-			  步數:
-			</span>
-			<span className="text-2xl font-black text-emerald-400">
-			  {stats.steps}
-			</span>
-		  </div>
-
-		</div>
-
-        {/* 基本設定面板 */}
-        <div className="mb-3 bg-neutral-900/80 rounded-2xl border border-neutral-800 overflow-hidden shadow-xl">
-          <div className="w-full p-3 flex items-center justify-between bg-blue-900/10 border-b border-neutral-800">
-            <button onClick={() => setShowBasicSettings(!showBasicSettings)} className="flex items-center gap-2 text-[14px] font-bold text-blue-300 pl-2"><Settings size={18} /> 基本設定與目標</button>
-            <div className="flex items-center gap-3 pr-2"><button onClick={resetBasic} className="flex items-center gap-1.5 px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs font-bold transition-all border border-neutral-700 shadow-sm"><RotateCcw size={14} /> 恢復預設</button><span className="text-xs text-neutral-600 uppercase font-bold cursor-pointer" onClick={() => setShowBasicSettings(!showBasicSettings)}>{showBasicSettings ? '收起' : '展開'}</span></div>
-          </div>
-          {showBasicSettings && (
-			  <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-6 bg-neutral-900/40">
-				<ParamSlider
-				  label="🎯 期望目標 Combo"
-				  value={targetCombos}
-				  min={1}
-				  max={stats.theoreticalMax || 1}
-				  step={1}
-				  onChange={(v) => setTargetCombos(parseInt(v, 10))}
-				/>
-				<ParamSlider
-				  label="⏱️ 播放速度 (s/步)"
-				  value={config.replaySpeed / 1000}
-				  min={0.08}
-				  max={0.45}
-				  step={0.01}
-				  displayValue={(config.replaySpeed / 1000).toFixed(2)}
-				  onChange={(v) => updateParam('replaySpeed', v * 1000)}
-				/>
-				<ParamSlider
-				  label="📏 步數上限 (Steps)"
-				  value={config.maxSteps}
-				  min={20}
-				  max={240}
-				  step={1}
-				  onChange={(v) => updateParam('maxSteps', v)}
-				/>
+			  <div className="text-lg md:text-xl font-black tracking-wide">
+				Tower of Saviors神魔之塔自動轉珠模擬器
 			  </div>
-			)}
-        </div>
+			</div>
 
-        {/* 進階設定面板 */}
-        <div className="mb-6 bg-neutral-900/80 rounded-2xl border border-neutral-800 overflow-hidden shadow-xl">
-          <div className="w-full p-3 flex items-center justify-between bg-zinc-800/30 border-b border-neutral-800">
-            <button onClick={() => setShowConfig(!showConfig)} className="flex items-center gap-2 text-[14px] font-bold text-neutral-400 pl-2"><Settings2 size={18} /> 進階搜尋參數調優</button>
-            <div className="flex items-center gap-3 pr-2"><button onClick={resetAdvanced} className="flex items-center gap-1.5 px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs font-bold transition-all border border-neutral-700 shadow-sm"><RotateCcw size={14} /> 恢復預設</button><span className="text-xs text-neutral-600 uppercase font-bold cursor-pointer" onClick={() => setShowConfig(!showConfig)}>{showConfig ? '收起' : '展開'}</span></div>
-          </div>
-          {showConfig && (<div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 border-t border-neutral-800 bg-neutral-900/40">
-              <ParamSlider label="束寬 (Beam Width)" value={config.beamWidth} min={40} max={1050} step={10} onChange={(v) => updateParam('beamWidth', v)} />
-              <ParamSlider label="潛在權重 (Potential)" value={config.potentialWeight} min={0} max={4500} step={50} onChange={(v) => updateParam('potentialWeight', v)} />
-              <ParamSlider label="節點上限" value={config.maxNodes} min={10000} max={600000} step={10000} onChange={(v) => updateParam('maxNodes', v)} />
-              <ParamSlider label="達標後步數懲罰" value={config.stepPenalty} min={0} max={1500} step={50} onChange={(v) => updateParam('stepPenalty', v)} />
-            </div>)}
-        </div>
+			{/* 右邊可以放小按鈕（可刪） */}
+			{/* <button className="px-3 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-sm">?</button> */}
+		  </div>
+		</div>
+		<div className="mx-auto max-w-5xl w-full px-4 py-4">
+		   <div className="max-w-5xl w-full">
+			{/* 四組模式切換器 - 改為比例 2:2:1:1 */}
+			<div className="grid grid-cols-6 gap-1.5 mb-8 text-[14px]">
+			  {/* 排向 - 佔 2/6 */}
+			  <div className="col-span-2 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
+				<button onClick={() => setSolverMode('horizontal')} className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${solverMode === 'horizontal' ? 'bg-blue-600 text-white' : 'text-neutral-500 hover:bg-neutral-800'}`}>
+				  <Rows size={14} /> 橫排
+				</button>
+				<button onClick={() => setSolverMode('vertical')} className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${solverMode === 'vertical' ? 'bg-indigo-600 text-white' : 'text-neutral-500 hover:bg-neutral-800'}`}>
+				  直排 <Columns size={14} />
+				</button>
+			  </div>
+			  {/* 優先級 - 佔 2/6 */}
+			  <div className="col-span-2 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
+				<button onClick={() => setPriorityMode('combo')} className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${priorityMode === 'combo' ? 'bg-emerald-600 text-white' : 'text-neutral-500 hover:bg-neutral-800'}`}>
+				  <Trophy size={14} /> 消除
+				</button>
+				<button onClick={() => setPriorityMode('steps')} className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${priorityMode === 'steps' ? 'bg-amber-600 text-white' : 'text-neutral-500 hover:bg-neutral-800'}`}>
+				  步數 <Footprints size={14} />
+				</button>
+			  </div>
+			  {/* 天降 - 佔 1/6 */}
+			  <div className="col-span-1 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
+				<button onClick={() => setSkyfallEnabled(!skyfallEnabled)} className={`flex-1 flex items-center justify-center rounded-lg font-black transition-all ${skyfallEnabled ? 'bg-purple-600 text-white' : 'text-neutral-500 hover:bg-neutral-800'}`}>
+				  天降 <CloudLightning size={14} />
+				</button>
+			  </div>
+			  {/* 斜轉 - 佔 1/6 */}
+			  <div className="col-span-1 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
+				<button onClick={() => setDiagonalEnabled(!diagonalEnabled)} className={`flex-1 flex items-center justify-center rounded-lg font-black transition-all ${diagonalEnabled ? 'bg-rose-600 text-white' : 'text-neutral-500 hover:bg-neutral-800'}`}>
+				  斜轉 {diagonalEnabled ? <MoveUpRight size={14} /> : <Move size={14} />}
+				</button>
+			  </div>
+			</div>
 
-        {/* 棋盤容器 */}
-        <div style={{ contain: 'layout paint' }} ref={boardWrapRef} className="relative bg-neutral-900 p-3 rounded-3xl shadow-2xl border-2 border-neutral-800 mb-6 mx-auto w-fit overflow-visible" >
-          <div ref={boardInnerRef} className="relative overflow-visible">
-            <div className="grid grid-cols-6 gap-0">
-			  {renderBoard.map((row, r) => (
-				<React.Fragment key={r}>
-				  {!solving && r === 1 && (
-					  <div className="overflow-visible col-span-6 h-2 bg-white z-50 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
-					)}
+			{/* 數據面板 */}
+			<div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-4">
 
-				  {row.map((orb, c) => {
-					const isMoving =
-					  !solving &&
-					  isReplaying &&
-					  currentStep >= 0 &&               // ✅ 從第 0 步才開始算“移動”
-					  path[currentStep]?.r === r &&
-					  path[currentStep]?.c === c;
+			  <div className="bg-neutral-900/50 p-3 rounded-xl border border-neutral-800 flex items-center justify-center gap-2">
+				<span className="text-xs text-neutral-500 font-bold uppercase italic">
+				  上限組數:
+				</span>
+				<span className="text-2xl font-black text-white/40">
+				  {stats.theoreticalMax}
+				</span>
+			  </div>
+
+			  <div className="bg-blue-900/20 p-3 rounded-xl border border-blue-500/30 ring-1 ring-blue-500/20 flex items-center justify-center gap-2">
+				<span className="text-xs text-blue-400 font-bold uppercase italic">
+				  總消除組數:
+				</span>
+				<span className="text-2xl font-black text-blue-400">
+				  {stats.combos}
+				  {stats.skyfallCombos > 0 ? `+${stats.skyfallCombos}` : ''}
+				</span>
+			  </div>
+
+			  <div className="bg-indigo-900/20 p-3 rounded-xl border border-indigo-500/30 ring-1 ring-indigo-500/20 flex items-center justify-center gap-2">
+				<span className="text-xs text-indigo-400 font-bold uppercase italic">
+				  {solverMode === 'horizontal' ? '橫向:' : '直向:'}
+				</span>
+				<span className="text-2xl font-black text-indigo-400">
+				  {solverMode === 'horizontal'
+					? stats.horizontalCombos
+					: stats.verticalCombos}
+				</span>
+			  </div>
+
+			  <div className="bg-neutral-900/50 p-3 rounded-xl border border-neutral-800 flex items-center justify-center gap-2">
+				<span className="text-xs text-neutral-500 font-bold uppercase italic">
+				  消除符石數:
+				</span>
+				<span className="text-2xl font-black text-purple-400">
+				  {stats.clearedOrbs}
+				</span>
+			  </div>
+
+			  <div className="bg-neutral-900/50 p-3 rounded-xl border border-neutral-800 flex items-center justify-center gap-2">
+				<span className="text-xs text-neutral-500 font-bold uppercase italic">
+				  步數:
+				</span>
+				<span className="text-2xl font-black text-emerald-400">
+				  {stats.steps}
+				</span>
+			  </div>
+
+			</div>
+
+			{/* 基本設定面板 */}
+			<div className="mb-3 bg-neutral-900/80 rounded-2xl border border-neutral-800 overflow-hidden shadow-xl">
+			  <div className="w-full p-3 flex items-center justify-between bg-blue-900/10 border-b border-neutral-800">
+				<button onClick={() => setShowBasicSettings(!showBasicSettings)} className="flex items-center gap-2 text-[14px] font-bold text-blue-300 pl-2"><Settings size={18} /> 基本設定與目標</button>
+				<div className="flex items-center gap-3 pr-2"><button onClick={resetBasic} className="flex items-center gap-1.5 px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs font-bold transition-all border border-neutral-700 shadow-sm"><RotateCcw size={14} /> 恢復預設</button><span className="text-xs text-neutral-600 uppercase font-bold cursor-pointer" onClick={() => setShowBasicSettings(!showBasicSettings)}>{showBasicSettings ? '收起' : '展開'}</span></div>
+			  </div>
+			  {showBasicSettings && (
+				  <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-6 bg-neutral-900/40">
+					<ParamSlider
+					  label="🎯 期望目標 Combo"
+					  value={targetCombos}
+					  min={1}
+					  max={stats.theoreticalMax || 1}
+					  step={1}
+					  onChange={(v) => setTargetCombos(parseInt(v, 10))}
+					/>
+					<ParamSlider
+					  label="⏱️ 播放速度 (s/步)"
+					  value={config.replaySpeed / 1000}
+					  min={0.08}
+					  max={0.45}
+					  step={0.01}
+					  displayValue={(config.replaySpeed / 1000).toFixed(2)}
+					  onChange={(v) => updateParam('replaySpeed', v * 1000)}
+					/>
+					<ParamSlider
+					  label="📏 步數上限 (Steps)"
+					  value={config.maxSteps}
+					  min={20}
+					  max={240}
+					  step={1}
+					  onChange={(v) => updateParam('maxSteps', v)}
+					/>
+				  </div>
+				)}
+			</div>
+
+			{/* 進階設定面板 */}
+			<div className="mb-6 bg-neutral-900/80 rounded-2xl border border-neutral-800 overflow-hidden shadow-xl">
+			  <div className="w-full p-3 flex items-center justify-between bg-zinc-800/30 border-b border-neutral-800">
+				<button onClick={() => setShowConfig(!showConfig)} className="flex items-center gap-2 text-[14px] font-bold text-neutral-400 pl-2"><Settings2 size={18} /> 進階搜尋參數調優</button>
+				<div className="flex items-center gap-3 pr-2"><button onClick={resetAdvanced} className="flex items-center gap-1.5 px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs font-bold transition-all border border-neutral-700 shadow-sm"><RotateCcw size={14} /> 恢復預設</button><span className="text-xs text-neutral-600 uppercase font-bold cursor-pointer" onClick={() => setShowConfig(!showConfig)}>{showConfig ? '收起' : '展開'}</span></div>
+			  </div>
+			  {showConfig && (<div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 border-t border-neutral-800 bg-neutral-900/40">
+				  <ParamSlider label="束寬 (Beam Width)" value={config.beamWidth} min={40} max={1050} step={10} onChange={(v) => updateParam('beamWidth', v)} />
+				  <ParamSlider label="潛在權重 (Potential)" value={config.potentialWeight} min={0} max={4500} step={50} onChange={(v) => updateParam('potentialWeight', v)} />
+				  <ParamSlider label="節點上限" value={config.maxNodes} min={10000} max={600000} step={10000} onChange={(v) => updateParam('maxNodes', v)} />
+				  <ParamSlider label="達標後步數懲罰" value={config.stepPenalty} min={0} max={1500} step={50} onChange={(v) => updateParam('stepPenalty', v)} />
+				</div>)}
+			</div>
+
+			{/* 棋盤容器 */}
+			<div style={{ contain: 'layout paint' }} ref={boardWrapRef} className="relative bg-neutral-900 p-3 rounded-3xl shadow-2xl border-2 border-neutral-800 mb-6 mx-auto w-fit overflow-visible" >
+			  <div ref={boardInnerRef} className="relative overflow-visible">
+				<div className="grid grid-cols-6 gap-0">
+				  {renderBoard.map((row, r) => (
+					<React.Fragment key={r}>
+					  {!solving && r === 1 && (
+						  <div className="overflow-visible col-span-6 h-2 bg-white z-50 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
+						)}
+
+					  {row.map((orb, c) => {
+						const isMoving =
+						  !solving &&
+						  isReplaying &&
+						  currentStep >= 0 &&               // ✅ 從第 0 步才開始算“移動”
+						  path[currentStep]?.r === r &&
+						  path[currentStep]?.c === c;
+						return (
+						  <div
+							key={`${r}-${c}`}
+							data-cell={`${r}-${c}`}
+							className={`relative w-16 h-16 md:w-20 md:h-20 flex items-center justify-center transition-all duration-75
+							  ${r === 0 ? 'ring-2 ring-yellow-400 z-10 rounded-2xl' : 'rounded-2xl'}
+							  ${isMoving ? 'opacity-20 z-40' : 'opacity-100'}
+							`}
+							style={{ backgroundColor: '#171717' }}
+						  >
+							{orb === -1 ? (
+							  <div className="w-[96%] h-[96%] rounded-2xl bg-black/40 border border-white/10" />
+							) : (
+							  <img
+								src={Object.values(ORB_TYPES).find(t => t.id === orb)?.img}
+								className="w-[96%] h-[96%] object-contain pointer-events-none select-none"
+								draggable={false}
+								alt=""
+							  />
+							)}
+						  </div>
+						);
+					  })}
+					</React.Fragment>
+				  ))}
+				</div>
+			   </div>
+			   <svg className="absolute inset-0 pointer-events-none w-full h-full overflow-visible z-[60]" style={{ overflow: 'visible' }}>
+				  <defs>
+					<filter id="glowGreen" x="-50%" y="-50%" width="200%" height="200%">
+					  <feGaussianBlur stdDeviation="3" result="blur" />
+					  <feMerge>
+						<feMergeNode in="blur" />
+						<feMergeNode in="SourceGraphic" />
+					  </feMerge>
+					</filter>
+					<filter id="glowRed" x="-50%" y="-50%" width="200%" height="200%">
+					  <feGaussianBlur stdDeviation="3" result="blur" />
+					  <feMerge>
+						<feMergeNode in="blur" />
+						<feMergeNode in="SourceGraphic" />
+					  </feMerge>
+					</filter>
+				  </defs>
+
+				  {(() => {
+					if (!path || path.length < 2) return null;
+
+					const visiblePath = path.slice(0, currentStep + 1);
+					if (visiblePath.length < 2) return null;
+
+					const { d, start, tip } = buildPathStringAndMarkers(visiblePath);
+
 					return (
-					  <div
-						key={`${r}-${c}`}
-						data-cell={`${r}-${c}`}
-						className={`relative w-16 h-16 md:w-20 md:h-20 flex items-center justify-center transition-all duration-75
-						  ${r === 0 ? 'ring-2 ring-yellow-400 z-10 rounded-2xl' : 'rounded-2xl'}
-						  ${isMoving ? 'opacity-20 z-40' : 'opacity-100'}
-						`}
-						style={{ backgroundColor: '#171717' }}
-					  >
-						{orb === -1 ? (
-						  <div className="w-[96%] h-[96%] rounded-2xl bg-black/40 border border-white/10" />
-						) : (
-						  <img
-							src={Object.values(ORB_TYPES).find(t => t.id === orb)?.img}
-							className="w-[96%] h-[96%] object-contain pointer-events-none select-none"
-							draggable={false}
-							alt=""
+					  <>
+						{start && (
+						  <circle
+							cx={start.x}
+							cy={start.y}
+							r="14"
+							fill="#22c55e"
+							stroke="black"
+							strokeWidth="2"
+							filter="url(#glowGreen)"
 						  />
 						)}
-					  </div>
+
+						<path
+						  d={d}
+						  stroke="white"
+						  strokeWidth="7"
+						  fill="none"
+						  strokeLinecap="round"
+						  strokeLinejoin="round"
+						  opacity="0.85"
+						/>
+
+						{currentStep >= 0 && tip && (
+						  <circle
+							cx={tip.x}
+							cy={tip.y}
+							r="16"
+							fill="#ef4444"
+							stroke="black"
+							strokeWidth="2"
+							filter="url(#glowRed)"
+						  >
+							<animate attributeName="r" values="15;21;15" dur="0.8s" repeatCount="indefinite" />
+							<animate attributeName="opacity" values="1;0.5;1" dur="0.8s" repeatCount="indefinite" />
+						  </circle>
+						)}
+					  </>
 					);
-				  })}
-				</React.Fragment>
-			  ))}
-			</div>
-		   </div>
-		   <svg className="absolute inset-0 pointer-events-none w-full h-full overflow-visible z-[60]" style={{ overflow: 'visible' }}>
-			  <defs>
-				<filter id="glowGreen" x="-50%" y="-50%" width="200%" height="200%">
-				  <feGaussianBlur stdDeviation="3" result="blur" />
-				  <feMerge>
-					<feMergeNode in="blur" />
-					<feMergeNode in="SourceGraphic" />
-				  </feMerge>
-				</filter>
-				<filter id="glowRed" x="-50%" y="-50%" width="200%" height="200%">
-				  <feGaussianBlur stdDeviation="3" result="blur" />
-				  <feMerge>
-					<feMergeNode in="blur" />
-					<feMergeNode in="SourceGraphic" />
-				  </feMerge>
-				</filter>
-			  </defs>
-
-			  {(() => {
-				if (!path || path.length < 2) return null;
-
-				const visiblePath = path.slice(0, currentStep + 1);
-				if (visiblePath.length < 2) return null;
-
-				const { d, start, tip } = buildPathStringAndMarkers(visiblePath);
-
-				return (
-				  <>
-					{start && (
-					  <circle
-						cx={start.x}
-						cy={start.y}
-						r="14"
-						fill="#22c55e"
-						stroke="black"
-						strokeWidth="2"
-						filter="url(#glowGreen)"
+				  })()}
+				</svg>
+			   {floating?.visible && (
+				  <div
+					  className="absolute z-[9999] pointer-events-none flex items-center justify-center"
+					  style={{
+						left: floating.x,
+						top: floating.y,
+						transform: 'translate(-50%, -50%)',
+						width: 120,
+						height: 120,
+					  }}
+					>
+					  <img
+						src={Object.values(ORB_TYPES).find(t => t.id === floating.orbId)?.img}
+						className="w-16 h-16 md:w-20 md:h-20 block"
+						draggable={false}
+						alt=""
 					  />
-					)}
+					</div>
+				)}
+			  {solving && (<div className="absolute inset-0 bg-neutral-950/90 rounded-3xl flex flex-col items-center justify-center z-20 backdrop-blur-xl">
+				  <div className="relative w-24 h-24 mb-6">
+					<div className="absolute inset-0 border-4 border-indigo-500/10 rounded-full"></div>
+					<div className="absolute inset-0 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+					{priorityMode === 'steps' ? <Footprints className="absolute inset-0 m-auto text-amber-400 animate-pulse" size={32} /> : <Trophy className="absolute inset-0 m-auto text-emerald-400 animate-pulse" size={32} />}
+				  </div>
+				  <p className="font-black text-xl text-indigo-500 tracking-[0.2em] animate-pulse uppercase">{skyfallEnabled ? 'Skyfall Analysis' : priorityMode === 'steps' ? 'Optimizing Time' : 'Deep Searching'}</p>
+				</div>)}
+			</div>
 
-					<path
-					  d={d}
-					  stroke="white"
-					  strokeWidth="7"
-					  fill="none"
-					  strokeLinecap="round"
-					  strokeLinejoin="round"
-					  opacity="0.85"
-					/>
+			<div className="flex flex-wrap gap-3 justify-center">
+			  <button onClick={() => initBoard(true)} disabled={solving || isReplaying} className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-20 px-6 py-4 rounded-2xl font-bold transition-all text-sm border border-neutral-700 shadow-md active:scale-95"><RefreshCw size={20} /> 隨機生成</button>
+			  <button onClick={handleOpenEditor} disabled={solving || isReplaying} className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-20 px-6 py-4 rounded-2xl font-bold transition-all text-sm border border-neutral-700 shadow-md active:scale-95"><Edit3 size={20} /> 自訂版面</button>
+			  <div className="flex items-center gap-2">
+			  <button
+				onClick={() => {
+				  if (isReplaying && !isPaused) return pauseReplay();
+				  if (isPaused) return resumeReplay();
 
-					{currentStep >= 0 && tip && (
-					  <circle
-						cx={tip.x}
-						cy={tip.y}
-						r="16"
-						fill="#ef4444"
-						stroke="black"
-						strokeWidth="2"
-						filter="url(#glowRed)"
-					  >
-						<animate attributeName="r" values="15;21;15" dur="0.8s" repeatCount="indefinite" />
-						<animate attributeName="opacity" values="1;0.5;1" dur="0.8s" repeatCount="indefinite" />
-					  </circle>
-					)}
+				  if (!path || path.length === 0) return;
+				  const s = getCellCenterPx(path[0].r, path[0].c);
+				  const startPx = { x: s.x, y: s.y - 30 };
+				  replayPathContinuous(path, startPx);
+				}}
+				disabled={solving || (path.length === 0 && !isReplaying && !isPaused)}
+				className={[
+				  "flex items-center gap-2 px-10 py-4 rounded-2xl font-black shadow-xl transition-all text-base active:scale-95",
+				  (solving ? "opacity-20" : ""),
+				  (isReplaying && !isPaused)
+					? "bg-red-600 hover:bg-red-500 shadow-red-900/40"
+					: isPaused
+					  ? "bg-orange-500 hover:bg-orange-400 shadow-orange-900/30"
+					  : "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/40"
+				].join(" ")}
+			  >
+				{(isReplaying && !isPaused) ? (
+				  <>
+					<Pause size={22} fill="white" /> 暫停播放
 				  </>
-				);
-			  })()}
-			</svg>
-		   {floating?.visible && (
-			  <div
-				  className="absolute z-[9999] pointer-events-none flex items-center justify-center"
-				  style={{
-					left: floating.x,
-					top: floating.y,
-					transform: 'translate(-50%, -50%)',
-					width: 120,
-					height: 120,
-				  }}
+				) : isPaused ? (
+				  <>
+					<Play size={22} fill="white" /> 繼續播放
+				  </>
+				) : (
+				  <>
+					<Play size={22} fill="white" /> 重播路徑
+				  </>
+				)}
+			  </button>
+
+			  {(isReplaying || isPaused || currentStep !== -1) && (
+				<button
+				  onClick={() => stopToBase(true)}
+				  className="p-4 bg-neutral-800 hover:bg-neutral-700 rounded-2xl border border-neutral-700 active:scale-95 transition-all text-neutral-300"
+				  title="Stop / 回到原盤"
 				>
-				  <img
-					src={Object.values(ORB_TYPES).find(t => t.id === floating.orbId)?.img}
-					className="w-16 h-16 md:w-20 md:h-20 block"
-					draggable={false}
-					alt=""
-				  />
+				  <Square size={20} fill="currentColor" />
+				</button>
+			  )}
+			</div>
+			</div>
+
+			{/* Modal 編輯器 */}
+			{showEditor && (
+			  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4" onClick={handleApplyCustomBoard}>
+				<div className="bg-neutral-900 w-full max-w-xl rounded-3xl border border-neutral-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200" onClick={(e) => e.stopPropagation()}>
+				  <div className="p-6 border-b border-neutral-800 flex justify-between items-center">
+					<div className="flex items-center gap-3"><div className="p-2 bg-indigo-500/20 rounded-lg"><Palette className="text-indigo-400" size={24} /></div><div><h3 className="font-black text-white text-xl">版面編輯器</h3><p className="text-xs text-neutral-500 font-mono">Select orb brush and click cells to replace</p></div></div>
+					<button onClick={() => setShowEditor(false)} className="p-2 hover:bg-neutral-800 rounded-full transition-colors"><X size={24} /></button>
+				  </div>
+				  <div className="p-6 flex flex-col items-center">
+					<div className="bg-neutral-950 p-3 rounded-3xl border-2 border-neutral-800 mb-8">
+					  <div className="grid grid-cols-6 gap-0">
+						{editingBoard.map((row, r) => row.map((orb, c) => (<div key={`${r}-${c}`} onClick={() => { const next = [...editingBoard]; next[r][c] = selectedBrush; setEditingBoard(next); }} className={`w-16 h-16 md:w-20 md:h-20 flex items-center justify-center rounded-2xl cursor-pointer transition-all ${editingBoard[r][c] === selectedBrush ? 'ring-2 ring-white' : ''} `} > <img src={Object.values(ORB_TYPES).find(t => t.id === orb)?.img} className="w-[90%] h-[90%] object-contain pointer-events-none" alt="" /> </div>)))}
+					  </div>
+					</div>
+					<div className="w-full">
+					  <p className="text-xs font-black text-neutral-500 uppercase tracking-widest text-center mb-4">Orb Palette</p>
+					  <div className="flex justify-center gap-3 mb-8">
+						{Object.values(ORB_TYPES).map((type) => ( <button key={type.id} onClick={() => setSelectedBrush(type.id)} className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800 ${selectedBrush === type.id ? 'ring-4 ring-indigo-500 scale-110 shadow-lg shadow-indigo-500/20' : 'opacity-70 hover:opacity-100'}`} > <img src={type.img} className="w-[88%] h-[88%] object-contain pointer-events-none select-none" draggable={false} alt="" /> </button> ))}                  </div>
+					</div>
+					<div className="grid grid-cols-2 gap-0 w-full">
+					  <button onClick={() => setShowEditor(false)} className="w-full py-5 rounded-2xl font-bold bg-neutral-800 hover:bg-neutral-700 transition-colors text-base">取消</button>
+					  <button onClick={handleApplyCustomBoard} className="w-full py-5 rounded-2xl font-black bg-indigo-600 hover:bg-indigo-500 shadow-xl shadow-indigo-900/20 transition-all flex items-center justify-center gap-2 text-base"><Check size={22} /> 完成</button>
+					</div>
+				  </div>
 				</div>
+			  </div>
 			)}
-          {solving && (<div className="absolute inset-0 bg-neutral-950/90 rounded-3xl flex flex-col items-center justify-center z-20 backdrop-blur-xl">
-              <div className="relative w-24 h-24 mb-6">
-                <div className="absolute inset-0 border-4 border-indigo-500/10 rounded-full"></div>
-                <div className="absolute inset-0 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-                {priorityMode === 'steps' ? <Footprints className="absolute inset-0 m-auto text-amber-400 animate-pulse" size={32} /> : <Trophy className="absolute inset-0 m-auto text-emerald-400 animate-pulse" size={32} />}
-              </div>
-              <p className="font-black text-xl text-indigo-500 tracking-[0.2em] animate-pulse uppercase">{skyfallEnabled ? 'Skyfall Analysis' : priorityMode === 'steps' ? 'Optimizing Time' : 'Deep Searching'}</p>
-            </div>)}
-        </div>
-
-        <div className="flex flex-wrap gap-3 justify-center">
-          <button onClick={() => initBoard(true)} disabled={solving || isReplaying} className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-20 px-6 py-4 rounded-2xl font-bold transition-all text-sm border border-neutral-700 shadow-md active:scale-95"><RefreshCw size={20} /> 隨機生成</button>
-          <button onClick={handleOpenEditor} disabled={solving || isReplaying} className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-20 px-6 py-4 rounded-2xl font-bold transition-all text-sm border border-neutral-700 shadow-md active:scale-95"><Edit3 size={20} /> 自訂版面</button>
-          <div className="flex items-center gap-2">
-		  <button
-			onClick={() => {
-			  if (isReplaying && !isPaused) return pauseReplay();
-			  if (isPaused) return resumeReplay();
-
-			  if (!path || path.length === 0) return;
-			  const s = getCellCenterPx(path[0].r, path[0].c);
-			  const startPx = { x: s.x, y: s.y - 30 };
-			  replayPathContinuous(path, startPx);
-			}}
-			disabled={solving || (path.length === 0 && !isReplaying && !isPaused)}
-			className={[
-			  "flex items-center gap-2 px-10 py-4 rounded-2xl font-black shadow-xl transition-all text-base active:scale-95",
-			  (solving ? "opacity-20" : ""),
-			  (isReplaying && !isPaused)
-				? "bg-red-600 hover:bg-red-500 shadow-red-900/40"
-				: isPaused
-				  ? "bg-orange-500 hover:bg-orange-400 shadow-orange-900/30"
-				  : "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/40"
-			].join(" ")}
-		  >
-			{(isReplaying && !isPaused) ? (
-			  <>
-				<Pause size={22} fill="white" /> 暫停播放
-			  </>
-			) : isPaused ? (
-			  <>
-				<Play size={22} fill="white" /> 繼續播放
-			  </>
-			) : (
-			  <>
-				<Play size={22} fill="white" /> 重播路徑
-			  </>
-			)}
-		  </button>
-
-		  {(isReplaying || isPaused || currentStep !== -1) && (
-			<button
-			  onClick={() => stopToBase(true)}
-			  className="p-4 bg-neutral-800 hover:bg-neutral-700 rounded-2xl border border-neutral-700 active:scale-95 transition-all text-neutral-300"
-			  title="Stop / 回到原盤"
-			>
-			  <Square size={20} fill="currentColor" />
-			</button>
-		  )}
+		  </div>
 		</div>
-        </div>
-
-        {/* Modal 編輯器 */}
-        {showEditor && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4" onClick={handleApplyCustomBoard}>
-            <div className="bg-neutral-900 w-full max-w-xl rounded-3xl border border-neutral-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200" onClick={(e) => e.stopPropagation()}>
-              <div className="p-6 border-b border-neutral-800 flex justify-between items-center">
-                <div className="flex items-center gap-3"><div className="p-2 bg-indigo-500/20 rounded-lg"><Palette className="text-indigo-400" size={24} /></div><div><h3 className="font-black text-white text-xl">版面編輯器</h3><p className="text-xs text-neutral-500 font-mono">Select orb brush and click cells to replace</p></div></div>
-                <button onClick={() => setShowEditor(false)} className="p-2 hover:bg-neutral-800 rounded-full transition-colors"><X size={24} /></button>
-              </div>
-              <div className="p-6 flex flex-col items-center">
-                <div className="bg-neutral-950 p-3 rounded-3xl border-2 border-neutral-800 mb-8">
-                  <div className="grid grid-cols-6 gap-0">
-                    {editingBoard.map((row, r) => row.map((orb, c) => (<div key={`${r}-${c}`} onClick={() => { const next = [...editingBoard]; next[r][c] = selectedBrush; setEditingBoard(next); }} className={`w-16 h-16 md:w-20 md:h-20 flex items-center justify-center rounded-2xl cursor-pointer transition-all ${editingBoard[r][c] === selectedBrush ? 'ring-2 ring-white' : ''} `} > <img src={Object.values(ORB_TYPES).find(t => t.id === orb)?.img} className="w-[90%] h-[90%] object-contain pointer-events-none" alt="" /> </div>)))}
-                  </div>
-                </div>
-                <div className="w-full">
-                  <p className="text-xs font-black text-neutral-500 uppercase tracking-widest text-center mb-4">Orb Palette</p>
-                  <div className="flex justify-center gap-3 mb-8">
-					{Object.values(ORB_TYPES).map((type) => ( <button key={type.id} onClick={() => setSelectedBrush(type.id)} className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800 ${selectedBrush === type.id ? 'ring-4 ring-indigo-500 scale-110 shadow-lg shadow-indigo-500/20' : 'opacity-70 hover:opacity-100'}`} > <img src={type.img} className="w-[88%] h-[88%] object-contain pointer-events-none select-none" draggable={false} alt="" /> </button> ))}                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-0 w-full">
-                  <button onClick={() => setShowEditor(false)} className="w-full py-5 rounded-2xl font-bold bg-neutral-800 hover:bg-neutral-700 transition-colors text-base">取消</button>
-                  <button onClick={handleApplyCustomBoard} className="w-full py-5 rounded-2xl font-black bg-indigo-600 hover:bg-indigo-500 shadow-xl shadow-indigo-900/20 transition-all flex items-center justify-center gap-2 text-base"><Check size={22} /> 完成</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 };
