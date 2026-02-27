@@ -1310,9 +1310,9 @@ const buildPathStringAndMarkers = (fullPath) => {
 			  {/* 左邊可以放你的 logo（可刪） */}
 			  <img src={logoImg} className="w-8 h-8" alt="" />
 
-			  <div className="text-lg md:text-xl font-black tracking-wide">
-				Tower of Saviors神魔之塔自動轉珠模擬器
-			  </div>
+			  <h1 className="text-lg md:text-xl font-black tracking-wide">
+				  Tower of Saviors 神魔之塔自動轉珠模擬器
+				</h1>
 			</div>
 
 			{/* 右邊可以放小按鈕（可刪） */}
