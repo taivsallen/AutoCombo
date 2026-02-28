@@ -4,3 +4,21 @@
 html, body, #root {
   height: 100%;
 }
+
+@keyframes neonFlicker {
+  0%, 18%, 22%, 25%, 53%, 57%, 100% {
+    text-shadow:
+      0 0 4px #818cf8,
+      0 0 8px #818cf8,
+      0 0 16px #6366f1,
+      0 0 24px #6366f1;
+  }
+
+  20%, 24%, 55% {
+    text-shadow: none;
+  }
+}
+
+.neon-link {
+  animation: neonFlicker 2.5s infinite;
+}

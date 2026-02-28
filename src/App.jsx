@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, Pause, Square, Zap, RefreshCw, Database, Activity, Target, BrainCircuit, Settings2, Sliders, Layers, Microscope, Binary, Timer, Unlink, AlignJustify, AlignCenterVertical, Columns, Rows, RotateCcw, Footprints, Trophy, Edit3, Check, X, Palette, Clock, Settings, Hourglass, Ruler, CloudLightning, MoveUpRight, Move, Lightbulb } from 'lucide-react';
+import { Wrench, Play, Pause, Square, Zap, RefreshCw, Database, Activity, Target, BrainCircuit, Settings2, Sliders, Layers, Microscope, Binary, Timer, Unlink, AlignJustify, AlignCenterVertical, Columns, Rows, RotateCcw, Footprints, Trophy, Edit3, Check, X, Palette, Clock, Settings, Hourglass, Ruler, CloudLightning, MoveUpRight, Move, Lightbulb } from 'lucide-react';
 import wImg from './assets/w.png';
 import fImg from './assets/f.png';
 import pImg from './assets/p.png';
@@ -1977,6 +1977,27 @@ const buildPathStringAndMarkers = (fullPath) => {
 				</div>
 			  </div>
 			)}
+			<div className="mt-10 flex items-start gap-4 p-5 bg-indigo-500/5 rounded-2xl border border-indigo-500/20 text-xs text-neutral-400 leading-relaxed shadow-inner">
+			  <Wrench size={18} className="text-indigo-500 shrink-0 mt-1" />
+			  <div>
+				<strong className="text-indigo-400 block mb-1 text-sm">功能介紹：</strong>
+				 <strong className="block">
+				  自動轉珠模擬器，全自動搜尋最優路徑。自訂盤面模擬、天降與斜轉判定、
+				  完整顯示 Combo 數、總消除符石數與移動步數。
+				  可設定目標 Combo、步數上限與回放速度。
+				</strong>
+
+				{/* 🔗 新增連結 */}
+				<a
+				  href="https://forum.gamer.com.tw/C.php?bsn=23805&snA=729214"
+				  target="_blank"
+				  rel="noopener noreferrer"
+				  className="inline-block mt-3 text-indigo-400 neon-link font-semibold tracking-wide"
+				>
+				   → 前往巴哈介紹文
+				</a>
+				</div>
+			</div>
 		  </div>
 		</div>
     </div>
