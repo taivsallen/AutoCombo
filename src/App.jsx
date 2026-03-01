@@ -1379,9 +1379,17 @@ const App = () => {
 
 		stopToBase(true);
 	  } catch (e) {
-		console.error(e);
-		alert("GIF 輸出失敗，請看 Console: " + (e?.message || e));
-		stopToBase(true);
+			// ✅ 使用者按終止/取消：不要當錯誤，不要 alert
+			  const msg = String(e?.message || e || "");
+			  if (exportTokenRef.current.cancelled || /aborted|abort/i.test(msg)) {
+				console.log("GIF export cancelled:", e);
+				stopToBase(true);
+				return;
+			  }
+
+			  console.error(e);
+			  alert("GIF 輸出失敗，請看 Console: " + (e?.message || e));
+			  stopToBase(true);
 	  } finally {
 		// ✅ 只有「這次匯出」還是最新那次，才去收尾 UI
 		const stillMine = exportTokenRef.current.id === myId;
@@ -1637,97 +1645,110 @@ const App = () => {
 	  return `${sx},${sy}`;
 	};
 
-	// ✅ v2：如果同方向 run 的「前綴」有重合，就把整段 A->D 一次鼓包（不中斷）
-	// prefixMinEdges：前綴重合幾條邊就觸發（你要 A->B 一條就鼓包 → 用 1）
-	// fullMinEdges：整段都重合時至少幾條邊才鼓包（避免很短的抖動，可用 2~3）
-  const collapseUpcomingOverlapRunsV2 = (
-	  pts,
-	  {
-		prefixMinEdges = 1,
-		fullMinEdges = 3,
-		bump = 14,
-		bumpRamp = 14,
-		eps = 1e-6,
-	  } = {}
-	) => {
-	  if (!pts || pts.length < 2) return pts;
+  // ✅ v3：同方向 run 只要「前綴或後綴」有重合，就把整段 A->D 一次鼓包
+  const collapseUpcomingOverlapRunsV3 = (
+  pts,
+  {
+    prefixMinEdges = 1, // 前綴重合 >= 1 就觸發
+    suffixMinEdges = 1, // 後綴重合 >= 1 就觸發（你這題要的）
+    fullMinEdges = 3,   // 整段全重合時至少幾條邊才鼓包（避免太短抖動）
+    bump = 14,
+    bumpRamp = 14,
+    eps = 1e-6,
+  } = {}
+) => {
+  if (!pts || pts.length < 2) return pts;
 
-	  const visited = new Set();
-	  const out = [pts[0]];
+  const visited = new Set();
+  const out = [pts[0]];
+  const hypot = (x, y) => Math.hypot(x, y);
 
-	  const hypot = (x, y) => Math.hypot(x, y);
+  const addRunEdgesToVisited = (fromIdx, toIdx) => {
+    for (let k = fromIdx; k < toIdx; k++) {
+      visited.add(edgeKey(pts[k], pts[k + 1]));
+    }
+  };
 
-	  const addRunEdgesToVisited = (fromIdx, toIdx) => {
-		// 加入 edges [fromIdx .. toIdx-1]
-		for (let k = fromIdx; k < toIdx; k++) {
-		  visited.add(edgeKey(pts[k], pts[k + 1]));
-		}
-	  };
+  const pushBumpWholeRun = (A, D) => {
+    const dx = D.x - A.x;
+    const dy = D.y - A.y;
+    const L = hypot(dx, dy);
 
-	  let i = 0;
-	  while (i < pts.length - 1) {
-		const d = dirKey(pts[i], pts[i + 1], eps);
+    if (L <= eps) {
+      out.push(D);
+      return;
+    }
 
-		// 找同方向 run：pts[i..j]
-		let j = i + 1;
-		while (j < pts.length - 1 && dirKey(pts[j], pts[j + 1], eps) === d) j++;
+    const ux = dx / L, uy = dy / L;
+    const nx = -uy, ny = ux;
 
-		const edgesCount = j - i; // run 內邊數
+    const t = Math.max(2, Math.min(bumpRamp, L * 0.33));
+    const h = Math.min(bump, L * 0.25);
 
-		// 1) 計算「重合前綴」長度 p：從 i 開始連續多少條邊已走過
-		let p = 0;
-		while (p < edgesCount && visited.has(edgeKey(pts[i + p], pts[i + p + 1]))) {
-		  p++;
-		}
+    const bumpIn  = { x: A.x + ux * t + nx * h, y: A.y + uy * t + ny * h };
+    const bumpOut = { x: D.x - ux * t + nx * h, y: D.y - uy * t + ny * h };
 
-		const A = pts[i];
-		const D = pts[j];
+    out.push(bumpIn, bumpOut, D);
+  };
 
-		// 2) 判斷要不要做「整段鼓包」
-		const fullOverlapped = (p === edgesCount);
-		const triggerFull = fullOverlapped && edgesCount >= fullMinEdges;
-		const triggerPrefix = (!fullOverlapped) && p >= prefixMinEdges;
+  let i = 0;
+  while (i < pts.length - 1) {
+    const d = dirKey(pts[i], pts[i + 1], eps);
 
-		if (triggerFull || triggerPrefix) {
-		  // ✅ 整段 A->D 一次鼓包（你要的 A->C 情況就在這裡）
-		  const dx = D.x - A.x;
-		  const dy = D.y - A.y;
-		  const L = hypot(dx, dy);
+    // 找同方向 run：pts[i..j]
+    let j = i + 1;
+    while (j < pts.length - 1 && dirKey(pts[j], pts[j + 1], eps) === d) j++;
 
-		  if (L <= eps) {
-			out.push(D);
-		  } else {
-			const ux = dx / L, uy = dy / L;
-			const nx = -uy, ny = ux;
+    const edgesCount = j - i;
+    const A = pts[i];
+    const D = pts[j];
 
-			const t = Math.max(2, Math.min(bumpRamp, L * 0.33));
-			const h = Math.min(bump, L * 0.25);
+    // 1) 前綴重合長度 p
+    let p = 0;
+    while (p < edgesCount && visited.has(edgeKey(pts[i + p], pts[i + p + 1]))) {
+      p++;
+    }
 
-			const bumpIn = { x: A.x + ux * t + nx * h, y: A.y + uy * t + ny * h };
-			const bumpOut = { x: D.x - ux * t + nx * h, y: D.y - uy * t + ny * h };
+    // 2) 後綴重合長度 s
+    let s = 0;
+    while (s < edgesCount && visited.has(edgeKey(pts[j - 1 - s], pts[j - s]))) {
+      s++;
+    }
 
-			out.push(bumpIn, bumpOut, D);
-		  }
+    const fullOverlapped = (p === edgesCount); // (= s 也會等於 edgesCount)
+    const triggerFull = fullOverlapped && edgesCount >= fullMinEdges;
 
-		  // ✅ 很重要：run 中「不重合的後半」其實是新邊，必須加入 visited
-		  // - 全重合：加不加都行；部分重合：至少把 [i+p .. j-1] 加入
-		  if (!fullOverlapped) addRunEdgesToVisited(i + p, j);
-		  // 如果你想更一致，也可以把整段都加：
-		  // addRunEdgesToVisited(i, j);
+    // ✅ 你要的：後綴重合也觸發整段鼓包
+    const triggerPrefix = (!fullOverlapped) && (p >= prefixMinEdges);
+    const triggerSuffix = (!fullOverlapped) && (s >= suffixMinEdges);
 
-		} else {
-		  // 3) 正常輸出 run，並把邊加入 visited
-		  for (let k = i; k < j; k++) {
-			visited.add(edgeKey(pts[k], pts[k + 1]));
-			out.push(pts[k + 1]);
-		  }
-		}
+    if (triggerFull || triggerPrefix || triggerSuffix) {
+      pushBumpWholeRun(A, D);
 
-		i = j;
-	  }
+      // ✅ 把 run 中「新邊」加入 visited，避免後續判斷錯
+      // - 前綴重合：新增的是後半 [i+p .. j-1]
+      // - 後綴重合：新增的是前半 [i .. j-s-1]
+      // - 兩邊都有：新增的是中間那段
+      const newStart = i + p;
+      const newEnd   = j - s;
 
-	  return out;
-	};
+      if (newStart < newEnd) addRunEdgesToVisited(newStart, newEnd);
+
+      // 若你想更保守/一致，也可直接 addRunEdgesToVisited(i, j);
+
+    } else {
+      // 正常輸出
+      for (let k = i; k < j; k++) {
+        visited.add(edgeKey(pts[k], pts[k + 1]));
+        out.push(pts[k + 1]);
+      }
+    }
+
+    i = j;
+  }
+
+  return out;
+};
 
   const hypot = (x, y) => Math.hypot(x, y);
 
@@ -2226,16 +2247,16 @@ const App = () => {
 
 					const pts0 = buildPixelPath(visiblePath);
 
-					const ptsJump = collapseUpcomingOverlapRunsV2(pts0, {
-					  prefixMinEdges: 1, // ✅ A->B 只要重合一條邊，就把整段 A->C 鼓包
-					  fullMinEdges: 3,   // ✅ 全重合時至少 3 邊才鼓包（可依喜好）
+					const ptsJump = collapseUpcomingOverlapRunsV3(pts0, {
+					  prefixMinEdges: 1,
+					  suffixMinEdges: 1, // ✅ 後綴重合也直接整段 A->C 鼓包
+					  fullMinEdges: 3,
 					  bump: 14,
 					  bumpRamp: 14,
 					});
 
 					const ptsDetour = deOverlapByRampedDetourV2(ptsJump, 8, 14);
-					const { d, start, tip } = buildPathStringAndMarkersRounded(ptsDetour, 12);
-
+					const { d, start, tip } = buildPathStringAndMarkersRounded(ptsDetour, 18);
 					return (
 					  <>
 						{start && (
@@ -2251,52 +2272,52 @@ const App = () => {
 						)}
 
 						<>
-  {/* 中：陰影（先畫，才會在後面） */}
-  <path
-    d={d}
-    stroke="rgba(0,0,0,0.55)"
-    strokeWidth="10"
-    fill="none"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    style={{
-      filter: "blur(3.5px)",
-      // 陰影不要用 screen，不然會變淡甚至看不到
-      mixBlendMode: "normal",
-    }}
-    opacity={0.9}
-  />
+						  {/* 中：陰影（先畫，才會在後面） */}
+						  <path
+							d={d}
+							stroke="rgba(0,0,0,0.55)"
+							strokeWidth="10"
+							fill="none"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+							style={{
+							  filter: "blur(3.5px)",
+							  // 陰影不要用 screen，不然會變淡甚至看不到
+							  mixBlendMode: "normal",
+							}}
+							opacity={0.9}
+						  />
 
-  {/* 外：光暈（再畫） */}
-  <path
-    d={d}
-    stroke="rgba(255,255,255,0.95)"
-    strokeWidth="14"
-    fill="none"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    style={{
-      filter: "blur(6px)",
-      mixBlendMode: "screen",
-    }}
-    opacity={0.45}
-  />
+						  {/* 外：光暈（再畫） */}
+						  <path
+							d={d}
+							stroke="rgba(255,255,255,0.95)"
+							strokeWidth="14"
+							fill="none"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+							style={{
+							  filter: "blur(6px)",
+							  mixBlendMode: "screen",
+							}}
+							opacity={0.45}
+						  />
 
-  {/* 裡：白色核心（最後畫，最清晰） */}
-  <path
-    d={d}
-    stroke="white"
-    strokeWidth="4"
-    fill="none"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    style={{
-      // 核心不要 blur
-      mixBlendMode: "screen",
-    }}
-    opacity={0.95}
-  />
-</>
+						  {/* 裡：白色核心（最後畫，最清晰） */}
+						  <path
+							d={d}
+							stroke="white"
+							strokeWidth="4"
+							fill="none"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+							style={{
+							  // 核心不要 blur
+							  mixBlendMode: "screen",
+							}}
+							opacity={0.95}
+						  />
+						</>
 
 						{currentStep >= 0 && tip && (
 						  <circle
@@ -2736,7 +2757,7 @@ const App = () => {
 			  <Wrench size={18} className="text-indigo-500 shrink-0 mt-1" />
 			  <div>
 				<strong className="text-indigo-400 block mb-1 text-base">功能介紹：</strong>
-				 <strong className="block text-base">
+				 <strong className="block text-xs">
 				  自動轉珠模擬器，全自動搜尋最優路徑。自訂盤面模擬、天降與斜轉判定、
 				  完整顯示 Combo 數、總消除符石數與移動步數。
 				  可設定目標 Combo、步數上限與回放速度。
