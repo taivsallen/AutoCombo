@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Wrench, Play, Pause, Square, Zap, RefreshCw, Database, Activity, Target, BrainCircuit, Settings2, Sliders, Layers, Microscope, Binary, Timer, Unlink, AlignJustify, AlignCenterVertical, Columns, Rows, RotateCcw, Footprints, Trophy, Edit3, Check, X, Palette, Clock, Settings, Hourglass, Ruler, CloudLightning, MoveUpRight, Move, Lightbulb } from 'lucide-react';
+import { toCanvas } from "html-to-image";
+import GIF from "gif.js.optimized";
+import gifWorkerUrl from "gif.js.optimized/dist/gif.worker.js?url";
+import { FileDown, Wrench, Play, Pause, Square, Zap, RefreshCw, Database, Activity, Target, BrainCircuit, Settings2, Sliders, Layers, Microscope, Binary, Timer, Unlink, AlignJustify, AlignCenterVertical, Columns, Rows, RotateCcw, Footprints, Trophy, Edit3, Check, X, Palette, Clock, Settings, Hourglass, Ruler, CloudLightning, MoveUpRight, Move, Lightbulb } from 'lucide-react';
 import wImg from './assets/w.png';
 import fImg from './assets/f.png';
 import pImg from './assets/p.png';
@@ -18,14 +21,18 @@ const ORB_TYPES = {
   DARK: { id: 4, img: dImg },
   HEART: { id: 5, img: hImg },
 };
+const orbOf = (v) => (v < 0 ? -1 : (v % 10));                // 0~5
+const xMarkOf = (v) => (v < 0 ? 0 : Math.floor(v / 10) % 10); // 0/1/2 (X)
+const qMarkOf = (v) => (v < 0 ? 0 : Math.floor(v / 100));     // 0/1/2 (Q)
 
-const orbOf = (v) => (v < 0 ? -1 : (v % 10));      // 0~5
-const markOf = (v) => (v < 0 ? 0 : Math.floor(v / 10)); // 0 / 1 / 2
-const withMark = (orbId, mark) => orbId + mark * 10;    // mark:0/1/2
+const withMarks = (orbId, xMark, qMark) => orbId + xMark * 10 + qMark * 100;
+const setXMark = (cellVal, xMark) => withMarks(orbOf(cellVal), xMark, qMarkOf(cellVal));
+const setQMark = (cellVal, qMark) => withMarks(orbOf(cellVal), xMarkOf(cellVal), qMark);
 
 const TOTAL_ROWS = 6;
 const COLS = 6;
 const PLAY_ROWS_START = 1; // 0 是暫存列
+const PLAY_ROWS = TOTAL_ROWS - PLAY_ROWS_START; // 5
 
 // 定義移動方向
 const DIRS_4 = [[0, 1], [0, -1], [1, 0], [-1, 0]];
@@ -33,21 +40,27 @@ const DIRS_8 = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1,
 
 const DEFAULT_CONFIG = {
   beamWidth: 200,    
-  maxSteps: 50,      
+  maxSteps: 10,      
   maxNodes: 120000,  
   stepPenalty: 250,  
   potentialWeight: 800, 
   clearedWeight: 300,
-  replaySpeed: 100, 
+  replaySpeed: 200, 
 };
 
 const App = () => {
-  const [selectedMark, setSelectedMark] = useState(0); // 0=刷符石, 1=X1, 2=X2
+  const exportTokenRef = useRef({ id: 0, cancelled: false });
+  const [gifStage, setGifStage] = useState("capture"); // "capture" | "render"
+  const [selectedMark, setSelectedMark] = useState(0); // 0=刷符石, 1=X1, 2=X2, 3=Q1, 4=Q2
   const baseBoardRef = useRef([]);
   const [holePos, setHolePos] = useState(null);
   const rafRef = useRef(0);
   const [geomTick, setGeomTick] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  
+  const [exportingGif, setExportingGif] = useState(false);
+  const [gifProgress, setGifProgress] = useState({ cur: 0, total: 0, pct: 0 });
+  const [gifReady, setGifReady] = useState({ url: "", name: "" });
   
   const solverCache = useRef(new Map());
   const debounceTimer = useRef(null);
@@ -111,6 +124,8 @@ const App = () => {
 	  window.addEventListener('resize', onResize);
 	  return () => window.removeEventListener('resize', onResize);
 	}, []);
+  const overlayRef = useRef(null);
+  const gifRef = useRef(null);
   const boardWrapRef = useRef(null);
   const [floating, setFloating] = useState(null);
   const [replayBoard, setReplayBoard] = useState(null);
@@ -199,7 +214,7 @@ const App = () => {
 		for (let r = 0; r < TOTAL_ROWS; r++) {
 		  let row = [];
 		  for (let c = 0; c < COLS; c++) {
-			row.push(withMark(Math.floor(Math.random() * 6), 0)); // ✅ 永遠 mark=0
+			row.push(withMarks(Math.floor(Math.random() * 6), 0, 0)); // ✅ 永遠 mark=0
 		  }
 		  newBoard.push(row);
 		}
@@ -212,7 +227,7 @@ const App = () => {
 		  [2,1,2,5,1,2],
 		  [5,4,1,0,3,1],
 		  [1,1,4,3,5,0],
-		].map(row => row.map(v => withMark(v, 0)));
+		].map(row => row.map(v => withMarks(v, 0, 0)));
 	  }
 
 	  baseBoardRef.current = newBoard.map(r => [...r]);
@@ -242,10 +257,19 @@ const App = () => {
 
   useEffect(() => {
 	  if (originalBoard.length === 0) return;
-	  if (isReplaying || showEditor) return;
+	  if (showEditor) return;
 	  setNeedsSolve(true);
-	}, [targetCombos, solverConfig, originalBoard, solverMode, priorityMode, skyfallEnabled, diagonalEnabled, isReplaying, showEditor]);
-	  
+	}, [targetCombos, solverConfig, originalBoard, solverMode, priorityMode, skyfallEnabled, diagonalEnabled, showEditor]);
+  
+  useEffect(() => {
+	  return () => {
+		setGifReady(prev => {
+		  if (prev.url) URL.revokeObjectURL(prev.url);
+		  return prev;
+		});
+	  };
+	}, []);
+  
   const holeStepInPlace = (b, hole, toRC) => {
 	  const moved = b[toRC.r][toRC.c];
 	  b[hole.r][hole.c] = moved;
@@ -509,111 +533,131 @@ const App = () => {
 };
 
   const beamSolve = (originalBoard, cfg, target, mode, priority, skyfall, diagonal) => {
-  const stepsOf = (pth) => Math.max(0, (pth?.length || 0) - 1);
+	  const stepsOf = (pth) => Math.max(0, (pth?.length || 0) - 1);
 
-  // ===== X1/X2 規則 =====
-  // X1：永遠不能踩
-  // X2：可以踩，但只能當最後一步（踩到後 locked=true，不再展開）
-  const stepConstraint = (cellVal) => {
-    const m = markOf(cellVal);
-    if (m === 1) return { ok: false, locked: false };
-    if (m === 2) return { ok: true, locked: true };
-    return { ok: true, locked: false };
-  };
+	  // ===== X1/X2 規則 =====
+	  // X1：永遠不能踩
+	  // X2：可以踩，但只能當最後一步（踩到後 locked=true，不再展開）
+	  const stepConstraint = (cellVal) => {
+		const m = xMarkOf(cellVal);
+		if (m === 1) return { ok: false, locked: false };
+		if (m === 2) return { ok: true, locked: true };
+		return { ok: true, locked: false };
+	  };
 
-  const maxNodesEffective =
-    priority === 'combo'
-      ? Math.max(cfg.maxNodes, cfg.maxSteps * cfg.beamWidth * 20)
-      : cfg.maxNodes;
+	  const maxNodesEffective =
+		priority === 'combo'
+		  ? Math.max(cfg.maxNodes, cfg.maxSteps * cfg.beamWidth * 20)
+		  : cfg.maxNodes;
 
-  let bestGlobal = {
-    combos: -1,
-    skyfallCombos: 0,
-    clearedCount: -1,
-    path: [],
-    score: -Infinity,
-    verticalCombos: 0,
-    horizontalCombos: 0,
-  };
+	  // ===== Q1/Q2 掃描（最多各一個）=====
+	  let q1Pos = null;
+	  let q2Pos = null;
+	  for (let rr = 0; rr < TOTAL_ROWS; rr++) {
+		for (let cc = 0; cc < COLS; cc++) {
+		  const q = qMarkOf(originalBoard[rr][cc]);
+		  if (q === 1) q1Pos = { r: rr, c: cc };
+		  if (q === 2) q2Pos = { r: rr, c: cc };
+		}
+	  }
+	  const isAtQ2 = (r, c) => q2Pos && r === q2Pos.r && c === q2Pos.c;
+	  const shouldAcceptEnd = (pthLast) => {
+		if (!q2Pos) return true;
+		return pthLast?.r === q2Pos.r && pthLast?.c === q2Pos.c;
+	  };
 
-  const considerBest = (ev, score, pth) => {
-    let isBetterGlobal = false;
+	  let bestGlobal = {
+		combos: -1,
+		skyfallCombos: 0,
+		clearedCount: -1,
+		path: [],
+		score: -Infinity,
+		verticalCombos: 0,
+		horizontalCombos: 0,
+	  };
 
-    if (priority === 'combo') {
-      isBetterGlobal =
-        score > bestGlobal.score ||
-        (score === bestGlobal.score && ev.clearedCount > bestGlobal.clearedCount);
-    } else {
-      // ✅ steps 模式：達標優先「最少步數」（步數 = path.length - 1）
-      if (ev.combos >= target) {
-        const bestSteps = bestGlobal.path ? stepsOf(bestGlobal.path) : Infinity;
-        const curSteps = stepsOf(pth);
-        if (bestGlobal.combos < target || curSteps < bestSteps) isBetterGlobal = true;
-      } else {
-        if (ev.combos > bestGlobal.combos) isBetterGlobal = true;
-      }
-    }
+	  const considerBest = (ev, score, pth) => {
+		  // ✅ 先檢查 Q2：不在 Q2 結束的一律不收
+		  const last = pth?.[pth.length - 1];
+		  if (!shouldAcceptEnd(last)) return;
 
-    if (isBetterGlobal) bestGlobal = { ...ev, path: pth, score };
-  };
+		  let isBetterGlobal = false;
 
-  const dirsPlay = diagonal ? DIRS_8 : DIRS_4;
+		  if (priority === 'combo') {
+			isBetterGlobal =
+			  score > bestGlobal.score ||
+			  (score === bestGlobal.score && ev.clearedCount > bestGlobal.clearedCount);
+		  } else {
+			if (ev.combos >= target) {
+			  const bestSteps = bestGlobal.path ? stepsOf(bestGlobal.path) : Infinity;
+			  const curSteps = stepsOf(pth);
+			  if (bestGlobal.combos < target || curSteps < bestSteps) isBetterGlobal = true;
+			} else {
+			  if (ev.combos > bestGlobal.combos) isBetterGlobal = true;
+			}
+		  }
 
-  let beam = [];
-  const visitedBest = new Map();
+		  if (isBetterGlobal) bestGlobal = { ...ev, path: pth, score };
+		};
+	  
+	  const dirsPlay = diagonal ? DIRS_8 : DIRS_4;
 
-  const pushInitState = (r, c, heldFromRow0) => {
-    const boardCopy = originalBoard.map(row => [...row]);
+	  let beam = [];
+	  const visitedBest = new Map();
 
-    let held;
-    let hole = null;
+	  const pushInitState = (r, c, heldFromRow0) => {
+		if (q1Pos && (r !== q1Pos.r || c !== q1Pos.c)) return;
+		const boardCopy = originalBoard.map(row => [...row]);
 
-    if (heldFromRow0) {
-      held = originalBoard[0][c]; // ✅ row0 起手：握 row0[c]
-      hole = null;                // ✅ 沒洞
-    } else {
-      held = originalBoard[r][c]; // ✅ row1~5 起手：握該格珠
-      hole = { r, c };
-      boardCopy[r][c] = -1;       // ✅ 起點挖洞（等價於把那顆拿起來）
-    }
+		let held;
+		let hole = null;
 
-    // ✅ 起手也算「碰到」：held 若是 X1 -> 禁止；X2 -> 鎖死只能當最後一步
-    const heldMark = markOf(held);
-    if (heldMark === 1) return;
-    const locked0 = (heldMark === 2);
+		if (heldFromRow0) {
+		  held = originalBoard[0][c]; // ✅ row0 起手：握 row0[c]
+		  hole = null;                // ✅ 沒洞
+		} else {
+		  held = originalBoard[r][c]; // ✅ row1~5 起手：握該格珠
+		  hole = { r, c };
+		  boardCopy[r][c] = -1;       // ✅ 起點挖洞（等價於把那顆拿起來）
+		}
 
-    const evalBoard = boardWithHeldFilled(boardCopy, hole, held);
-    const ev = evaluateBoard(evalBoard, skyfall);
-    const pot = potentialScore(evalBoard, mode);
-    const score = calcScore(ev, pot, 0, cfg, target, mode, priority);
+		// ✅ 起手也算「碰到」：held 若是 X1 -> 禁止；X2 -> 鎖死只能當最後一步
+		const heldMark = xMarkOf(held);
+		if (heldMark === 1) return;
+		const locked0 = (heldMark === 2);
 
-    const holeKey = hole ? `${hole.r},${hole.c}` : `-1,-1`;
-    const key =
-      getBoardKey(boardCopy) +
-      `|held:${held}|pos:${r},${c}|hole:${holeKey}|locked:${locked0 ? 1 : 0}`;
+		const evalBoard = boardWithHeldFilled(boardCopy, hole, held);
+		const ev = evaluateBoard(evalBoard, skyfall);
+		const pot = potentialScore(evalBoard, mode);
+		const score = calcScore(ev, pot, 0, cfg, target, mode, priority);
 
-    visitedBest.set(key, {
-      h: ev.horizontalCombos,
-      v: ev.verticalCombos,
-      c: ev.combos,
-      clr: ev.clearedCount,
-      pot,
-      len: 0,
-      locked: locked0 ? 1 : 0,
-    });
+		const holeKey = hole ? `${hole.r},${hole.c}` : `-1,-1`;
+		const key =
+		  getBoardKey(boardCopy) +
+		  `|held:${held}|pos:${r},${c}|hole:${holeKey}|locked:${locked0 ? 1 : 0}`;
 
-    beam.push({
-      board: boardCopy,
-      held,
-      hole,
-      r,
-      c,
-      path: [{ r, c }],
-      score,
-      ...ev,
-      pot,
-      locked: locked0,
-    });
+		visitedBest.set(key, {
+		  h: ev.horizontalCombos,
+		  v: ev.verticalCombos,
+		  c: ev.combos,
+		  clr: ev.clearedCount,
+		  pot,
+		  len: 0,
+		  locked: locked0 ? 1 : 0,
+		});
+
+		beam.push({
+		  board: boardCopy,
+		  held,
+		  hole,
+		  r,
+		  c,
+		  path: [{ r, c }],
+		  score,
+		  ...ev,
+		  pot,
+		  locked: locked0,
+		});
   };
 
   // 起手：row0(6) + row1~5(30)
@@ -657,7 +701,7 @@ const App = () => {
           const destVal = state.board[nr][nc];
           const chk = stepConstraint(destVal);
           if (!chk.ok) continue;
-          const nextLocked = chk.locked;
+		  const nextLocked = chk.locked || isAtQ2(nr, nc);
 
           const nextBoard = state.board.map(row => [...row]);
           nextBoard[nr][nc] = -1;          // ✅ 落點挖洞
@@ -738,7 +782,7 @@ const App = () => {
         const destVal = state.board[nr][nc];
         const chk = stepConstraint(destVal);
         if (!chk.ok) continue;
-        const nextLocked = chk.locked;
+        const nextLocked = chk.locked || isAtQ2(nr, nc);
 
         const nextBoard = state.board.map(row => [...row]);
         const nextHole = holeStepInPlace(nextBoard, state.hole, { r: nr, c: nc });
@@ -834,7 +878,6 @@ const App = () => {
   return bestGlobal;
 };
   
-  
   const stopToBase = useCallback((clearStep = true) => {
 	  // 1) 停動畫
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
@@ -855,6 +898,22 @@ const App = () => {
 	  // 4) Stop 是否要把路徑回到未開始
 	  if (clearStep) setCurrentStep(-1);
 	}, []);
+
+  const abortGifExport = useCallback(() => {
+	  // ✅ 讓正在跑的 exportGif 之後「所有 await 回來」都直接停掉
+	  exportTokenRef.current.cancelled = true;
+
+	  if (gifRef.current) {
+		try { gifRef.current.abort(); } catch (e) { console.warn("Abort error:", e); }
+	  }
+	  gifRef.current = null;
+
+	  setExportingGif(false);
+	  setGifProgress({ cur: 0, total: 0, pct: 0 });
+
+	  // ✅ 畫面立刻回底盤、停止匯出動畫
+	  stopToBase(true);
+	}, [stopToBase]);
 
   const pauseReplay = useCallback(() => {
   if (!isReplaying) return;
@@ -1045,24 +1104,265 @@ const App = () => {
     }, 50);
   };
 
-  const getCellCenterPx = (r, c) => {
-	  const wrap = boardWrapRef.current;
-	  if (!wrap) return { x: 0, y: 0 };
-
+  const getCellCenterPx = useCallback((r, c) => {
 	  const root = boardInnerRef.current;
-	  if (!root) return { x: 0, y: 0 };
+	  const svg = overlayRef.current;
+	  if (!root || !svg) return { x: 0, y: 0 };
 
 	  const cell = root.querySelector(`[data-cell="${r}-${c}"]`);
 	  if (!cell) return { x: 0, y: 0 };
 
-	  const wrapRect = wrap.getBoundingClientRect();
 	  const cellRect = cell.getBoundingClientRect();
+	  const svgRect = svg.getBoundingClientRect();
 
 	  return {
-		x: (cellRect.left - wrapRect.left) + cellRect.width / 2,
-		y: (cellRect.top - wrapRect.top) + cellRect.height / 2,
+		x: (cellRect.left + cellRect.right) / 2 - svgRect.left,
+		y: (cellRect.top + cellRect.bottom) / 2 - svgRect.top,
 	  };
-	};
+	}, []);
+
+  const exportGif = useCallback(async () => {
+	  // ✅ 開新的一次匯出：換 id、取消旗標歸零
+	  const myId = ++exportTokenRef.current.id;
+	  exportTokenRef.current.cancelled = false;
+
+	  const isCancelled = () =>
+		exportTokenRef.current.cancelled || exportTokenRef.current.id !== myId;
+	  try {
+		setGifReady(prev => {
+		  if (prev.url) URL.revokeObjectURL(prev.url);
+		  return { url: "", name: "" };
+		});
+
+		if (!path || path.length < 2) return;
+
+		setExportingGif(true);
+		setGifStage("capture");
+
+		// 先回到原盤面（避免 replay 狀態干擾）
+		stopToBase(true);
+
+		// 讓 React 有時間把畫面穩定下來
+		await new Promise(r => setTimeout(r, 80));
+
+		const el = boardWrapRef.current;
+		if (!el) return;
+
+		// =========
+		// 1) 自動決定 skip
+		// =========
+		const totalSteps = path.length - 1;
+		const maxFrames = 500;
+		const skip = Math.max(1, Math.ceil(totalSteps / maxFrames));
+		const frameDelay = Math.max(60, config.replaySpeed * skip);
+
+		const totalFrames = 1 + Math.floor((path.length - 1) / skip) + 1;
+		setGifProgress({ cur: 0, total: totalFrames, pct: 0 });
+
+		// =========
+		// 2) 建立第一步畫面（跟你原本相同）
+		// =========
+		const base = baseBoardRef.current.map(r => [...r]);
+		const start = path[0];
+		const held = base[start.r][start.c];
+
+		let b = base.map(r => [...r]);
+		let hole = null;
+
+		if (start.r >= PLAY_ROWS_START) {
+		  hole = { r: start.r, c: start.c };
+		  b[start.r][start.c] = -1;
+		  setHolePos({ ...hole });
+		} else {
+		  setHolePos(null);
+		}
+
+		setReplayBoard(b.map(r => [...r]));
+		setCurrentStep(0);
+
+		{
+		  const p0 = getCellCenterPx(start.r, start.c);
+		  setFloating({ orbId: orbOf(held), x: p0.x, y: p0.y, visible: true });
+		}
+
+		// 等 DOM 更新
+		await new Promise(r => requestAnimationFrame(() => r()));
+		await new Promise(r => requestAnimationFrame(() => r())); // 多等一幀更穩
+
+		// =========
+		// 3) foreignObject 截圖：固定輸出尺寸，避免擠壓
+		// =========
+		const rect0 = el.getBoundingClientRect();
+		const W = Math.round(rect0.width);
+		const H = Math.round(rect0.height);
+
+		// 你想要清晰度：用 pixelRatio 取代 html2canvas 的 scale
+		const pixelRatio = 1; // 1~3 可調（2 通常很夠）
+
+		const captureOpts = {
+		  backgroundColor: null,
+		  cacheBust: true,
+		  width: W,
+		  height: H,
+		  pixelRatio,
+
+		  // ✅ 強制一套 style，避免 foreignObject 對 transform/sticky 的怪偏移
+		  style: {
+		// ✅ 把「整個頁面座標系」拉回來，讓 el 的左上角剛好落在畫布 (0,0)
+		transform: `translate(${(-rect0.left)/2+10}px, 0)`,
+		transformOrigin: "top left",
+	  },
+
+		  // ✅ 只截你的棋盤，不要吃到外層影響（可留）
+		  // filter: (node) => true,
+		};
+
+		const bumpProgress = (forceCur = null) => {
+		  setGifProgress(prev => {
+			const total = prev.total || 1;
+			const nextCur =
+			  forceCur !== null
+				? Math.min(forceCur, total)
+				: Math.min((prev.cur || 0) + 1, total);
+
+			const pct = Math.round((nextCur / total) * 100);
+			return { ...prev, cur: nextCur, pct };
+		  });
+		};
+
+		// 先截第一幀，用它決定 GIF 固定像素尺寸
+		const firstCanvas = await toCanvas(el, captureOpts);
+
+		const gif = new GIF({
+		  workers: 2,
+		  quality: 20,
+		  workerScript: gifWorkerUrl,
+		  width: firstCanvas.width,
+		  height: firstCanvas.height,
+		});
+		
+		gifRef.current = gif; 
+
+		gif.addFrame(firstCanvas, { delay: frameDelay, copy: true });
+		bumpProgress();
+
+		const addFrame = async () => {
+		  if (isCancelled()) return;
+
+		  await new Promise(r => requestAnimationFrame(() => r()));
+		  if (isCancelled()) return;
+
+		  const canvas = await toCanvas(el, captureOpts);
+		  if (isCancelled()) return;
+
+		  if (canvas.width !== firstCanvas.width || canvas.height !== firstCanvas.height) {
+			console.warn("Skip frame due to size mismatch:", canvas.width, canvas.height);
+			return;
+		  }
+
+		  gif.addFrame(canvas, { delay: frameDelay, copy: true });
+		  if (!isCancelled()) bumpProgress();
+		};
+
+		// =========
+		// 4) 推進步驟 + 擷取
+		// =========
+		for (let i = 1; i < path.length; i++) {
+		  if (isCancelled()) return;
+		  const currRC = path[i];
+
+		  if (currRC.r === 0) {
+			if (hole) b[hole.r][hole.c] = held;
+
+			setReplayBoard(b.map(r => [...r]));
+			setHolePos(null);
+			setFloating(null);
+			setCurrentStep(i);
+
+			await new Promise(r => requestAnimationFrame(() => r()));
+			await addFrame();
+			break;
+		  }
+
+		  if (!hole) {
+			hole = { r: currRC.r, c: currRC.c };
+			b[currRC.r][currRC.c] = -1;
+		  } else {
+			const moved = b[currRC.r][currRC.c];
+			b[hole.r][hole.c] = moved;
+			b[currRC.r][currRC.c] = -1;
+			hole = { r: currRC.r, c: currRC.c };
+		  }
+
+		  setReplayBoard(b.map(r => [...r]));
+		  setHolePos({ ...hole });
+		  setCurrentStep(i);
+
+		  {
+			const pi = getCellCenterPx(currRC.r, currRC.c);
+			setFloating(prev => (prev ? { ...prev, x: pi.x, y: pi.y, visible: true } : prev));
+		  }
+
+		  await new Promise(r => requestAnimationFrame(() => r()));
+		  if (isCancelled()) return;
+
+		  if (i % skip === 0 || i === path.length - 1) {
+			await addFrame();
+			if (isCancelled()) return;
+		  }
+		}
+		
+		// ✅ 最後一幀都加完了，強制顯示 12/12（100%）
+		bumpProgress(totalFrames);
+
+		// ✅ 讓 React 有機會把 12/12 畫上去（哪怕一瞬間）
+		await new Promise(r => requestAnimationFrame(r));
+		await new Promise(r => setTimeout(r, 60)); // 30~120ms 自己調，想更快就 30
+
+		if (isCancelled()) return;
+
+		// ✅ 進入「合成 GIF...」階段
+		setGifStage("render");
+		await new Promise(r => requestAnimationFrame(r));
+		
+		// =========
+		// 5) render GIF
+		// =========
+		const blob = await new Promise((resolve, reject) => {
+		  gif.on("finished", resolve);
+		  gif.on("abort", () => reject(new Error("GIF render aborted")));
+		  gif.render();
+		});
+
+		// ✅ 這裡加：render 等很久，回來時可能已經按終止了
+		if (isCancelled()) return;
+
+		const url = URL.createObjectURL(blob);
+		
+		// ✅ B：setGifReady 前再檢查一次（保險）
+		if (isCancelled()) {
+		  URL.revokeObjectURL(url); // ✅ 可選：避免 blob leak
+		  return;
+		}
+		
+		setGifReady({ url, name: `tos_replay_${totalSteps}steps_skip${skip}.gif` });
+
+		stopToBase(true);
+	  } catch (e) {
+		console.error(e);
+		alert("GIF 輸出失敗，請看 Console: " + (e?.message || e));
+		stopToBase(true);
+	  } finally {
+		  // ✅ 只有「這次匯出」還是最新那次，才去收尾 UI
+		  const stillMine = exportTokenRef.current.id === myId;
+		  if (stillMine) {
+			gifRef.current = null;
+			setExportingGif(false);
+			setGifProgress({ cur: 0, total: 0, pct: 0 });
+			setGifStage("capture");
+		  }
+		}
+	}, [path, config.replaySpeed, stopToBase, getCellCenterPx]);
 
   const buildPixelPath = (rcPath, startPx = null) => {
     if (!rcPath || rcPath.length < 2) return null;
@@ -1185,169 +1485,171 @@ const App = () => {
 	};
   
 
-	  const replayPathContinuous = (targetPath = path, startPx = null) => {
-  if (!targetPath || targetPath.length < 2) return;
+  const replayPathContinuous = (targetPath = path, startPx = null) => {
+	  if (!targetPath || targetPath.length < 2) return;
 
-  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
+	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
 
-  setIsReplaying(true);
-  setIsPaused(false);
-  setCurrentStep(0);
+	  setIsReplaying(true);
+	  setIsPaused(false);
+	  setCurrentStep(0);
 
-  const start = targetPath[0];
-  const base = baseBoardRef.current;
+	  const start = targetPath[0];
+	  const base = baseBoardRef.current;
 
-  const startOrb = base[start.r][start.c]; // ✅ 手上那顆永遠固定
-  let b = base.map(r => [...r]);
+	  const startCell = base[start.r][start.c]; // ✅ 手上那顆永遠固定
+	  const startOrbId = orbOf(startCell);
+	  let b = base.map(r => [...r]);
 
-  // ✅ 初始化：起手在 row0，棋盤先不挖洞；洞會在「第一次踏入 row1~5」才出現
-  let hole = null;
+	  // ✅ 初始化：起手在 row0，棋盤先不挖洞；洞會在「第一次踏入 row1~5」才出現
+	  let hole = null;
 
-if (start.r >= PLAY_ROWS_START) {
-  hole = { r: start.r, c: start.c };
-  b[start.r][start.c] = -1;
-  setHolePos({ ...hole });
-} else {
-  // ✅ 起手在 row0：一開始沒洞（你的規則）
-  setHolePos(null);
-}
+	if (start.r >= PLAY_ROWS_START) {
+	  hole = { r: start.r, c: start.c };
+	  b[start.r][start.c] = -1;
+	  setHolePos({ ...hole });
+	} else {
+	  // ✅ 起手在 row0：一開始沒洞（你的規則）
+	  setHolePos(null);
+	}
 
-  setReplayBoard(b);
+	  setReplayBoard(b);
 
-  const pts = buildPixelPath(targetPath, startPx);
-  if (!pts || pts.length < 2) return;
+	  const pts = buildPixelPath(targetPath, startPx);
+	  if (!pts || pts.length < 2) return;
 
-  const segLen = [];
-  let total = 0;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const d = Math.hypot(pts[i+1].x - pts[i].x, pts[i+1].y - pts[i].y);
-    segLen.push(d);
-    total += d;
-  }
-  if (total <= 0) return;
+	  const segLen = [];
+	  let total = 0;
+	  for (let i = 0; i < pts.length - 1; i++) {
+		const d = Math.hypot(pts[i+1].x - pts[i].x, pts[i+1].y - pts[i].y);
+		segLen.push(d);
+		total += d;
+	  }
+	  if (total <= 0) return;
 
-  setFloating({ orbId: startOrb, x: pts[0].x, y: pts[0].y, visible: true });
+	  setFloating({ orbId: startOrbId, x: pts[0].x, y: pts[0].y, visible: true });
 
-  const totalSteps = targetPath.length - 1;
-  const totalTimeSec = (totalSteps * config.replaySpeed) / 1000;
-  const pxPerSec = total / totalTimeSec;
+	  const totalSteps = targetPath.length - 1;
+	  const totalTimeSec = (totalSteps * config.replaySpeed) / 1000;
+	  const pxPerSec = total / totalTimeSec;
 
-  replayAnimRef.current = {
-    raf: 0,
-    tStart: performance.now(),
-    pxPerSec,
-    dist0: 0,
+	  replayAnimRef.current = {
+		raf: 0,
+		tStart: performance.now(),
+		pxPerSec,
+		dist0: 0,
 
-    b,
-    hole,          // ✅ 洞位置（b 裡面對應 -1）
-    held: startOrb,// ✅ 永遠固定
+		b,
+		hole,          // ✅ 洞位置（b 裡面對應 -1）
+		held: startCell,// ✅ 永遠固定
 
-    lastNode: 0,
-    pts,
-    segLen,
-    total,
-    targetPath,
-  };
+		lastNode: 0,
+		pts,
+		segLen,
+		total,
+		targetPath,
+	  };
 
-  const EPS = 1e-4;
+	  const EPS = 1e-4;
 
-  const tick = (now) => {
-    const st = replayAnimRef.current;
-    const elapsed = (now - st.tStart) / 1000;
-    const dist = (st.dist0 || 0) + elapsed * st.pxPerSec;
+	  const tick = (now) => {
+		const st = replayAnimRef.current;
+		const elapsed = (now - st.tStart) / 1000;
+		const dist = (st.dist0 || 0) + elapsed * st.pxPerSec;
 
-    // 位置插值
-    const clamped = Math.min(dist, st.total);
-    let acc = 0;
-    let i = 0;
-    while (i < st.segLen.length && acc + st.segLen[i] < clamped) {
-      acc += st.segLen[i];
-      i++;
-    }
-	
-    const t = st.segLen[i] === 0 ? 1 : (clamped - acc) / st.segLen[i];
-    const x = st.pts[i].x + (st.pts[i + 1].x - st.pts[i].x) * t;
-    const y = st.pts[i].y + (st.pts[i + 1].y - st.pts[i].y) * t;
-    setFloating(prev => prev ? { ...prev, x, y, visible: true } : prev);
+		// 位置插值
+		const clamped = Math.min(dist, st.total);
+		let acc = 0;
+		let i = 0;
+		while (i < st.segLen.length && acc + st.segLen[i] < clamped) {
+		  acc += st.segLen[i];
+		  i++;
+		}
+		
+		const t = st.segLen[i] === 0 ? 1 : (clamped - acc) / st.segLen[i];
+		const x = st.pts[i].x + (st.pts[i + 1].x - st.pts[i].x) * t;
+		const y = st.pts[i].y + (st.pts[i + 1].y - st.pts[i].y) * t;
+		setFloating(prev => prev ? { ...prev, x, y, visible: true } : prev);
 
-    // ✅ 走過節點就提交「洞滑動」
-    while (st.lastNode < i) {
-      const nextStep = st.lastNode + 1;
-      const currRC = st.targetPath[nextStep];
+		// ✅ 走過節點就提交「洞滑動」
+		while (st.lastNode < i) {
+		  const nextStep = st.lastNode + 1;
+		  const currRC = st.targetPath[nextStep];
 
-      // 踏回 row0：終止（先把 held 放回洞）
-      if (currRC.r === 0) {
-        if (st.hole) {
-          const bb = st.b.map(r => [...r]);
-          bb[st.hole.r][st.hole.c] = st.held;
-          setReplayBoard(bb);
-        } else {
-          setReplayBoard(st.b.map(r => [...r]));
-        }
-        setFloating(null);
-        setIsReplaying(false);
-        setIsPaused(false);
-        setCurrentStep(st.targetPath.length - 1);
-        st.raf = 0;
-        return;
-      }
+		  // 踏回 row0：終止（先把 held 放回洞）
+		  if (currRC.r === 0) {
+			if (st.hole) {
+			  const bb = st.b.map(r => [...r]);
+			  bb[st.hole.r][st.hole.c] = st.held;
+			  setReplayBoard(bb);
+			} else {
+			  setReplayBoard(st.b.map(r => [...r]));
+			}
+			setFloating(null);
+			setIsReplaying(false);
+			setIsPaused(false);
+			setCurrentStep(st.targetPath.length - 1);
+			st.raf = 0;
+			return;
+		  }
 
-      // 第一次踏入 row1~5：在那格挖洞（把那顆「抽走」不顯示，洞開始移動）
-      if (!st.hole) {
-        st.hole = { r: currRC.r, c: currRC.c };
-        st.b[currRC.r][currRC.c] = -1;
-        setHolePos({ ...st.hole });
-      } else {
-        st.hole = holeStepInPlace(st.b, st.hole, currRC);
-        setHolePos({ ...st.hole });
-      }
+		  // 第一次踏入 row1~5：在那格挖洞（把那顆「抽走」不顯示，洞開始移動）
+		  if (!st.hole) {
+			st.hole = { r: currRC.r, c: currRC.c };
+			st.b[currRC.r][currRC.c] = -1;
+			setHolePos({ ...st.hole });
+		  } else {
+			st.hole = holeStepInPlace(st.b, st.hole, currRC);
+			setHolePos({ ...st.hole });
+		  }
 
-      st.lastNode = nextStep;
-      setReplayBoard(st.b.map(r => [...r]));
-      setCurrentStep(nextStep);
+		  st.lastNode = nextStep;
+		  setReplayBoard(st.b.map(r => [...r]));
+		  setCurrentStep(nextStep);
 
-      // ✅ 浮珠永遠不換 orbId（保持 startOrb）
-    }
+		  // ✅ 浮珠永遠不換 orbId（保持 startOrb）
+		}
 
-    // 結束：把 held 放到洞，浮珠消失
-    if (dist >= st.total - EPS) {
-		const lastIdx = st.targetPath.length - 1;
+		// 結束：把 held 放到洞，浮珠消失
+		if (dist >= st.total - EPS) {
+			const lastIdx = st.targetPath.length - 1;
 
-  // 🔥 只補「最後一個 step」
-  if (st.lastNode < lastIdx) {
-    const currRC = st.targetPath[lastIdx];
+	  // 🔥 只補「最後一個 step」
+	  if (st.lastNode < lastIdx) {
+		const currRC = st.targetPath[lastIdx];
 
-    if (currRC.r !== 0) {
-      if (!st.hole) {
-        st.hole = { r: currRC.r, c: currRC.c };
-        st.b[currRC.r][currRC.c] = -1;
-      } else {
-        st.hole = holeStepInPlace(st.b, st.hole, currRC);
-      }
-    }
+		if (currRC.r !== 0) {
+		  if (!st.hole) {
+			st.hole = { r: currRC.r, c: currRC.c };
+			st.b[currRC.r][currRC.c] = -1;
+		  } else {
+			st.hole = holeStepInPlace(st.b, st.hole, currRC);
+		  }
+		}
 
-    st.lastNode = lastIdx;
-  }
-      const bb = st.b.map(r => [...r]);
-      if (st.hole) bb[st.hole.r][st.hole.c] = st.held;
-      setReplayBoard(bb);
+		st.lastNode = lastIdx;
+	  }
+		  const bb = st.b.map(r => [...r]);
+		  if (st.hole) bb[st.hole.r][st.hole.c] = st.held;
+		  setReplayBoard(bb);
 
-      setHolePos(null);
-      setFloating(null);
-      setIsReplaying(false);
-      setIsPaused(false);
-      setCurrentStep(st.targetPath.length - 1);
-      st.raf = 0;
-      return;
-    }
+		  setHolePos(null);
+		  setFloating(null);
+		  setIsReplaying(false);
+		  setIsPaused(false);
+		  setCurrentStep(st.targetPath.length - 1);
+		  st.raf = 0;
+		  return;
+		}
 
-    st.raf = requestAnimationFrame(tick);
-  };
+		st.raf = requestAnimationFrame(tick);
+	  };
 
-  replayAnimRef.current.raf = requestAnimationFrame(tick);
+	  replayAnimRef.current.raf = requestAnimationFrame(tick);
 	};
   const updateParam = (key, val) => setConfig(prev => ({ ...prev, [key]: key === 'replaySpeed' ? Math.round(parseFloat(val)) : parseFloat(val) }));
   const renderBoard = replayBoard ?? board;
+  const replayDone = (!isReplaying && !isPaused && currentStep >= 0);
 
   const getCellCenter = (p) => {
 	  const { x, y } = getCellCenterPx(p.r, p.c);
@@ -1553,7 +1855,9 @@ const buildPathStringAndMarkers = (fullPath) => {
 					  min={1}
 					  max={stats.theoreticalMax || 1}
 					  step={1}
-					  onChange={(v) => setTargetCombos(parseInt(v, 10))}
+					  inputMode="numeric"
+					  formatInput={(v) => String(v)} // 整數
+					  onChange={(n) => setTargetCombos(parseInt(n, 10))}
 					/>
 					<ParamSlider
 					  label="⏱️ 播放速度 (s/步)"
@@ -1561,8 +1865,9 @@ const buildPathStringAndMarkers = (fullPath) => {
 					  min={0.08}
 					  max={0.45}
 					  step={0.01}
-					  displayValue={(config.replaySpeed / 1000).toFixed(2)}
-					  onChange={(v) => updateParam('replaySpeed', v * 1000)}
+					  inputMode="decimal"
+					  formatInput={(v) => Number(v).toFixed(2)}              // ✅ input 也固定兩位
+					  onChange={(n) => updateParam('replaySpeed', n * 1000)}
 					/>
 					<ParamSlider
 					  label="📏 步數上限 (Steps)"
@@ -1570,7 +1875,9 @@ const buildPathStringAndMarkers = (fullPath) => {
 					  min={5}
 					  max={240}
 					  step={1}
-					  onChange={(v) => updateParam('maxSteps', v)}
+					  inputMode="numeric"
+					  formatInput={(v) => String(v)}
+					  onChange={(n) => updateParam('maxSteps', n)}
 					/>
 				  </div>
 				)}
@@ -1623,12 +1930,12 @@ const buildPathStringAndMarkers = (fullPath) => {
 							  <>
 								<img
 								  src={Object.values(ORB_TYPES).find(t => t.id === orbOf(orb))?.img}
-								  className="w-[96%] h-[96%] object-contain pointer-events-none select-none"
+								  className="w-[100%] h-[100%] object-contain pointer-events-none select-none"
 								  draggable={false}
 								  alt=""
 								/>
 
-								{markOf(orb) === 1 && (
+								{xMarkOf(orb) === 1 && (
 								  <img
 									src={x1Img}
 									className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
@@ -1637,13 +1944,25 @@ const buildPathStringAndMarkers = (fullPath) => {
 								  />
 								)}
 
-								{markOf(orb) === 2 && (
+								{xMarkOf(orb) === 2 && (
 								  <img
 									src={x2Img}
 									className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
 									draggable={false}
 									alt=""
 								  />
+								)}
+								
+								{qMarkOf(orb) === 1 && !(r === 0 && replayDone) && (
+								  <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
+									Start
+								  </div>
+								)}
+
+								{qMarkOf(orb) === 2 && (
+								  <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
+									End
+								  </div>
 								)}
 							  </>
 							)}
@@ -1654,7 +1973,7 @@ const buildPathStringAndMarkers = (fullPath) => {
 				  ))}
 				</div>
 			   </div>
-			   <svg className="absolute inset-0 pointer-events-none w-full h-full overflow-visible z-[60]" style={{ overflow: 'visible' }}>
+			   <svg ref={overlayRef} className="absolute inset-0 pointer-events-none w-full h-full overflow-visible z-[60]" style={{ overflow: 'visible' }}>
 				  <defs>
 					<filter id="glowGreen" x="-50%" y="-50%" width="200%" height="200%">
 					  <feGaussianBlur stdDeviation="3" result="blur" />
@@ -1737,25 +2056,27 @@ const buildPathStringAndMarkers = (fullPath) => {
 					);
 				  })()}
 				</svg>
-			   {floating?.visible && (
-				  <div
-					  className="absolute z-[9999] pointer-events-none flex items-center justify-center"
-					  style={{
-						left: floating.x,
-						top: floating.y,
-						transform: 'translate(-50%, -50%)',
-						width: 120,
-						height: 120,
-					  }}
-					>
-					  <img
-						src={Object.values(ORB_TYPES).find(t => t.id === floating.orbId)?.img}
-						className="w-16 h-16 md:w-20 md:h-20 block"
-						draggable={false}
-						alt=""
-					  />
-					</div>
-				)}
+				<div className="absolute inset-0 pointer-events-none z-[9999]">
+				   {floating?.visible && (
+					  <div
+						  className="absolute z-[9999] pointer-events-none flex items-center justify-center"
+						  style={{
+							left: floating.x,
+							top: floating.y,
+							transform: 'translate(-50%, -50%)',
+							width: 120,
+							height: 120,
+						  }}
+						>
+						  <img
+							src={Object.values(ORB_TYPES).find(t => t.id === floating.orbId)?.img}
+							className="w-16 h-16 md:w-20 md:h-20 block"
+							draggable={false}
+							alt=""
+						  />
+						</div>
+					)}
+				</div>
 			  {solving && (<div className="absolute inset-0 bg-neutral-950/90 rounded-3xl flex flex-col items-center justify-center z-20 backdrop-blur-xl">
 				  <div className="relative w-24 h-24 mb-6">
 					<div className="absolute inset-0 border-4 border-indigo-500/10 rounded-full"></div>
@@ -1767,56 +2088,128 @@ const buildPathStringAndMarkers = (fullPath) => {
 			</div>
 
 			<div className="flex flex-wrap gap-3 justify-center">
-			  <button onClick={() => initBoard(true)} disabled={solving || isReplaying} className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-20 px-6 py-4 rounded-2xl font-bold transition-all text-sm border border-neutral-700 shadow-md active:scale-95"><RefreshCw size={20} /> 隨機生成</button>
-			  <button onClick={handleOpenEditor} disabled={solving || isReplaying} className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-20 px-6 py-4 rounded-2xl font-bold transition-all text-sm border border-neutral-700 shadow-md active:scale-95"><Edit3 size={20} /> 自訂版面</button>
-			  <button onClick={solve} disabled={solving || isReplaying || showEditor} className={[ "flex items-center gap-2 px-8 py-4 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95", (solving || isReplaying || showEditor) ? "opacity-20" : "", needsSolve ? "bg-emerald-600 hover:bg-emerald-500 border-emerald-400/30 shadow-emerald-900/30 text-white" : "bg-neutral-800 hover:bg-neutral-700 border-neutral-700 text-neutral-200" ].join(" ")} title={needsSolve ? "參數已變更，尚未重新計算" : "目前結果已是最新"} > <Lightbulb size={20} /> {solving ? "計算中..." : (needsSolve ? "待計算" : "已計算")} </button>
+			  <button onClick={() => initBoard(true)} disabled={solving || isReplaying || exportingGif} className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-20 px-6 py-4 rounded-2xl font-bold transition-all text-sm border border-neutral-700 shadow-md active:scale-95"><RefreshCw size={20} /> 隨機生成</button>
+			  <button onClick={handleOpenEditor} disabled={solving || isReplaying || exportingGif} className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-20 px-6 py-4 rounded-2xl font-bold transition-all text-sm border border-neutral-700 shadow-md active:scale-95"><Edit3 size={20} /> 自訂版面</button>
+			  <button onClick={solve} disabled={solving || isReplaying || showEditor || exportingGif} className={[ "flex items-center gap-2 px-8 py-4 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95", (solving || isReplaying || showEditor || exportingGif) ? "opacity-20" : "", needsSolve ? "bg-emerald-600 hover:bg-emerald-500 border-emerald-400/30 shadow-emerald-900/30 text-white" : "bg-neutral-800 hover:bg-neutral-700 border-neutral-700 text-neutral-200" ].join(" ")} title={needsSolve ? "參數已變更，尚未重新計算" : "目前結果已是最新"} > <Lightbulb size={20} /> {solving ? "計算中..." : (needsSolve ? "待計算" : "已計算")} </button>
 			  <div className="flex items-center gap-2">
-			  <button
-				onClick={() => {
-				  if (isReplaying && !isPaused) return pauseReplay();
-				  if (isPaused) return resumeReplay();
+				  <button
+					onClick={() => {
+					  if (isReplaying && !isPaused) return pauseReplay();
+					  if (isPaused) return resumeReplay();
 
-				  if (!path || path.length === 0) return;
-				  const s = getCellCenterPx(path[0].r, path[0].c);
-				  const startPx = { x: s.x, y: s.y - 30 };
-				  replayPathContinuous(path, startPx);
-				}}
-				disabled={solving || (path.length === 0 && !isReplaying && !isPaused)}
-				className={[
-				  "flex items-center gap-2 px-10 py-4 rounded-2xl font-black shadow-xl transition-all text-base active:scale-95",
-				  (solving ? "opacity-20" : ""),
-				  (isReplaying && !isPaused)
-					? "bg-red-600 hover:bg-red-500 shadow-red-900/40"
-					: isPaused
-					  ? "bg-orange-500 hover:bg-orange-400 shadow-orange-900/30"
-					  : "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/40"
-				].join(" ")}
-			  >
-				{(isReplaying && !isPaused) ? (
-				  <>
-					<Pause size={22} fill="white" /> 暫停播放
-				  </>
-				) : isPaused ? (
-				  <>
-					<Play size={22} fill="white" /> 繼續播放
-				  </>
-				) : (
-				  <>
-					<Play size={22} fill="white" /> 重播路徑
-				  </>
-				)}
-			  </button>
+					  if (!path || path.length === 0) return;
+					  const s = getCellCenterPx(path[0].r, path[0].c);
+					  const startPx = { x: s.x, y: s.y - 30 };
+					  replayPathContinuous(path, startPx);
+					}}
+					disabled={solving || exportingGif ||(path.length === 0 && !isReplaying && !isPaused)}
+					className={[
+					  "flex items-center gap-2 px-10 py-4 rounded-2xl font-black shadow-xl transition-all text-base active:scale-95",
+					  ((solving || exportingGif)? "opacity-20" : ""),
+					  (isReplaying && !isPaused)
+						? "bg-red-600 hover:bg-red-500 shadow-red-900/40"
+						: isPaused
+						  ? "bg-orange-500 hover:bg-orange-400 shadow-orange-900/30"
+						  : "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-900/40"
+					].join(" ")}
+				  >
+					{(isReplaying && !isPaused) ? (
+					  <>
+						<Pause size={22} fill="white" /> 暫停播放
+					  </>
+					) : isPaused ? (
+					  <>
+						<Play size={22} fill="white" /> 繼續播放
+					  </>
+					) : (
+					  <>
+						<Play size={22} fill="white" /> 重播路徑
+					  </>
+					)}
+				  </button>
 
-			  {(isReplaying || isPaused || currentStep !== -1) && (
-				<button
-				  onClick={() => stopToBase(true)}
-				  className="p-4 bg-neutral-800 hover:bg-neutral-700 rounded-2xl border border-neutral-700 active:scale-95 transition-all text-neutral-300"
-				  title="Stop / 回到原盤"
-				>
-				  <Square size={20} fill="currentColor" />
-				</button>
-			  )}
+				  {(isReplaying || isPaused || exportingGif || currentStep !== -1) && (
+					<button
+					  onClick={() => stopToBase(true)}
+					  disabled={exportingGif}
+					  className={[
+						"p-4 bg-neutral-800 hover:bg-neutral-700 rounded-2xl border border-neutral-700 active:scale-95 transition-all text-neutral-300",
+						exportingGif ? "opacity-20 pointer-events-none" : ""
+					  ].join(" ")}
+					  title="Stop / 回到原盤"
+					>
+					  <Square size={20} fill="currentColor" />
+					</button>
+				  )}
+			  </div>
 			</div>
+			
+			<div className="flex flex-col items-center mt-3 gap-2">
+				<div className="flex items-center gap-3">
+				  {/* 輸出 GIF 主按鈕 */}
+				  <button
+					onClick={exportGif}
+					disabled={solving || exportingGif || !path || path.length < 2 || isReplaying || isPaused}
+					className={[
+					  "flex items-center gap-2 px-8 py-4 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95",
+					  (solving || exportingGif || isReplaying || isPaused || !path || path.length < 2) ? "opacity-20" : "",
+					  "bg-fuchsia-600 hover:bg-fuchsia-500 border-fuchsia-400/30 shadow-fuchsia-900/30 text-white"
+					].join(" ")}
+					title="將轉珠播放輸出為 GIF"
+				  >
+					<Database size={20} />
+					{exportingGif
+					  ? (gifStage === "render"
+						  ? "合成GIF..."
+						  : `擷取中... ${gifProgress.pct || 0}%`)
+					  : "輸出 GIF"}
+				  </button>
+
+				  {/* ⭐ 只有匯出中才出現 */}
+				  {exportingGif && (
+					<button
+					  onClick={abortGifExport}
+					  className="flex items-center gap-2 px-6 py-4 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95 bg-red-600 hover:bg-red-500 border-red-400/30 shadow-red-900/30 text-white"
+					>
+					  <Square size={20} />
+					  終止
+					</button>
+				  )}
+				</div>
+				{exportingGif && (
+					<div className="w-full max-w-xl">
+					  <div className="flex justify-between text-xs font-bold text-neutral-400 mb-1">
+						<span>擷取幀數</span>
+						<span className="text-fuchsia-300">
+						  {gifProgress.cur}/{gifProgress.total}
+						</span>
+					  </div>
+
+					  <div className="w-full h-2 rounded-full bg-neutral-800 overflow-hidden border border-neutral-700">
+						<div
+						  className="h-full bg-fuchsia-500 transition-all"
+						  style={{ width: `${gifProgress.pct || 0}%` }}
+						/>
+					  </div>
+
+					  <div className="mt-1 text-[11px] text-neutral-500 text-center">
+						產生中請勿切換頁面（會吃 CPU 是正常的）
+					  </div>
+					</div>
+				)}
+				{gifReady.url && (
+				  <a
+					href={gifReady.url}
+					download={gifReady.name}
+					className={[
+					  "mt-2 inline-flex items-center gap-2 px-8 py-4 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95",
+					  "bg-amber-500 hover:bg-amber-400 border-amber-300/30 shadow-amber-900/30 text-white"
+					].join(" ")}
+				  >
+					<FileDown size={20} />
+					下載 GIF
+				  </a>
+				)}
 			</div>
 
 			{/* Modal 編輯器 */}
@@ -1836,67 +2229,122 @@ const buildPathStringAndMarkers = (fullPath) => {
 					<div className="flex flex-col items-center">
 					  <div className="bg-neutral-950 p-3 rounded-3xl border-2 border-neutral-800 mb-8">
 						<div className="grid grid-cols-6 gap-0">
-						  {editingBoard.map((row, r) =>
-							row.map((orb, c) => (
-							  <div
-								key={`${r}-${c}`}
-								onClick={() => {
-									const next = editingBoard.map(row => [...row]);
-									const cur = next[r][c];
+						  {editingBoard.map((row, r) => (
+							  <React.Fragment key={r}>
 
-									if (selectedMark === 0) {
-									  // 刷符石：改 orb，保留 mark
-									  const m = markOf(cur);
-									  next[r][c] = withMark(selectedBrush, m);
-									} else {
-									  // 刷狀態：改 mark，保留 orb；同狀態再點 => 取消
+								{/* ✅ row0 / row1 分隔粗白線 */}
+								{r === 1 && (
+								  <div className="col-span-6 h-2 bg-white z-50 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
+								)}
+
+								{row.map((orb, c) => (
+								  <div
+									key={`${r}-${c}`}
+									onClick={() => {
+									  const next = editingBoard.map(row => [...row]);
+									  const cur = next[r][c];
+
 									  const o = orbOf(cur);
-									  const m = markOf(cur);
-									  const nm = (m === selectedMark) ? 0 : selectedMark;
-									  next[r][c] = withMark(o, nm);
-									}
+									  const xm = xMarkOf(cur);
+									  const qm = qMarkOf(cur);
 
-									setEditingBoard(next);
-								}}
-								className={`relative w-16 h-16 md:w-20 md:h-20 flex items-center justify-center rounded-2xl cursor-pointer transition-all
-								  ${orbOf(editingBoard[r][c]) === selectedBrush ? 'ring-2 ring-white' : ''}`}
-							  >
-								{(() => {
-								  const o = orbOf(orb);
-								  const m = markOf(orb);
+									  // ---------- ORB 刷子 ----------
+									  if (selectedMark === 0) {
+										next[r][c] = withMarks(selectedBrush, xm, qm);
+										setEditingBoard(next);
+										return;
+									  }
 
-								  return (
-									<>
+									  // ---------- X1 / X2 ----------
+									  if (selectedMark === 1 || selectedMark === 2) {
+										const want = selectedMark;
+										const nx = (xm === want) ? 0 : want;
+										const nq = (nx !== 0) ? 0 : qm;
+										next[r][c] = withMarks(o, nx, nq);
+										setEditingBoard(next);
+										return;
+									  }
+
+									  // ---------- Q1 / Q2 ----------
+									  if (selectedMark === 3 || selectedMark === 4) {
+										const wantQ = (selectedMark === 3) ? 1 : 2;
+
+										if (wantQ === 1 && xm !== 0) return;
+										if (wantQ === 2 && xm === 1) return;
+
+										if (qm === wantQ) {
+										  next[r][c] = withMarks(o, xm, 0);
+										  setEditingBoard(next);
+										  return;
+										}
+
+										if (r === 0) {
+										  for (let cc = 0; cc < COLS; cc++) {
+											const v = next[0][cc];
+											if (wantQ === 1 && qMarkOf(v) === 2) return;
+											if (wantQ === 2 && qMarkOf(v) === 1) return;
+										  }
+										}
+
+										for (let rr = 0; rr < TOTAL_ROWS; rr++) {
+										  for (let cc = 0; cc < COLS; cc++) {
+											const v = next[rr][cc];
+											if (qMarkOf(v) === wantQ) {
+											  next[rr][cc] = withMarks(orbOf(v), xMarkOf(v), 0);
+											}
+										  }
+										}
+
+										next[r][c] = withMarks(o, xm, wantQ);
+										setEditingBoard(next);
+										return;
+									  }
+									}}
+									className={`relative w-16 h-16 md:w-20 md:h-20 flex items-center justify-center transition-all duration-75
+									  ${r === 0 ? 'ring-2 ring-yellow-400 z-10 rounded-2xl' : 'rounded-2xl'}
+									  ${orbOf(editingBoard[r][c]) === selectedBrush ? 'ring-2 ring-white' : ''}
+									`}
+								  >
+									<img
+									  src={Object.values(ORB_TYPES).find(t => t.id === orbOf(orb))?.img}
+									  className="w-[90%] h-[90%] object-contain pointer-events-none select-none"
+									  draggable={false}
+									  alt=""
+									/>
+
+									{xMarkOf(orb) === 1 && (
 									  <img
-										src={Object.values(ORB_TYPES).find(t => t.id === o)?.img}
-										className="w-[90%] h-[90%] object-contain pointer-events-none select-none"
+										src={x1Img}
+										className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
 										draggable={false}
 										alt=""
 									  />
+									)}
 
-									  {m === 1 && (
-										<img
-										  src={x1Img}
-										  className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-										  draggable={false}
-										  alt=""
-										/>
-									  )}
+									{xMarkOf(orb) === 2 && (
+									  <img
+										src={x2Img}
+										className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+										draggable={false}
+										alt=""
+									  />
+									)}
 
-									  {m === 2 && (
-										<img
-										  src={x2Img}
-										  className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-										  draggable={false}
-										  alt=""
-										/>
-									  )}
-									</>
-								  );
-								})()}
-							  </div>
-							))
-						  )}
+									{qMarkOf(orb) === 1 && (
+									  <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
+										Start
+									  </div>
+									)}
+
+									{qMarkOf(orb) === 2 && (
+									  <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
+										End
+									  </div>
+									)}
+								  </div>
+								))}
+							  </React.Fragment>
+							))}
 						</div>
 					  </div>
 
@@ -1925,7 +2373,7 @@ const buildPathStringAndMarkers = (fullPath) => {
 						  STATE PALETTE
 						</p>
 
-						<div className="flex justify-center gap-3 flex-wrap">
+						<div className="flex justify-center gap-3">
 						  <button
 							onClick={() => setSelectedMark(0)}
 							className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
@@ -1952,6 +2400,24 @@ const buildPathStringAndMarkers = (fullPath) => {
 						  >
 							<img src={x2Img} className="w-[85%] h-[85%] object-contain" draggable={false} alt="" />
 						  </button>
+						  
+						  <button
+							  onClick={() => setSelectedMark(3)}
+							  className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
+								${selectedMark === 3 ? 'ring-4 ring-cyan-400 scale-110 shadow-lg shadow-cyan-500/20' : 'opacity-70 hover:opacity-100'}`}
+							  title="附加 Start（計算從此格開始，最多一個，再點取消）"
+							>
+							  <span className="font-black text-cyan-300 text-lg">Start</span>
+							</button>
+
+							<button
+							  onClick={() => setSelectedMark(4)}
+							  className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
+								${selectedMark === 4 ? 'ring-4 ring-fuchsia-400 scale-110 shadow-lg shadow-fuchsia-500/20' : 'opacity-70 hover:opacity-100'}`}
+							  title="附加 End（計算在此格結束，最多一個，再點取消）"
+							>
+							  <span className="font-black text-fuchsia-300 text-lg">End</span>
+							</button>
 						</div>
 					  </div>
 					</div>
@@ -1980,8 +2446,8 @@ const buildPathStringAndMarkers = (fullPath) => {
 			<div className="mt-10 flex items-start gap-4 p-5 bg-indigo-500/5 rounded-2xl border border-indigo-500/20 text-xs text-neutral-400 leading-relaxed shadow-inner">
 			  <Wrench size={18} className="text-indigo-500 shrink-0 mt-1" />
 			  <div>
-				<strong className="text-indigo-400 block mb-1 text-sm">功能介紹：</strong>
-				 <strong className="block">
+				<strong className="text-indigo-400 block mb-1 text-base">功能介紹：</strong>
+				 <strong className="block text-base">
 				  自動轉珠模擬器，全自動搜尋最優路徑。自訂盤面模擬、天降與斜轉判定、
 				  完整顯示 Combo 數、總消除符石數與移動步數。
 				  可設定目標 Combo、步數上限與回放速度。
@@ -1992,7 +2458,7 @@ const buildPathStringAndMarkers = (fullPath) => {
 				  href="https://forum.gamer.com.tw/C.php?bsn=23805&snA=729214"
 				  target="_blank"
 				  rel="noopener noreferrer"
-				  className="inline-block mt-3 text-indigo-400 neon-link font-semibold tracking-wide"
+				  className="inline-block mt-3 text-indigo-400 neon-link font-semibold tracking-wide text-base"
 				>
 				   → 前往巴哈介紹文
 				</a>
@@ -2004,14 +2470,96 @@ const buildPathStringAndMarkers = (fullPath) => {
   );
 };
 
-const ParamSlider = ({ label, value, min, max, step, displayValue, onChange }) => (
-  <div className="flex flex-col gap-1.5">
-    <div className="flex justify-between text-[14px] font-bold text-neutral-400">
-      <span>{label}</span>
-      <span className="text-blue-400 font-bold text-base">{displayValue || value}</span>
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+const roundToStep = (v, step, min = 0) => {
+  const s = Number(step) || 1;
+  const base = Number(min) || 0;
+  const k = Math.round((v - base) / s);
+  return base + k * s;
+};
+
+const ParamSlider = ({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+  inputMode = "decimal",
+  formatInput = (v) => String(v),
+}) => {
+  const [text, setText] = React.useState(formatInput(value));
+  const isComposingRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (isComposingRef.current) return;
+    setText(formatInput(value));
+  }, [value, formatInput]);
+
+  const commit = React.useCallback(() => {
+    if (text.trim() === "") {
+      setText(formatInput(value));
+      return;
+    }
+
+    const n = Number(text);
+    if (!Number.isFinite(n)) {
+      setText(formatInput(value));
+      return;
+    }
+
+    let next = clamp(n, min, max);
+    next = roundToStep(next, step, min);
+
+    if (String(step).includes(".")) {
+      const decimals = String(step).split(".")[1].length;
+      next = Number(next.toFixed(decimals));
+    }
+
+    onChange(next);
+    setText(formatInput(next));
+  }, [text, value, min, max, step, onChange, formatInput]);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex justify-between items-center text-[14px] font-bold text-neutral-400 gap-2">
+        <span>{label}</span>
+
+        {/* ✅ 只保留可輸入 input，拿掉原本不可輸入 label */}
+        <input
+          value={text}
+          inputMode={inputMode}
+          className="w-24 md:w-28 px-2 py-1 rounded-lg bg-neutral-950 border border-neutral-800 text-blue-400 font-bold text-base text-right outline-none focus:ring-2 focus:ring-blue-500/40"
+          onCompositionStart={() => { isComposingRef.current = true; }}
+          onCompositionEnd={() => { isComposingRef.current = false; commit(); }}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+            if (e.key === "Escape") {
+              setText(formatInput(value));
+              e.currentTarget.blur();
+            }
+          }}
+        />
+      </div>
+
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          onChange(n);
+          setText(formatInput(n));
+        }}
+        className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+      />
     </div>
-    <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(e.target.value)} className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-blue-500" />
-  </div>
-);
+  );
+};
 
 export default App;
