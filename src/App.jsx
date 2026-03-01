@@ -40,7 +40,7 @@ const DIRS_8 = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1,
 
 const DEFAULT_CONFIG = {
   beamWidth: 200,    
-  maxSteps: 10,      
+  maxSteps: 50,      
   maxNodes: 120000,  
   stepPenalty: 250,  
   potentialWeight: 800, 
