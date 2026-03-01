@@ -2067,40 +2067,29 @@ const buildPathStringAndMarkers = (fullPath) => {
 						{/* 🔵 高濃厚版光暈 */}
 						<div className="absolute z-0 flex items-center justify-center">
 
-						  {/* 外層強擴散 */}
-						  <div
-							className="absolute rounded-full blur-[60px] opacity-90"
-							style={{
-							  width: 170,
-							  height: 170,
-							  background:
-								"radial-gradient(circle, rgba(99,102,241,0.85) 0%, rgba(99,102,241,0.65) 35%, rgba(99,102,241,0.35) 60%, rgba(0,0,0,0) 85%)",
-							}}
-						  />
+  {/* 集中高能核心 */}
+  <div
+    className="absolute rounded-full blur-lg opacity-100"
+    style={{
+      width: 90,
+      height: 90,
+      background:
+        "radial-gradient(circle, rgba(99,102,241,1) 0%, rgba(99,102,241,0.95) 40%, rgba(99,102,241,0.6) 65%, rgba(0,0,0,0) 80%)",
+    }}
+  />
 
-						  {/* 中層實光 */}
-						  <div
-							className="absolute rounded-full blur-2xl opacity-95"
-							style={{
-							  width: 120,
-							  height: 120,
-							  background:
-								"radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(99,102,241,0.7) 50%, rgba(99,102,241,0.3) 75%, rgba(0,0,0,0) 90%)",
-							}}
-						  />
+  {/* 強白色核心提亮 */}
+  <div
+    className="absolute rounded-full blur-sm opacity-100"
+    style={{
+      width: 75,
+      height: 75,
+      background:
+        "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,255,255,0.95) 50%, rgba(255,255,255,0.5) 75%, rgba(0,0,0,0) 95%)",
+    }}
+  />
 
-						  {/* 內核高亮核心 */}
-						  <div
-							className="absolute rounded-full blur-lg opacity-100"
-							style={{
-							  width: 90,
-							  height: 90,
-							  background:
-								"radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,255,255,0.9) 40%, rgba(255,255,255,0.4) 70%, rgba(0,0,0,0) 95%)",
-							}}
-						  />
-
-						</div>
+</div>
 
 						{/* orb 本體 */}
 						<img
