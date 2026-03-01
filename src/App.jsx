@@ -45,7 +45,7 @@ const DEFAULT_CONFIG = {
   stepPenalty: 250,  
   potentialWeight: 800, 
   clearedWeight: 300,
-  replaySpeed: 200, 
+  replaySpeed: 250, 
 };
 
 const App = () => {
@@ -1122,6 +1122,31 @@ const App = () => {
 	  };
 	}, []);
 
+  const addHoldFrames = async (n, delay = frameDelay) => {
+	  if (isCancelled()) return;
+
+	  // 先等一幀確保 DOM 是最後狀態
+	  await new Promise(r => requestAnimationFrame(r));
+	  if (isCancelled()) return;
+
+	  // 抓最後畫面一次
+	  const holdCanvas = await toCanvas(el, captureOpts);
+	  if (isCancelled()) return;
+
+	  // 尺寸不符就不加（避免你前面那個 size mismatch）
+	  if (holdCanvas.width !== firstCanvas.width || holdCanvas.height !== firstCanvas.height) {
+		console.warn("Skip hold frames due to size mismatch:", holdCanvas.width, holdCanvas.height);
+		return;
+	  }
+
+	  // 重複塞 n 幀（同一張畫面），讓結尾停住
+	  for (let k = 0; k < n; k++) {
+		if (isCancelled()) return;
+		gif.addFrame(holdCanvas, { delay, copy: true });
+		bumpProgress();
+	  }
+	};
+
   const exportGif = useCallback(async () => {
 	  // ✅ 開新的一次匯出：換 id、取消旗標歸零
 	  const myId = ++exportTokenRef.current.id;
@@ -1129,6 +1154,7 @@ const App = () => {
 
 	  const isCancelled = () =>
 		exportTokenRef.current.cancelled || exportTokenRef.current.id !== myId;
+
 	  try {
 		setGifReady(prev => {
 		  if (prev.url) URL.revokeObjectURL(prev.url);
@@ -1194,13 +1220,12 @@ const App = () => {
 		// =========
 		// 3) foreignObject 截圖：固定輸出尺寸，避免擠壓
 		// =========
-		const rect0 = el.getBoundingClientRect();
+		// const rect0 = el.getBoundingClientRect(); // 你沒用到可以刪掉
 
-		const W = el.offsetWidth;   // 用 offsetWidth/Height（更不吃 zoom 的浮動）
+		const W = el.offsetWidth;
 		const H = el.offsetHeight;
 
-		const pixelRatio = 1; // ✅ 固定 1：輸出大小完全不受瀏覽器縮放影響（最穩）
-		/* 你想更清晰：用 2 也行，但會變大張 */
+		const pixelRatio = 1;
 
 		const captureOpts = {
 		  backgroundColor: null,
@@ -1208,11 +1233,7 @@ const App = () => {
 		  width: W,
 		  height: H,
 		  pixelRatio,
-
-		  // ❌ 直接拿掉這段！縮放錯位的主因
-		  // style: { transform: ..., transformOrigin: ... },
 		};
-		
 
 		const bumpProgress = (forceCur = null) => {
 		  setGifProgress(prev => {
@@ -1227,19 +1248,23 @@ const App = () => {
 		  });
 		};
 
+		// ✅ 這個用來「不再抓圖」直接多加 3 偵
+		let lastCanvas = null;
+
 		// 先截第一幀，用它決定 GIF 固定像素尺寸
 		const firstCanvas = await toCanvas(el, captureOpts);
+		lastCanvas = firstCanvas;
 
 		const gif = new GIF({
 		  workers: 2,
 		  quality: 40,
-		  dither: false,        // ✅ 關掉抖動，常常能再降體積
+		  dither: false,
 		  workerScript: gifWorkerUrl,
 		  width: firstCanvas.width,
 		  height: firstCanvas.height,
 		});
-		
-		gifRef.current = gif; 
+
+		gifRef.current = gif;
 
 		gif.addFrame(firstCanvas, { delay: frameDelay, copy: true });
 		bumpProgress();
@@ -1257,6 +1282,8 @@ const App = () => {
 			console.warn("Skip frame due to size mismatch:", canvas.width, canvas.height);
 			return;
 		  }
+
+		  lastCanvas = canvas; // ✅ 記住最後一張（用來尾端多加偵）
 
 		  gif.addFrame(canvas, { delay: frameDelay, copy: true });
 		  if (!isCancelled()) bumpProgress();
@@ -1309,20 +1336,26 @@ const App = () => {
 			if (isCancelled()) return;
 		  }
 		}
-		
+
 		// ✅ 最後一幀都加完了，強制顯示 12/12（100%）
 		bumpProgress(totalFrames);
 
+		// ✅ 不再抓圖：直接把最後一張 canvas 重複加 3 偵
+		if (lastCanvas) {
+			if (isCancelled()) return;
+			gif.addFrame(lastCanvas, { delay: 1500, copy: true });
+		}
+
 		// ✅ 讓 React 有機會把 12/12 畫上去（哪怕一瞬間）
 		await new Promise(r => requestAnimationFrame(r));
-		await new Promise(r => setTimeout(r, 60)); // 30~120ms 自己調，想更快就 30
+		await new Promise(r => setTimeout(r, 60));
 
 		if (isCancelled()) return;
 
 		// ✅ 進入「合成 GIF...」階段
 		setGifStage("render");
 		await new Promise(r => requestAnimationFrame(r));
-		
+
 		// =========
 		// 5) render GIF
 		// =========
@@ -1334,7 +1367,7 @@ const App = () => {
 
 		if (isCancelled()) return;
 
-		gifBlobRef.current = blob; // ✅ 加這行（關鍵）
+		gifBlobRef.current = blob;
 		const url = URL.createObjectURL(blob);
 
 		if (isCancelled()) {
@@ -1350,15 +1383,15 @@ const App = () => {
 		alert("GIF 輸出失敗，請看 Console: " + (e?.message || e));
 		stopToBase(true);
 	  } finally {
-		  // ✅ 只有「這次匯出」還是最新那次，才去收尾 UI
-		  const stillMine = exportTokenRef.current.id === myId;
-		  if (stillMine) {
-			gifRef.current = null;
-			setExportingGif(false);
-			setGifProgress({ cur: 0, total: 0, pct: 0 });
-			setGifStage("capture");
-		  }
+		// ✅ 只有「這次匯出」還是最新那次，才去收尾 UI
+		const stillMine = exportTokenRef.current.id === myId;
+		if (stillMine) {
+		  gifRef.current = null;
+		  setExportingGif(false);
+		  setGifProgress({ cur: 0, total: 0, pct: 0 });
+		  setGifStage("capture");
 		}
+	  }
 	}, [path, config.replaySpeed, stopToBase, getCellCenterPx]);
 
   const onGifDownloadClick = useCallback(async () => {
@@ -1413,114 +1446,6 @@ const App = () => {
 	  if (!rc) return { x: 0, y: 0 };
 	  return { x: (rc.left + rc.right) / 2, y: (rc.top + rc.bottom) / 2 };
 	};
-  const replayPath = (targetPath = path) => {
-	  if (!targetPath || targetPath.length < 2) return;
-
-	  // 停掉舊動畫
-	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
-
-	  setIsReplaying(true);
-	  setCurrentStep(0);
-
-	  const start = targetPath[0];
-	  const held = originalBoard[start.r][start.c];
-
-	  // 建立回放盤面：起手格挖洞
-	  let b = originalBoard.map(r => [...r]);
-	  b[start.r][start.c] = -1;
-
-	  setReplayBoard(b);
-	  setHolePos({ r: start.r, c: start.c });
-
-	  // floating 初始位置：起點中心
-	  const p0 = getCellCenterPx(start.r, start.c);
-	  setFloating({ orbId: held, x: p0.x, y: p0.y, visible: true });
-
-	  // 初始化動畫狀態
-	  replayAnimRef.current = {
-		raf: 0,
-		step: 0, // 已完成的 step index（對應 targetPath[step]）
-		t0: performance.now(),
-		from: targetPath[0],
-		to: targetPath[1],
-		b,
-		held,
-	  };
-
-	  const duration = Math.max(40, config.replaySpeed); // 每步動畫時長(ms)
-
-	  const tick = (now) => {
-		const st = replayAnimRef.current;
-		const t = Math.min(1, (now - st.t0) / duration);
-
-		// from -> to 插值
-		const a = getCellCenterPx(st.from.r, st.from.c);
-		const z = getCellCenterPx(st.to.r, st.to.c);
-		const x = a.x + (z.x - a.x) * t;
-		const y = a.y + (z.y - a.y) * t;
-
-		setFloating(prev => (prev ? { ...prev, x, y, visible: true } : prev));
-
-		if (t < 1) {
-		  st.raf = requestAnimationFrame(tick);
-		  return;
-		}
-
-		// === 到達 to：提交一次盤面更新（跟你原本 interval 每步一致） ===
-		const nextStep = st.step + 1;      // 即將完成的 step
-		const prev = targetPath[nextStep - 1];
-		const curr = targetPath[nextStep];
-
-		// row0 終止
-		if (curr.r === 0) {
-		  const bb = st.b.map(r => [...r]);
-		  bb[prev.r][prev.c] = st.held;
-
-		  setReplayBoard(bb);
-		  setFloating(null);
-		  setHolePos(null);
-		  setIsReplaying(false);
-		  setCurrentStep(targetPath.length - 1);
-		  st.raf = 0;
-		  return;
-		}
-
-		// 核心：curr 的珠滑進 prev 的洞，洞移到 curr
-		const movedOrb = st.b[curr.r][curr.c];
-		st.b[prev.r][prev.c] = movedOrb;
-		st.b[curr.r][curr.c] = -1;
-
-		setReplayBoard(st.b.map(r => [...r]));
-		setHolePos({ r: curr.r, c: curr.c });
-		setCurrentStep(nextStep);
-
-		// 結束：把 held 放到最後洞
-		if (nextStep >= targetPath.length - 1) {
-		  const last = targetPath[targetPath.length - 1];
-		  const bb = st.b.map(r => [...r]);
-		  bb[last.r][last.c] = st.held;
-
-		  setReplayBoard(bb);
-		  setFloating(null);
-		  setHolePos(null);
-		  setIsReplaying(false);
-		  setCurrentStep(targetPath.length - 1);
-		  st.raf = 0;
-		  return;
-		}
-
-		// 下一段
-		st.step = nextStep;
-		st.t0 = performance.now();
-		st.from = curr;
-		st.to = targetPath[nextStep + 1];
-
-		st.raf = requestAnimationFrame(tick);
-	  };
-
-	  replayAnimRef.current.raf = requestAnimationFrame(tick);
-	};
-  
 
   const replayPathContinuous = (targetPath = path, startPx = null) => {
 	  if (!targetPath || targetPath.length < 2) return;
@@ -1693,84 +1618,350 @@ const App = () => {
 	  return { x, y };
 	};
 
+  const q = (v, unit = 0.25) => Math.round(v / unit) * unit;
+
+  const edgeKey = (a, b) => {
+	  const ax = q(a.x), ay = q(a.y);
+	  const bx = q(b.x), by = q(b.y);
+	  // 無向邊：反向走同一小段也算重合
+	  if (ax < bx || (ax === bx && ay <= by)) return `${ax},${ay}|${bx},${by}`;
+	  return `${bx},${by}|${ax},${ay}`;
+	};
+
+  const dirKey = (a, b, eps = 1e-6) => {
+	  const dx = b.x - a.x, dy = b.y - a.y;
+	  // 你的路徑通常是格子中心點，所以 dx/dy 會是固定步長的倍數
+	  // 用 sign 就能穩定分方向（水平/垂直/斜）
+	  const sx = Math.abs(dx) < eps ? 0 : Math.sign(dx);
+	  const sy = Math.abs(dy) < eps ? 0 : Math.sign(dy);
+	  return `${sx},${sy}`;
+	};
+
+	// ✅ v2：如果同方向 run 的「前綴」有重合，就把整段 A->D 一次鼓包（不中斷）
+	// prefixMinEdges：前綴重合幾條邊就觸發（你要 A->B 一條就鼓包 → 用 1）
+	// fullMinEdges：整段都重合時至少幾條邊才鼓包（避免很短的抖動，可用 2~3）
+  const collapseUpcomingOverlapRunsV2 = (
+	  pts,
+	  {
+		prefixMinEdges = 1,
+		fullMinEdges = 3,
+		bump = 14,
+		bumpRamp = 14,
+		eps = 1e-6,
+	  } = {}
+	) => {
+	  if (!pts || pts.length < 2) return pts;
+
+	  const visited = new Set();
+	  const out = [pts[0]];
+
+	  const hypot = (x, y) => Math.hypot(x, y);
+
+	  const addRunEdgesToVisited = (fromIdx, toIdx) => {
+		// 加入 edges [fromIdx .. toIdx-1]
+		for (let k = fromIdx; k < toIdx; k++) {
+		  visited.add(edgeKey(pts[k], pts[k + 1]));
+		}
+	  };
+
+	  let i = 0;
+	  while (i < pts.length - 1) {
+		const d = dirKey(pts[i], pts[i + 1], eps);
+
+		// 找同方向 run：pts[i..j]
+		let j = i + 1;
+		while (j < pts.length - 1 && dirKey(pts[j], pts[j + 1], eps) === d) j++;
+
+		const edgesCount = j - i; // run 內邊數
+
+		// 1) 計算「重合前綴」長度 p：從 i 開始連續多少條邊已走過
+		let p = 0;
+		while (p < edgesCount && visited.has(edgeKey(pts[i + p], pts[i + p + 1]))) {
+		  p++;
+		}
+
+		const A = pts[i];
+		const D = pts[j];
+
+		// 2) 判斷要不要做「整段鼓包」
+		const fullOverlapped = (p === edgesCount);
+		const triggerFull = fullOverlapped && edgesCount >= fullMinEdges;
+		const triggerPrefix = (!fullOverlapped) && p >= prefixMinEdges;
+
+		if (triggerFull || triggerPrefix) {
+		  // ✅ 整段 A->D 一次鼓包（你要的 A->C 情況就在這裡）
+		  const dx = D.x - A.x;
+		  const dy = D.y - A.y;
+		  const L = hypot(dx, dy);
+
+		  if (L <= eps) {
+			out.push(D);
+		  } else {
+			const ux = dx / L, uy = dy / L;
+			const nx = -uy, ny = ux;
+
+			const t = Math.max(2, Math.min(bumpRamp, L * 0.33));
+			const h = Math.min(bump, L * 0.25);
+
+			const bumpIn = { x: A.x + ux * t + nx * h, y: A.y + uy * t + ny * h };
+			const bumpOut = { x: D.x - ux * t + nx * h, y: D.y - uy * t + ny * h };
+
+			out.push(bumpIn, bumpOut, D);
+		  }
+
+		  // ✅ 很重要：run 中「不重合的後半」其實是新邊，必須加入 visited
+		  // - 全重合：加不加都行；部分重合：至少把 [i+p .. j-1] 加入
+		  if (!fullOverlapped) addRunEdgesToVisited(i + p, j);
+		  // 如果你想更一致，也可以把整段都加：
+		  // addRunEdgesToVisited(i, j);
+
+		} else {
+		  // 3) 正常輸出 run，並把邊加入 visited
+		  for (let k = i; k < j; k++) {
+			visited.add(edgeKey(pts[k], pts[k + 1]));
+			out.push(pts[k + 1]);
+		  }
+		}
+
+		i = j;
+	  }
+
+	  return out;
+	};
+
+  const hypot = (x, y) => Math.hypot(x, y);
+
+  const laneOf = (count) => {
+	  // 0, +1, -1, +2, -2 ...
+	  if (count === 0) return 0;
+	  return (count % 2 === 1) ? (count + 1) / 2 : -(count / 2);
+	};
+
+  const dedupePts = (pts, eps = 1e-6) => {
+	  if (!pts || pts.length < 2) return pts;
+	  const out = [pts[0]];
+	  for (let i = 1; i < pts.length; i++) {
+		const p = pts[i], q0 = out[out.length - 1];
+		if (Math.hypot(p.x - q0.x, p.y - q0.y) > eps) out.push(p);
+	  }
+	  return out;
+	};
+
+	// ✅ v2：用「單步邊」偵測重疊 + 把連續重疊合併成 run，做順滑 detour
+  const deOverlapByRampedDetourV2 = (pts, spacing = 8, ramp = 14, eps = 1e-6) => {
+	  const clean = dedupePts(pts, eps);
+	  if (!clean || clean.length < 2) return clean;
+
+	  const used = new Map();     // edgeKey -> times seen
+	  const out = [clean[0]];
+
+	  // run 狀態
+	  let inRun = false;
+	  let runStart = null;        // run 起點（原座標）
+	  let runEnd = null;          // run 終點（原座標，會一路延伸）
+	  let runDir = null;          // {ux, uy, nx, ny}
+	  let runOff = 0;             // offset
+	  let runLen = 0;             // run 長度（像素）
+
+	  const flushRun = () => {
+		if (!inRun) return;
+
+		const a = runStart;
+		const b = runEnd;
+		const L = runLen;
+
+		// ramp 不要吃光，run 越長越可以拉大一點，但仍有限制
+		const t = Math.max(2, Math.min(ramp, L * 0.33));
+
+		const { ux, uy, nx, ny } = runDir;
+		const off = runOff;
+
+		const pIn = {
+		  x: a.x + ux * t + nx * off,
+		  y: a.y + uy * t + ny * off,
+		};
+		const pOut = {
+		  x: b.x - ux * t + nx * off,
+		  y: b.y - uy * t + ny * off,
+		};
+
+		// out 最後一點已經是 a，所以 push detour 點與 b
+		out.push(pIn, pOut, b);
+
+		inRun = false;
+		runStart = runEnd = runDir = null;
+		runOff = 0;
+		runLen = 0;
+	  };
+
+	  for (let i = 0; i < clean.length - 1; i++) {
+		const a = clean[i];
+		const b = clean[i + 1];
+
+		const dx = b.x - a.x;
+		const dy = b.y - a.y;
+		const L = hypot(dx, dy);
+		if (L <= eps) continue;
+
+		// 單步邊 key（這裡 a->b 通常就是一步）
+		const k = edgeKey(a, b);
+		const cnt = used.get(k) || 0;
+		used.set(k, cnt + 1);
+
+		const isOverlap = cnt > 0;
+
+		if (!isOverlap) {
+		  // 遇到非重疊邊：先把正在 detour 的 run 結束
+		  flushRun();
+		  out.push(b);
+		  continue;
+		}
+
+		// 重疊邊：計算這條邊該用的 lane / offset
+		const ux = dx / L;
+		const uy = dy / L;
+		const nx = -uy;
+		const ny = ux;
+
+		const lane = laneOf(cnt);       // 第2次、第3次…各走不同 lane
+		const off  = lane * spacing;
+
+		if (!inRun) {
+		  // 開新 run：從 a 開始 detour
+		  inRun = true;
+		  runStart = a;
+		  runEnd = b;
+		  runDir = { ux, uy, nx, ny };
+		  runOff = off;
+		  runLen = L;
+		} else {
+		  // 如果方向相同 + offset 相同，延長 run（保持一路都不貼合）
+		  const sameDir =
+			Math.abs(runDir.ux - ux) < 1e-6 &&
+			Math.abs(runDir.uy - uy) < 1e-6;
+		  const sameOff = Math.abs(runOff - off) < 1e-6;
+
+		  if (sameDir && sameOff) {
+			runEnd = b;
+			runLen += L;
+		  } else {
+			// 方向或 lane 變了：先結束舊 run，再開新 run
+			flushRun();
+			inRun = true;
+			runStart = a;
+			runEnd = b;
+			runDir = { ux, uy, nx, ny };
+			runOff = off;
+			runLen = L;
+		  }
+		}
+	  }
+
+	  flushRun();
+	  return out;
+	};
+
+  const simplifyPts = (pts, eps = 1e-6) => {
+	  if (!pts || pts.length < 2) return pts;
+
+	  // 1) 去掉重複點
+	  const a = [pts[0]];
+	  for (let i = 1; i < pts.length; i++) {
+		const p = pts[i];
+		const q = a[a.length - 1];
+		if (Math.hypot(p.x - q.x, p.y - q.y) > eps) {
+		  a.push(p);
+		}
+	  }
+
+	  if (a.length < 3) return a;
+
+	  // 2) 去掉同方向直線上的中繼點
+	  const out = [a[0]];
+	  for (let i = 1; i < a.length - 1; i++) {
+		const p0 = out[out.length - 1];
+		const p1 = a[i];
+		const p2 = a[i + 1];
+
+		const v1x = p1.x - p0.x;
+		const v1y = p1.y - p0.y;
+		const v2x = p2.x - p1.x;
+		const v2y = p2.y - p1.y;
+
+		const cross = v1x * v2y - v1y * v2x; // 叉積
+		const dot   = v1x * v2x + v1y * v2y; // 點積
+
+		// 共線且同方向 → 刪除 p1
+		if (Math.abs(cross) < eps && dot > 0) {
+		  continue;
+		}
+
+		out.push(p1);
+	  }
+
+	  out.push(a[a.length - 1]);
+	  return out;
+	};
   // ====== 核心路徑幾何邏輯：節點端口分配系統 (v12.9) ======
   // ====== 全重疊錯開：Node-Port Lane System ======
-const buildPathStringAndMarkers = (fullPath) => {
-  if (!fullPath || fullPath.length < 2) return { d: "", tip: null, start: null };
 
-  const SPACING = 9;          // 想更分開就加大：10~14
-  const portUsage = new Map(); // key: "r,c|dr,dc" -> count
+  const buildPathStringAndMarkersRounded = (pts, radius = 8) => {
+	  if (!pts || pts.length < 2) return { d: "", start: null, tip: null };
 
-  const laneOf = (k) => {
-    const count = portUsage.get(k) || 0;
-    portUsage.set(k, count + 1);
-    // 0, +1, -1, +2, -2 ...
-    if (count === 0) return 0;
-    return (count % 2 === 1) ? (count + 1) / 2 : -(count / 2);
-  };
+	  const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 
-  const dirKey = (dr, dc) => `${dr},${dc}`;
-  const nodeKey = (p) => `${p.r},${p.c}`;
+	  const moveTowards = (from, to, len) => {
+		const d = dist(from, to);
+		if (d <= 1e-6) return { ...from };
+		const t = len / d;
+		return {
+		  x: from.x + (to.x - from.x) * t,
+		  y: from.y + (to.y - from.y) * t
+		};
+	  };
 
-  // 每種方向給一個固定法向量（用來往旁邊偏移）
-  const normalFor = (dr, dc) => {
-    // 水平移動：往上下偏
-    if (dr === 0 && dc !== 0) return { nx: 0, ny: 1 };
-    // 垂直移動：往左右偏
-    if (dc === 0 && dr !== 0) return { nx: 1, ny: 0 };
-    // 斜線：\ 方向（dr,dc 同號）法向 (1,-1)
-    if ((dr > 0 && dc > 0) || (dr < 0 && dc < 0)) return { nx: 1, ny: -1 };
-    // 斜線：/ 方向（dr,dc 異號）法向 (1,1)
-    return { nx: 1, ny: 1 };
-  };
+	  // 🔥 先簡化點
+	  const cleanPts = simplifyPts(pts);
 
-  const normalize = ({ nx, ny }) => {
-    const len = Math.hypot(nx, ny) || 1;
-    return { nx: nx / len, ny: ny / len };
-  };
+	  const start = cleanPts[0];
+	  const tip   = cleanPts[cleanPts.length - 1];
 
-  // 某點 p 朝 (dr,dc) 的 port 位置 = cell center + normal * lane*SPACING
-  const portPoint = (p, dr, dc) => {
-    const base = getCellCenter(p);
-    const { nx, ny } = normalize(normalFor(dr, dc));
+	  let dStr = `M ${start.x} ${start.y}`;
 
-    const k = `${nodeKey(p)}|dir:${dirKey(dr, dc)}`;
-    const lane = laneOf(k);
-    const off = lane * SPACING;
+	  if (cleanPts.length === 2) {
+		dStr += ` L ${tip.x} ${tip.y}`;
+		return { d: dStr, start, tip };
+	  }
 
-    return {
-      x: base.x + nx * off,
-      y: base.y + ny * off,
-    };
-  };
+	  for (let i = 1; i < cleanPts.length - 1; i++) {
+		const p0 = cleanPts[i - 1];
+		const p1 = cleanPts[i];
+		const p2 = cleanPts[i + 1];
 
-  // 每段：起點用 p1 朝 p2 的 port，終點用 p2 朝 p1 的 port
-  const segs = fullPath.slice(0, -1).map((p1, i) => {
-    const p2 = fullPath[i + 1];
-    const dr = p2.r - p1.r;
-    const dc = p2.c - p1.c;
+		const d01 = dist(p0, p1);
+		const d12 = dist(p1, p2);
 
-    const start = portPoint(p1, dr, dc);
-    const end   = portPoint(p2, -dr, -dc);
+		const r = Math.max(
+		  0,
+		  Math.min(radius, d01 * 0.5, d12 * 0.5)
+		);
 
-    return { start, end };
-  });
+		if (r <= 1e-6) {
+		  dStr += ` L ${p1.x} ${p1.y}`;
+		  continue;
+		}
 
-  // 組 path：段與段之間 start/end 可能不同（因為 port 不同），補一段連接線
-  let d = `M ${segs[0].start.x} ${segs[0].start.y}`;
-  for (let i = 0; i < segs.length; i++) {
-    d += ` L ${segs[i].end.x} ${segs[i].end.y}`;
-    if (i + 1 < segs.length) {
-      d += ` L ${segs[i + 1].start.x} ${segs[i + 1].start.y}`;
-    }
-  }
+		const inPt  = moveTowards(p1, p0, r);
+		const outPt = moveTowards(p1, p2, r);
 
-  return {
-    d,
-    start: segs[0].start,
-    tip: segs[segs.length - 1].end,
-  };
-};
+		dStr += ` L ${inPt.x} ${inPt.y}`;
+		dStr += ` Q ${p1.x} ${p1.y} ${outPt.x} ${outPt.y}`;
+	  }
+
+	  dStr += ` L ${tip.x} ${tip.y}`;
+
+	  return { d: dStr, start, tip };
+	};
 
   return (
     <div className="min-h-screen bg-neutral-950 text-white font-sans">
@@ -2033,7 +2224,17 @@ const buildPathStringAndMarkers = (fullPath) => {
 					const visiblePath = path.slice(0, currentStep + 1);
 					if (visiblePath.length < 2) return null;
 
-					const { d, start, tip } = buildPathStringAndMarkers(visiblePath);
+					const pts0 = buildPixelPath(visiblePath);
+
+					const ptsJump = collapseUpcomingOverlapRunsV2(pts0, {
+					  prefixMinEdges: 1, // ✅ A->B 只要重合一條邊，就把整段 A->C 鼓包
+					  fullMinEdges: 3,   // ✅ 全重合時至少 3 邊才鼓包（可依喜好）
+					  bump: 14,
+					  bumpRamp: 14,
+					});
+
+					const ptsDetour = deOverlapByRampedDetourV2(ptsJump, 8, 14);
+					const { d, start, tip } = buildPathStringAndMarkersRounded(ptsDetour, 12);
 
 					return (
 					  <>
@@ -2050,29 +2251,52 @@ const buildPathStringAndMarkers = (fullPath) => {
 						)}
 
 						<>
-						  {/* 外層柔光 */}
-						  <path
-							d={d}
-							stroke="white"
-							strokeWidth="8"
-							fill="none"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-							opacity={0.35}
-							style={{ mixBlendMode: 'screen' }}
-						  />
-						  {/* 內層主線 */}
-						  <path
-							d={d}
-							stroke="white"
-							strokeWidth="4"
-							fill="none"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-							opacity={0.80}
-							style={{ mixBlendMode: 'screen' }}
-						  />
-						</>
+  {/* 中：陰影（先畫，才會在後面） */}
+  <path
+    d={d}
+    stroke="rgba(0,0,0,0.55)"
+    strokeWidth="10"
+    fill="none"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={{
+      filter: "blur(3.5px)",
+      // 陰影不要用 screen，不然會變淡甚至看不到
+      mixBlendMode: "normal",
+    }}
+    opacity={0.9}
+  />
+
+  {/* 外：光暈（再畫） */}
+  <path
+    d={d}
+    stroke="rgba(255,255,255,0.95)"
+    strokeWidth="14"
+    fill="none"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={{
+      filter: "blur(6px)",
+      mixBlendMode: "screen",
+    }}
+    opacity={0.45}
+  />
+
+  {/* 裡：白色核心（最後畫，最清晰） */}
+  <path
+    d={d}
+    stroke="white"
+    strokeWidth="4"
+    fill="none"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={{
+      // 核心不要 blur
+      mixBlendMode: "screen",
+    }}
+    opacity={0.95}
+  />
+</>
 
 						{currentStep >= 0 && tip && (
 						  <circle
@@ -2108,29 +2332,29 @@ const buildPathStringAndMarkers = (fullPath) => {
 						{/* 🔵 高濃厚版光暈 */}
 						<div className="absolute z-0 flex items-center justify-center">
 
-  {/* 集中高能核心 */}
-  <div
-    className="absolute rounded-full blur-lg opacity-100"
-    style={{
-      width: 90,
-      height: 90,
-      background:
-        "radial-gradient(circle, rgba(99,102,241,1) 0%, rgba(99,102,241,0.95) 40%, rgba(99,102,241,0.6) 65%, rgba(0,0,0,0) 80%)",
-    }}
-  />
+					  {/* 集中高能核心 */}
+					  <div
+						className="absolute rounded-full blur-lg opacity-100"
+						style={{
+						  width: 90,
+						  height: 90,
+						  background:
+							"radial-gradient(circle, rgba(99,102,241,1) 0%, rgba(99,102,241,0.95) 40%, rgba(99,102,241,0.6) 65%, rgba(0,0,0,0) 80%)",
+						}}
+					  />
 
-  {/* 強白色核心提亮 */}
-  <div
-    className="absolute rounded-full blur-sm opacity-100"
-    style={{
-      width: 75,
-      height: 75,
-      background:
-        "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,255,255,0.95) 50%, rgba(255,255,255,0.5) 75%, rgba(0,0,0,0) 95%)",
-    }}
-  />
+					  {/* 強白色核心提亮 */}
+					  <div
+						className="absolute rounded-full blur-sm opacity-100"
+						style={{
+						  width: 75,
+						  height: 75,
+						  background:
+							"radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,255,255,0.95) 50%, rgba(255,255,255,0.5) 75%, rgba(0,0,0,0) 95%)",
+						}}
+					  />
 
-</div>
+					</div>
 
 						{/* orb 本體 */}
 						<img
