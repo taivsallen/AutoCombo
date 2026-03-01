@@ -1626,6 +1626,20 @@ const App = () => {
 	  return { x, y };
 	};
 
+  const lineIntersection = (P, r, Q, s, eps = 1e-9) => {
+  // 解 P + t r  與  Q + u s 的交點
+  // 2D cross
+  const cross = (a, b) => a.x * b.y - a.y * b.x;
+
+  const rxs = cross(r, s);
+  if (Math.abs(rxs) < eps) return null; // 平行或幾乎平行
+
+  const qmp = { x: Q.x - P.x, y: Q.y - P.y };
+  const t = cross(qmp, s) / rxs;
+
+  return { x: P.x + r.x * t, y: P.y + r.y * t, t };
+};
+
   const q = (v, unit = 0.25) => Math.round(v / unit) * unit;
 
   const edgeKey = (a, b) => {
@@ -1661,6 +1675,7 @@ const App = () => {
 
   const visited = new Set();
   const out = [pts[0]];
+  
   const hypot = (x, y) => Math.hypot(x, y);
 
   const addRunEdgesToVisited = (fromIdx, toIdx) => {
@@ -1669,27 +1684,78 @@ const App = () => {
     }
   };
 
-  const pushBumpWholeRun = (A, D) => {
-    const dx = D.x - A.x;
-    const dy = D.y - A.y;
-    const L = hypot(dx, dy);
+  const lineIntersection = (P, r, Q, s, eps = 1e-9) => {
+	  const cross = (a, b) => a.x * b.y - a.y * b.x;
+	  const rxs = cross(r, s);
+	  if (Math.abs(rxs) < eps) return null;
 
-    if (L <= eps) {
-      out.push(D);
-      return;
-    }
+	  const qmp = { x: Q.x - P.x, y: Q.y - P.y };
+	  const t = cross(qmp, s) / rxs;
+	  return { x: P.x + r.x * t, y: P.y + r.y * t, t };
+	};
 
-    const ux = dx / L, uy = dy / L;
-    const nx = -uy, ny = ux;
+	const pushBumpWholeRun = (A, D, W) => {
+	  const dx = D.x - A.x;
+	  const dy = D.y - A.y;
+	  const L  = hypot(dx, dy);
 
-    const t = Math.max(2, Math.min(bumpRamp, L * 0.33));
-    const h = Math.min(bump, L * 0.25);
+	  if (L <= eps) {
+		out.push(D);
+		return;
+	  }
 
-    const bumpIn  = { x: A.x + ux * t + nx * h, y: A.y + uy * t + ny * h };
-    const bumpOut = { x: D.x - ux * t + nx * h, y: D.y - uy * t + ny * h };
+	  const ux = dx / L, uy = dy / L;
+	  const nx = -uy, ny = ux;
 
-    out.push(bumpIn, bumpOut, D);
-  };
+	  const t = Math.max(2, Math.min(bumpRamp, L * 0.33));
+	  const h = Math.min(bump, L * 0.25);
+
+	  const bumpIn = { x: A.x + ux * t + nx * h, y: A.y + uy * t + ny * h };
+
+	  // 預設（舊行為）
+	  let bumpOut = { x: D.x - ux * t + nx * h, y: D.y - uy * t + ny * h };
+	  let endPt   = D;
+
+	  if (W) {
+		const wx = W.x - D.x;
+		const wy = W.y - D.y;
+		const WL = hypot(wx, wy);
+
+		if (WL > eps) {
+		  const wux = wx / WL, wuy = wy / WL;
+
+		  // ✅ 鼓包方向(法線方向) 與 下一段 w 同向？
+		  // 如果你未來會改 h 正負，這裡也能改成 dot((n*sign(h)), w) > 0
+		  const dotNW = nx * wux + ny * wuy;
+
+		  if (dotNW > 0.0001) {
+			// 偏移線：穿過 bumpIn，方向是 u（與原段平行，距離=最大鼓包距離）
+			const P = bumpIn;
+			const r = { x: ux, y: uy };
+
+			// 下一段延長線：穿過 D，方向 w
+			const Q = D;
+			const s = { x: wux, y: wuy };
+
+			const hit = lineIntersection(P, r, Q, s);
+
+			// ✅ 只採用「往前」的交點：t 必須為正（避免交點在 bumpIn 後方）
+			if (hit && hit.t > 0.0) {
+			  // 用交點當新的落點（你說的 “直線和 w 的預相交位置”）
+			  endPt = { x: hit.x, y: hit.y };
+
+			  // bumpOut 改成 endPt 本身（讓結構變：A -> bumpIn -> endPt）
+			  // 但為了讓 rounded 有轉角可圓，你通常還是留一個 bumpOut 比較圓滑：
+			  // 我建議 bumpOut 取 endPt 往回一點點（沿 u 往回），再讓 endPt 做轉向點
+			  const back = Math.min(t, 10); // 可調 6~14
+			  bumpOut = { x: endPt.x - ux * back, y: endPt.y - uy * back };
+			}
+		  }
+		}
+	  }
+
+	  out.push(bumpIn, bumpOut, endPt);
+	};
 
   let i = 0;
   while (i < pts.length - 1) {
@@ -1723,7 +1789,8 @@ const App = () => {
     const triggerSuffix = (!fullOverlapped) && (s >= suffixMinEdges);
 
     if (triggerFull || triggerPrefix || triggerSuffix) {
-      pushBumpWholeRun(A, D);
+      const W = (j < pts.length - 1) ? pts[j + 1] : null;
+	  pushBumpWholeRun(A, D, W);
 
       // ✅ 把 run 中「新邊」加入 visited，避免後續判斷錯
       // - 前綴重合：新增的是後半 [i+p .. j-1]
@@ -2528,137 +2595,136 @@ const App = () => {
 				className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
 			  >
 				<div
-				  className="bg-neutral-900 w-full max-w-xl rounded-3xl border border-neutral-800 shadow-2xl overflow-hidden
+				  className="bg-neutral-900 w-full max-w-lg rounded-3xl border border-neutral-800 shadow-2xl overflow-hidden
 							 max-h-[calc(100vh-2rem)] flex flex-col"
 				  onClick={(e) => e.stopPropagation()}
 				>
-				  {/* ✅ 上面那欄整個拿掉 */}
-
 				  {/* ✅ 內容區：可滾動 */}
-				  <div className="p-6 flex-1 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }} >
+				  <div className="pt-6 pb-6 flex-1 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }} >
 					<div className="flex flex-col items-center">
-					  <div className="bg-neutral-950 p-3 rounded-3xl border-2 border-neutral-800 mb-8">
-						<div className="grid grid-cols-6 gap-0">
-						  {editingBoard.map((row, r) => (
-							  <React.Fragment key={r}>
+					  <div className="px-3">
+						<div className="bg-neutral-950 p-3 rounded-3xl border border-neutral-800 mt-6 mb-8 w-full">
+							<div className="grid grid-cols-6 gap-0">
+							  {editingBoard.map((row, r) => (
+								  <React.Fragment key={r}>
 
-								{/* ✅ row0 / row1 分隔粗白線 */}
-								{r === 1 && (
-								  <div className="col-span-6 h-2 bg-white z-50 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
-								)}
+									{/* ✅ row0 / row1 分隔粗白線 */}
+									{r === 1 && (
+									  <div className="col-span-6 h-2 bg-white z-50 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
+									)}
 
-								{row.map((orb, c) => (
-								  <div
-									key={`${r}-${c}`}
-									onClick={() => {
-									  const next = editingBoard.map(row => [...row]);
-									  const cur = next[r][c];
+									{row.map((orb, c) => (
+									  <div
+										key={`${r}-${c}`}
+										onClick={() => {
+										  const next = editingBoard.map(row => [...row]);
+										  const cur = next[r][c];
 
-									  const o = orbOf(cur);
-									  const xm = xMarkOf(cur);
-									  const qm = qMarkOf(cur);
+										  const o = orbOf(cur);
+										  const xm = xMarkOf(cur);
+										  const qm = qMarkOf(cur);
 
-									  // ---------- ORB 刷子 ----------
-									  if (selectedMark === 0) {
-										next[r][c] = withMarks(selectedBrush, xm, qm);
-										setEditingBoard(next);
-										return;
-									  }
-
-									  // ---------- X1 / X2 ----------
-									  if (selectedMark === 1 || selectedMark === 2) {
-										const want = selectedMark;
-										const nx = (xm === want) ? 0 : want;
-										const nq = (nx !== 0) ? 0 : qm;
-										next[r][c] = withMarks(o, nx, nq);
-										setEditingBoard(next);
-										return;
-									  }
-
-									  // ---------- Q1 / Q2 ----------
-									  if (selectedMark === 3 || selectedMark === 4) {
-										const wantQ = (selectedMark === 3) ? 1 : 2;
-
-										if (wantQ === 1 && xm !== 0) return;
-										if (wantQ === 2 && xm === 1) return;
-
-										if (qm === wantQ) {
-										  next[r][c] = withMarks(o, xm, 0);
-										  setEditingBoard(next);
-										  return;
-										}
-
-										if (r === 0) {
-										  for (let cc = 0; cc < COLS; cc++) {
-											const v = next[0][cc];
-											if (wantQ === 1 && qMarkOf(v) === 2) return;
-											if (wantQ === 2 && qMarkOf(v) === 1) return;
+										  // ---------- ORB 刷子 ----------
+										  if (selectedMark === 0) {
+											next[r][c] = withMarks(selectedBrush, xm, qm);
+											setEditingBoard(next);
+											return;
 										  }
-										}
 
-										for (let rr = 0; rr < TOTAL_ROWS; rr++) {
-										  for (let cc = 0; cc < COLS; cc++) {
-											const v = next[rr][cc];
-											if (qMarkOf(v) === wantQ) {
-											  next[rr][cc] = withMarks(orbOf(v), xMarkOf(v), 0);
+										  // ---------- X1 / X2 ----------
+										  if (selectedMark === 1 || selectedMark === 2) {
+											const want = selectedMark;
+											const nx = (xm === want) ? 0 : want;
+											const nq = (nx !== 0) ? 0 : qm;
+											next[r][c] = withMarks(o, nx, nq);
+											setEditingBoard(next);
+											return;
+										  }
+
+										  // ---------- Q1 / Q2 ----------
+										  if (selectedMark === 3 || selectedMark === 4) {
+											const wantQ = (selectedMark === 3) ? 1 : 2;
+
+											if (wantQ === 1 && xm !== 0) return;
+											if (wantQ === 2 && xm === 1) return;
+
+											if (qm === wantQ) {
+											  next[r][c] = withMarks(o, xm, 0);
+											  setEditingBoard(next);
+											  return;
 											}
+
+											if (r === 0) {
+											  for (let cc = 0; cc < COLS; cc++) {
+												const v = next[0][cc];
+												if (wantQ === 1 && qMarkOf(v) === 2) return;
+												if (wantQ === 2 && qMarkOf(v) === 1) return;
+											  }
+											}
+
+											for (let rr = 0; rr < TOTAL_ROWS; rr++) {
+											  for (let cc = 0; cc < COLS; cc++) {
+												const v = next[rr][cc];
+												if (qMarkOf(v) === wantQ) {
+												  next[rr][cc] = withMarks(orbOf(v), xMarkOf(v), 0);
+												}
+											  }
+											}
+
+											next[r][c] = withMarks(o, xm, wantQ);
+											setEditingBoard(next);
+											return;
 										  }
-										}
+										}}
+										className={`relative w-16 h-16 md:w-20 md:h-20 flex items-center justify-center transition-all duration-75
+										  ${r === 0 ? 'ring-2 ring-yellow-400 z-10 rounded-2xl' : 'rounded-2xl'}
+										  ${orbOf(editingBoard[r][c]) === selectedBrush ? 'ring-2 ring-white' : ''}
+										`}
+									  >
+										<img
+										  src={Object.values(ORB_TYPES).find(t => t.id === orbOf(orb))?.img}
+										  className="w-[90%] h-[90%] object-contain pointer-events-none select-none"
+										  draggable={false}
+										  alt=""
+										/>
 
-										next[r][c] = withMarks(o, xm, wantQ);
-										setEditingBoard(next);
-										return;
-									  }
-									}}
-									className={`relative w-16 h-16 md:w-20 md:h-20 flex items-center justify-center transition-all duration-75
-									  ${r === 0 ? 'ring-2 ring-yellow-400 z-10 rounded-2xl' : 'rounded-2xl'}
-									  ${orbOf(editingBoard[r][c]) === selectedBrush ? 'ring-2 ring-white' : ''}
-									`}
-								  >
-									<img
-									  src={Object.values(ORB_TYPES).find(t => t.id === orbOf(orb))?.img}
-									  className="w-[90%] h-[90%] object-contain pointer-events-none select-none"
-									  draggable={false}
-									  alt=""
-									/>
+										{xMarkOf(orb) === 1 && (
+										  <img
+											src={x1Img}
+											className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+											draggable={false}
+											alt=""
+										  />
+										)}
 
-									{xMarkOf(orb) === 1 && (
-									  <img
-										src={x1Img}
-										className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-										draggable={false}
-										alt=""
-									  />
-									)}
+										{xMarkOf(orb) === 2 && (
+										  <img
+											src={x2Img}
+											className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+											draggable={false}
+											alt=""
+										  />
+										)}
 
-									{xMarkOf(orb) === 2 && (
-									  <img
-										src={x2Img}
-										className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-										draggable={false}
-										alt=""
-									  />
-									)}
+										{qMarkOf(orb) === 1 && (
+										  <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
+											START
+										  </div>
+										)}
 
-									{qMarkOf(orb) === 1 && (
-									  <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
-										START
+										{qMarkOf(orb) === 2 && (
+										  <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
+											END
+										  </div>
+										)}
 									  </div>
-									)}
-
-									{qMarkOf(orb) === 2 && (
-									  <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
-										END
-									  </div>
-									)}
-								  </div>
+									))}
+								  </React.Fragment>
 								))}
-							  </React.Fragment>
-							))}
-						</div>
+							</div>
+						  </div>
 					  </div>
-
-					  <div className="w-full">
+					  <div className="w-full px-6">
 						<p className="text-xs font-black text-neutral-500 uppercase tracking-widest text-center mb-4">
 						  ORB PALETTE
 						</p>
