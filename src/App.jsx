@@ -2368,13 +2368,13 @@ const buildPathStringAndMarkers = (fullPath) => {
 
 									{qMarkOf(orb) === 1 && (
 									  <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
-										Start
+										START
 									  </div>
 									)}
 
 									{qMarkOf(orb) === 2 && (
 									  <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
-										End
+										END
 									  </div>
 									)}
 								  </div>
@@ -2443,7 +2443,7 @@ const buildPathStringAndMarkers = (fullPath) => {
 								${selectedMark === 3 ? 'ring-4 ring-cyan-400 scale-110 shadow-lg shadow-cyan-500/20' : 'opacity-70 hover:opacity-100'}`}
 							  title="附加 Start（計算從此格開始，最多一個，再點取消）"
 							>
-							  <span className="font-black text-cyan-300 text-lg">Start</span>
+							  <span className="font-black text-cyan-300 text-lg">START</span>
 							</button>
 
 							<button
@@ -2452,7 +2452,7 @@ const buildPathStringAndMarkers = (fullPath) => {
 								${selectedMark === 4 ? 'ring-4 ring-fuchsia-400 scale-110 shadow-lg shadow-fuchsia-500/20' : 'opacity-70 hover:opacity-100'}`}
 							  title="附加 End（計算在此格結束，最多一個，再點取消）"
 							>
-							  <span className="font-black text-fuchsia-300 text-lg">End</span>
+							  <span className="font-black text-fuchsia-300 text-lg">END</span>
 							</button>
 						</div>
 					  </div>
