@@ -1145,7 +1145,7 @@ const App = () => {
 		// 讓 React 有時間把畫面穩定下來
 		await new Promise(r => setTimeout(r, 80));
 
-		const el = boardWrapRef.current;
+		const el = boardInnerRef.current;
 		if (!el) return;
 
 		// =========
@@ -1193,11 +1193,12 @@ const App = () => {
 		// 3) foreignObject 截圖：固定輸出尺寸，避免擠壓
 		// =========
 		const rect0 = el.getBoundingClientRect();
-		const W = Math.round(rect0.width);
-		const H = Math.round(rect0.height);
 
-		// 你想要清晰度：用 pixelRatio 取代 html2canvas 的 scale
-		const pixelRatio = 1; // 1~3 可調（2 通常很夠）
+		const W = el.offsetWidth;   // 用 offsetWidth/Height（更不吃 zoom 的浮動）
+		const H = el.offsetHeight;
+
+		const pixelRatio = 1; // ✅ 固定 1：輸出大小完全不受瀏覽器縮放影響（最穩）
+		/* 你想更清晰：用 2 也行，但會變大張 */
 
 		const captureOpts = {
 		  backgroundColor: null,
@@ -1206,16 +1207,10 @@ const App = () => {
 		  height: H,
 		  pixelRatio,
 
-		  // ✅ 強制一套 style，避免 foreignObject 對 transform/sticky 的怪偏移
-		  style: {
-		// ✅ 把「整個頁面座標系」拉回來，讓 el 的左上角剛好落在畫布 (0,0)
-		transform: `translate(${(-rect0.left)/2}px, 0)`,
-		transformOrigin: "top left",
-	  },
-
-		  // ✅ 只截你的棋盤，不要吃到外層影響（可留）
-		  // filter: (node) => true,
+		  // ❌ 直接拿掉這段！縮放錯位的主因
+		  // style: { transform: ..., transformOrigin: ... },
 		};
+		
 
 		const bumpProgress = (forceCur = null) => {
 		  setGifProgress(prev => {
@@ -1972,8 +1967,7 @@ const buildPathStringAndMarkers = (fullPath) => {
 					</React.Fragment>
 				  ))}
 				</div>
-			   </div>
-			   <svg ref={overlayRef} className="absolute inset-0 pointer-events-none w-full h-full overflow-visible z-[60]" style={{ overflow: 'visible' }}>
+				<svg ref={overlayRef} className="absolute inset-0 pointer-events-none w-full h-full overflow-visible z-[60]" style={{ overflow: 'visible' }}>
 				  <defs>
 					<filter id="glowGreen" x="-50%" y="-50%" width="200%" height="200%">
 					  <feGaussianBlur stdDeviation="3" result="blur" />
@@ -2085,6 +2079,7 @@ const buildPathStringAndMarkers = (fullPath) => {
 				  </div>
 				  <p className="font-black text-xl text-indigo-500 tracking-[0.2em] animate-pulse uppercase">{skyfallEnabled ? 'Skyfall Analysis' : priorityMode === 'steps' ? 'Optimizing Time' : 'Deep Searching'}</p>
 				</div>)}
+			   </div>
 			</div>
 
 			<div className="flex flex-wrap gap-3 justify-center">
