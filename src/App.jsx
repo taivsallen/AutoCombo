@@ -1209,7 +1209,7 @@ const App = () => {
 		  // ✅ 強制一套 style，避免 foreignObject 對 transform/sticky 的怪偏移
 		  style: {
 		// ✅ 把「整個頁面座標系」拉回來，讓 el 的左上角剛好落在畫布 (0,0)
-		transform: `translate(${(-rect0.left)/2+10}px, 0)`,
+		transform: `translate(${(-rect0.left)/2}px, 0)`,
 		transformOrigin: "top left",
 	  },
 
