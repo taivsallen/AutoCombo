@@ -57,6 +57,7 @@ const App = () => {
   const rafRef = useRef(0);
   const [geomTick, setGeomTick] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const gifBlobRef = useRef(null);
   
   const [exportingGif, setExportingGif] = useState(false);
   const [gifProgress, setGifProgress] = useState({ cur: 0, total: 0, pct: 0 });
@@ -1133,6 +1134,7 @@ const App = () => {
 		  if (prev.url) URL.revokeObjectURL(prev.url);
 		  return { url: "", name: "" };
 		});
+		gifBlobRef.current = null;
 
 		if (!path || path.length < 2) return;
 
@@ -1330,17 +1332,16 @@ const App = () => {
 		  gif.render();
 		});
 
-		// ✅ 這裡加：render 等很久，回來時可能已經按終止了
 		if (isCancelled()) return;
 
+		gifBlobRef.current = blob; // ✅ 加這行（關鍵）
 		const url = URL.createObjectURL(blob);
-		
-		// ✅ B：setGifReady 前再檢查一次（保險）
+
 		if (isCancelled()) {
-		  URL.revokeObjectURL(url); // ✅ 可選：避免 blob leak
+		  URL.revokeObjectURL(url);
 		  return;
 		}
-		
+
 		setGifReady({ url, name: `tos_replay_${totalSteps}steps_skip${skip}.gif` });
 
 		stopToBase(true);
@@ -1359,6 +1360,46 @@ const App = () => {
 		  }
 		}
 	}, [path, config.replaySpeed, stopToBase, getCellCenterPx]);
+
+  const onGifDownloadClick = useCallback(async () => {
+	  const blob = gifBlobRef.current;
+	  const url = gifReady?.url;
+	  const name = gifReady?.name || "replay.gif";
+	  if (!blob && !url) return;
+
+	  // ✅ 只在「手機」才走 share（避免 Windows Chrome 也跳分享面板）
+	  const isMobile =
+		/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+		(navigator.maxTouchPoints > 1 && window.matchMedia?.("(pointer: coarse)")?.matches);
+
+	  if (isMobile && blob && navigator.share && navigator.canShare) {
+		try {
+		  const file = new File([blob], name, { type: "image/gif" });
+		  if (navigator.canShare({ files: [file] })) {
+			await navigator.share({ files: [file], title: name });
+			return; // ✅ 手機 share 成功就結束
+		  }
+		} catch (e) {
+		  // 使用者取消/分享失敗 → fallback 下載
+		  console.log("share cancelled/failed:", e);
+		}
+	  }
+
+	  // ✅ fallback：直接下載（電腦一定走這條）
+	  const downloadUrl = url || (blob ? URL.createObjectURL(blob) : "");
+	  if (!downloadUrl) return;
+
+	  const a = document.createElement("a");
+	  a.href = downloadUrl;
+	  a.download = name;
+	  a.rel = "noopener";
+	  document.body.appendChild(a);
+	  a.click();
+	  a.remove();
+
+	  // 若是臨時 createObjectURL，回收
+	  if (!url && blob) setTimeout(() => URL.revokeObjectURL(downloadUrl), 10000);
+	}, [gifReady?.url, gifReady?.name]);
 
   const buildPixelPath = (rcPath, startPx = null) => {
     if (!rcPath || rcPath.length < 2) return null;
@@ -2223,9 +2264,8 @@ const buildPathStringAndMarkers = (fullPath) => {
 					</div>
 				)}
 				{gifReady.url && (
-				  <a
-					href={gifReady.url}
-					download={gifReady.name}
+				  <button
+					onClick={onGifDownloadClick}
 					className={[
 					  "mt-2 inline-flex items-center gap-2 px-8 py-4 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95",
 					  "bg-amber-500 hover:bg-amber-400 border-amber-300/30 shadow-amber-900/30 text-white"
@@ -2233,7 +2273,7 @@ const buildPathStringAndMarkers = (fullPath) => {
 				  >
 					<FileDown size={20} />
 					下載 GIF
-				  </a>
+				  </button>
 				)}
 			</div>
 
