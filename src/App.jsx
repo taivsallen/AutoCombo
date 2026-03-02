@@ -152,9 +152,9 @@ const App = () => {
   const [showConfig, setShowConfig] = useState(false);
   const [showBasicSettings, setShowBasicSettings] = useState(true);
 
-  const [solverMode, setSolverMode] = useState('horizontal'); 
-  const [priorityMode, setPriorityMode] = useState('combo'); 
-  const [skyfallEnabled, setSkyfallEnabled] = useState(false);
+  const [solverMode, setSolverMode] = useState('vertical'); 
+  const [priorityMode, setPriorityMode] = useState('steps'); 
+  const [skyfallEnabled, setSkyfallEnabled] = useState(true);
   const [diagonalEnabled, setDiagonalEnabled] = useState(true); 
   
   const [showEditor, setShowEditor] = useState(false);
