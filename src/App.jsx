@@ -40,7 +40,7 @@ const DIRS_8 = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1,
 
 const DEFAULT_CONFIG = {
   beamWidth: 200,    
-  maxSteps: 50,      
+  maxSteps: 30,      
   maxNodes: 120000,  
   stepPenalty: 250,  
   potentialWeight: 800, 
@@ -49,13 +49,14 @@ const DEFAULT_CONFIG = {
 };
 
 const App = () => {
+  const svgRectRef = useRef(null);
+  const [stableCellSize, setStableCellSize] = useState(64);
   const exportTokenRef = useRef({ id: 0, cancelled: false });
   const [gifStage, setGifStage] = useState("capture"); // "capture" | "render"
   const [selectedMark, setSelectedMark] = useState(0); // 0=刷符石, 1=X1, 2=X2, 3=Q1, 4=Q2
   const baseBoardRef = useRef([]);
   const [holePos, setHolePos] = useState(null);
   const rafRef = useRef(0);
-  const [geomTick, setGeomTick] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const gifBlobRef = useRef(null);
   
@@ -76,9 +77,14 @@ const App = () => {
 
   const measureCells = useCallback(() => {
 	  const root = boardInnerRef.current;
+	  const svg = overlayRef.current;
 	  if (!root) return;
 
+	  // ✅ cache svg rect（不要每次 getCellCenterPx 都拿一次）
+	  if (svg) svgRectRef.current = svg.getBoundingClientRect();
+
 	  const rects = Array.from({ length: TOTAL_ROWS }, () => Array(COLS).fill(null));
+
 	  for (let r = 0; r < TOTAL_ROWS; r++) {
 		for (let c = 0; c < COLS; c++) {
 		  const el = root.querySelector(`[data-cell="${r}-${c}"]`);
@@ -87,28 +93,13 @@ const App = () => {
 		}
 	  }
 	  cellRectsRef.current = rects;
+
+	  // ✅ 算一次 cellSize（用 row1 col0 最穩）
+	  const r10 = rects?.[1]?.[0];
+	  if (r10) setStableCellSize(r10.width);
 	}, []);
 	
   const [overlay, setOverlay] = useState({ d: "", start: null, tip: null });
-  useEffect(() => {
-	  const kick = () => {
-		if (rafRef.current) return;
-		rafRef.current = requestAnimationFrame(() => {
-		  rafRef.current = 0;
-		  setGeomTick(t => t + 1);
-		});
-	  };
-
-	  // capture=true：就算你在某個容器內滾動也抓得到
-	  window.addEventListener('scroll', kick, { passive: true, capture: true });
-	  window.addEventListener('resize', kick, { passive: true });
-
-	  return () => {
-		window.removeEventListener('scroll', kick, { capture: true });
-		window.removeEventListener('resize', kick);
-		if (rafRef.current) cancelAnimationFrame(rafRef.current);
-	  };
-	}, []);
   useEffect(() => {
 	  measureCells();
 	  window.addEventListener('resize', measureCells);
@@ -1106,20 +1097,16 @@ const App = () => {
   };
 
   const getCellCenterPx = useCallback((r, c) => {
-	  const root = boardInnerRef.current;
-	  const svg = overlayRef.current;
-	  if (!root || !svg) return { x: 0, y: 0 };
+	  const rc = cellRectsRef.current?.[r]?.[c];
+	  const svgRect = svgRectRef.current || overlayRef.current?.getBoundingClientRect();
+	  if (!rc || !svgRect) return { x: 0, y: 0 };
 
-	  const cell = root.querySelector(`[data-cell="${r}-${c}"]`);
-	  if (!cell) return { x: 0, y: 0 };
+	  // ✅ 轉成 SVG 內座標
+	  const x = (rc.left + rc.right) / 2 - svgRect.left;
+	  const y = (rc.top + rc.bottom) / 2 - svgRect.top;
 
-	  const cellRect = cell.getBoundingClientRect();
-	  const svgRect = svg.getBoundingClientRect();
-
-	  return {
-		x: (cellRect.left + cellRect.right) / 2 - svgRect.left,
-		y: (cellRect.top + cellRect.bottom) / 2 - svgRect.top,
-	  };
+	  // ✅ 像素對齊：直接消滅 subpixel 抖動
+	  return { x: Math.round(x), y: Math.round(y) };
 	}, []);
 
   const addHoldFrames = async (n, delay = frameDelay) => {
@@ -1661,30 +1648,30 @@ const App = () => {
 
   // ✅ v3：同方向 run 只要「前綴或後綴」有重合，就把整段 A->D 一次鼓包
   const collapseUpcomingOverlapRunsV3 = (
-  pts,
-  {
-    prefixMinEdges = 1, // 前綴重合 >= 1 就觸發
-    suffixMinEdges = 1, // 後綴重合 >= 1 就觸發（你這題要的）
-    fullMinEdges = 3,   // 整段全重合時至少幾條邊才鼓包（避免太短抖動）
-    bump = 14,
-    bumpRamp = 14,
-    eps = 1e-6,
-  } = {}
-) => {
-  if (!pts || pts.length < 2) return pts;
+	  pts,
+	  {
+		prefixMinEdges = 1, // 前綴重合 >= 1 就觸發
+		suffixMinEdges = 1, // 後綴重合 >= 1 就觸發（你這題要的）
+		fullMinEdges = 3,   // 整段全重合時至少幾條邊才鼓包（避免太短抖動）
+		bump = 14,
+		bumpRamp = 14,
+		eps = 1e-6,
+	  } = {}
+	) => {
+	  if (!pts || pts.length < 2) return pts;
 
-  const visited = new Set();
-  const out = [pts[0]];
-  
-  const hypot = (x, y) => Math.hypot(x, y);
+	  const visited = new Set();
+	  const out = [pts[0]];
+	  
+	  const hypot = (x, y) => Math.hypot(x, y);
 
-  const addRunEdgesToVisited = (fromIdx, toIdx) => {
-    for (let k = fromIdx; k < toIdx; k++) {
-      visited.add(edgeKey(pts[k], pts[k + 1]));
-    }
-  };
+	  const addRunEdgesToVisited = (fromIdx, toIdx) => {
+		for (let k = fromIdx; k < toIdx; k++) {
+		  visited.add(edgeKey(pts[k], pts[k + 1]));
+		}
+	  };
 
-  const lineIntersection = (P, r, Q, s, eps = 1e-9) => {
+	  const lineIntersection = (P, r, Q, s, eps = 1e-9) => {
 	  const cross = (a, b) => a.x * b.y - a.y * b.x;
 	  const rxs = cross(r, s);
 	  if (Math.abs(rxs) < eps) return null;
@@ -1817,6 +1804,7 @@ const App = () => {
   return out;
 };
 
+//1122
   const hypot = (x, y) => Math.hypot(x, y);
 
   const laneOf = (count) => {
@@ -2051,6 +2039,135 @@ const App = () => {
 	  return { d: dStr, start, tip };
 	};
 
+const normalizeRcPath = (rcPath) => {
+  if (!rcPath || rcPath.length < 1) return [];
+  const out = [rcPath[0]];
+  for (let i = 1; i < rcPath.length; i++) {
+    const p = rcPath[i];
+    const q = out[out.length - 1];
+    if (p.r !== q.r || p.c !== q.c) out.push(p);
+  }
+  return out;
+};
+
+const buildSegmentsFromRcPath = (rcPathRaw) => {
+  const rcPath = normalizeRcPath(rcPathRaw);
+  if (rcPath.length < 2) return [];
+
+  const segments = [];
+  let start = 0;
+
+  const dir = (a, b) => {
+    const dr = b.r - a.r;
+    const dc = b.c - a.c;
+    // ✅ 理論上不會 0,0（normalize 會去掉），保險
+    return `${Math.sign(dr)},${Math.sign(dc)}`;
+  };
+
+  let d0 = dir(rcPath[0], rcPath[1]);
+
+  for (let i = 1; i < rcPath.length - 1; i++) {
+    const d1 = dir(rcPath[i], rcPath[i + 1]);
+    if (d1 !== d0) {
+      segments.push({ start, end: i });
+      start = i;
+      d0 = d1;
+    }
+  }
+
+  segments.push({ start, end: rcPath.length - 1 });
+  return segments;
+};
+
+const buildSegmentLabelsFromRcPath = (
+  rcPathRaw,
+  getCellCenterPx,
+  {
+    labelR = 8,
+    pathStroke = 4,
+    gap = 1.5,
+    alongScale = 0.22,
+    cellSize = 64,
+    minPxLen = 10,
+  } = {}
+) => {
+  const rcPath = normalizeRcPath(rcPathRaw);
+  if (rcPath.length < 2) return [];
+
+  const segs = buildSegmentsFromRcPath(rcPath);
+  if (!segs.length) return [];
+
+  const labels = [];
+  const off = labelR + pathStroke / 2 + gap;
+  const alongBase = Math.max(8, Math.min(18, cellSize * alongScale));
+
+  const usage = new Map();
+  const segKey = (A, B) => {
+    const k1 = `${A.x},${A.y}|${B.x},${B.y}`;
+    const k2 = `${B.x},${B.y}|${A.x},${A.y}`;
+    return k1 < k2 ? k1 : k2;
+  };
+  const laneOf = (count) => (count === 0 ? 0 : (count % 2 ? (count + 1) / 2 : -(count / 2)));
+
+  for (let s = 0; s < segs.length; s++) {
+    const { start, end } = segs[s];
+
+    // A,B: 用段的首尾
+    const A = rcPath[start];
+    const B = rcPath[end];
+
+    const pA = getCellCenterPx(A.r, A.c);
+    const pB = getCellCenterPx(B.r, B.c);
+
+    let dx = pB.x - pA.x;
+    let dy = pB.y - pA.y;
+    let L = Math.hypot(dx, dy);
+
+    // ✅ 如果 L 太短或怪，改用「段內第一個有效方向」來定向（但仍會畫 label）
+    if (!Number.isFinite(L) || L < 1e-6) {
+      // 找段內第一個不同點
+      let i = start;
+      while (i < end && rcPath[i].r === rcPath[i + 1].r && rcPath[i].c === rcPath[i + 1].c) i++;
+      if (i < end) {
+        const p1 = getCellCenterPx(rcPath[i].r, rcPath[i].c);
+        const p2 = getCellCenterPx(rcPath[i + 1].r, rcPath[i + 1].c);
+        dx = p2.x - p1.x;
+        dy = p2.y - p1.y;
+        L = Math.hypot(dx, dy);
+      }
+    }
+
+    // ✅ 保證有方向：再不行就給一個水平
+    if (!Number.isFinite(L) || L < 1e-6) {
+      dx = 1; dy = 0; L = 1;
+    }
+
+    // ✅ 不再 continue：短段也畫，只是用 minPxLen 讓偏移穩定
+    const LforCalc = Math.max(L, minPxLen);
+    const ux = dx / L;
+    const uy = dy / L;
+    const nx = -uy;
+    const ny = ux;
+
+    const mx = (pA.x + pB.x) / 2;
+    const my = (pA.y + pB.y) / 2;
+
+    const key = segKey(pA, pB);
+    const count = usage.get(key) || 0;
+    usage.set(key, count + 1);
+    const lane = laneOf(count);
+
+    const alongMax = Math.max(0, LforCalc * 0.45 - (labelR + 2));
+    const along = Math.min(alongBase, alongMax);
+
+    const x = mx + nx * off + ux * (along * lane);
+    const y = my + ny * off + uy * (along * lane);
+
+    labels.push({ idx: labels.length + 1, x, y });
+  }
+
+  return labels;
+};
   return (
     <div className="min-h-screen bg-neutral-950 text-white font-sans">
 		<div className="sticky top-0 z-[3000] bg-neutral-900/95 backdrop-blur border-b border-white/10">
@@ -2316,7 +2433,7 @@ const App = () => {
 
 					const ptsJump = collapseUpcomingOverlapRunsV3(pts0, {
 					  prefixMinEdges: 1,
-					  suffixMinEdges: 1, // ✅ 後綴重合也直接整段 A->C 鼓包
+					  suffixMinEdges: 1,
 					  fullMinEdges: 3,
 					  bump: 14,
 					  bumpRamp: 14,
@@ -2324,6 +2441,20 @@ const App = () => {
 
 					const ptsDetour = deOverlapByRampedDetourV2(ptsJump, 8, 14);
 					const { d, start, tip } = buildPathStringAndMarkersRounded(ptsDetour, 18);
+
+					// ✅ 段號：只看原始 rcPath (visiblePath) 的轉折
+					// ✅ 位置：投影到 ptsDetour
+					const segLabels = replayDone
+					  ? buildSegmentLabelsFromRcPath(visiblePath, getCellCenterPx, {
+						  cellSize: stableCellSize,
+						  labelR: 8,
+						  pathStroke: 4,
+						  gap: -2,
+						  alongScale: 0.22,
+						  minPxLen: 10,
+						})
+					  : [];
+					
 					return (
 					  <>
 						{start && (
@@ -2386,6 +2517,36 @@ const App = () => {
 						  />
 						</>
 
+						{replayDone && segLabels.length > 0 && (
+						  <g>
+							{segLabels.map(s => (
+							  <g key={s.idx}>
+								{/* 背板圓 */}
+								<circle
+								  cx={s.x}
+								  cy={s.y}
+								  r={7}                        // 10 → 8
+								  fill="rgba(0,0,0,0.75)"
+								  stroke="rgba(255,255,255,0.35)"
+								  strokeWidth="1.2"            // 1.5 → 1.2
+								/>
+								{/* 段號 */}
+								<text
+								  x={s.x}
+								  y={s.y + 3}                  // 4 → 3
+								  textAnchor="middle"
+								  fontSize="9"                // 12 → 10
+								  fontWeight="900"
+								  fill="white"
+								  style={{ pointerEvents: "none", userSelect: "none" }}
+								>
+								  {s.idx}
+								</text>
+							  </g>
+							))}
+						  </g>
+						)}
+						
 						{currentStep >= 0 && tip && (
 						  <circle
 							cx={tip.x}
@@ -2843,6 +3004,7 @@ const App = () => {
 		</div>
     </div>
   );
+
 };
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
