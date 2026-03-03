@@ -139,6 +139,7 @@ const App = () => {
     verticalCombos: 0, 
     horizontalCombos: 0
   });
+  const GIF_FOOTER_H = 30;
   const [isReplaying, setIsReplaying] = useState(false);
   
   const [showConfig, setShowConfig] = useState(false);
@@ -155,6 +156,7 @@ const App = () => {
 
   const [targetCombos, setTargetCombos] = useState(1);
   const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [gifCaptureMode, setGifCaptureMode] = useState(false);
 
   const solverConfig = React.useMemo(() => {
 	  const { replaySpeed, ...rest } = config; // ✅ 排除播放速度
@@ -1110,6 +1112,45 @@ const App = () => {
 	  return { x: Math.round(x), y: Math.round(y) };
 	}, []);
 
+  // footer 文字（每幀可更新）
+  const [gifFooter, setGifFooter] = useState({
+	  segment: 1,
+	  segmentTotal: 1,
+	  comboText: "0",
+	  step: 0,
+	  stepTotal: 0,
+	});
+
+  // 依 path 計算「每一步」屬於第幾段 segment（方向改變就 +1）
+  // segment: 1..N
+  const buildSegmentIndexByStep = (rcPath) => {
+	  const n = rcPath?.length || 0;
+	  if (n < 2) return { segAt: [1], segTotal: 1 };
+
+	  let seg = 1;
+	  const segAt = Array(n).fill(1);
+
+	  let prevDr = rcPath[1].r - rcPath[0].r;
+	  let prevDc = rcPath[1].c - rcPath[0].c;
+
+	  segAt[0] = 1;
+	  segAt[1] = 1;
+
+	  for (let i = 2; i < n; i++) {
+		const dr = rcPath[i].r - rcPath[i - 1].r;
+		const dc = rcPath[i].c - rcPath[i - 1].c;
+
+		// 方向改變（含斜轉↔直轉、直↔橫）就算新段
+		if (dr !== prevDr || dc !== prevDc) seg++;
+
+		segAt[i] = seg;
+		prevDr = dr;
+		prevDc = dc;
+	  }
+
+	  return { segAt, segTotal: seg };
+	};
+
   const exportGif = useCallback(async () => {
 	  // ✅ 開新的一次匯出：換 id、取消旗標歸零
 	  const myId = ++exportTokenRef.current.id;
@@ -1119,6 +1160,7 @@ const App = () => {
 		exportTokenRef.current.cancelled || exportTokenRef.current.id !== myId;
 
 	  try {
+		
 		setGifReady(prev => {
 		  if (prev.url) URL.revokeObjectURL(prev.url);
 		  return { url: "", name: "" };
@@ -1128,6 +1170,7 @@ const App = () => {
 		if (!path || path.length < 2) return;
 
 		setExportingGif(true);
+		setGifCaptureMode(true);
 		setGifStage("capture");
 
 		// 先回到原盤面（避免 replay 狀態干擾）
@@ -1143,13 +1186,31 @@ const App = () => {
 		// 1) 自動決定 skip
 		// =========
 		const totalSteps = path.length - 1;
+
 		const maxFrames = 500;
 		const skip = Math.max(1, Math.ceil(totalSteps / maxFrames));
 		const frameDelay = Math.max(60, config.replaySpeed * skip);
+		const { segAt, segTotal } = buildSegmentIndexByStep(path);
+		const comboText = `${stats.combos}${stats.skyfallCombos > 0 ? `+${stats.skyfallCombos}` : ""}`;
 
-		const totalFrames = 1 + Math.floor((path.length - 1) / skip) + 1;
+		setGifFooter({
+		  segment: segAt[0] || 1,
+		  segmentTotal: segTotal,
+		  comboText,
+		  step: 0,
+		  stepTotal: totalSteps,
+		});
+
+		const baseFrames = 1 + Math.floor(totalSteps / skip); 
+		// 1 = firstCanvas
+		// + floor(totalSteps/skip) = i=skip,2skip,...,<=totalSteps 會被抓到的幀數
+
+		const forceLastFrame = 1; // 你後面固定會 addFrame() 一次（強制最後一步）
+		const tailHoldFrame  = 1; // 你後面 lastCanvas 又 addFrame 一次（delay 1500）
+
+		const totalFrames = baseFrames + forceLastFrame + tailHoldFrame;
+
 		setGifProgress({ cur: 0, total: totalFrames, pct: 0 });
-
 		// =========
 		// 2) 建立第一步畫面（跟你原本相同）
 		// =========
@@ -1295,10 +1356,31 @@ const App = () => {
 		  if (isCancelled()) return;
 
 		  if (i % skip === 0 || i === path.length - 1) {
+			// ✅ 更新 footer（segment/step）
+			 setGifFooter(prev => ({
+			  ...prev,
+			  segment: segAt[i] || prev.segment || 1,
+			  step: i,
+			}));
+
+			// ✅ 等 footer DOM 真的更新再截（保險兩幀）
+			await new Promise(r => requestAnimationFrame(r));
+			await new Promise(r => requestAnimationFrame(r));
+
 			await addFrame();
 			if (isCancelled()) return;
 		  }
 		}
+		
+		// ✅ 強制最後一步的 footer + 截一張，確保顯示 step=totalSteps
+		setGifFooter(prev => ({
+		  ...prev,
+		  segment: segAt[totalSteps] || prev.segment || 1,
+		  step: totalSteps,
+		}));
+		await new Promise(r => requestAnimationFrame(r));
+		await new Promise(r => requestAnimationFrame(r));
+		await addFrame(); // 這張會變成真正的 lastCanvas
 
 		// ✅ 最後一幀都加完了，強制顯示 12/12（100%）
 		bumpProgress(totalFrames);
@@ -1361,9 +1443,10 @@ const App = () => {
 		  setExportingGif(false);
 		  setGifProgress({ cur: 0, total: 0, pct: 0 });
 		  setGifStage("capture");
+		  setGifCaptureMode(false);
 		}
 	  }
-	}, [path, config.replaySpeed, stopToBase, getCellCenterPx]);
+	}, [path, config.replaySpeed, stopToBase, getCellCenterPx, stats.combos, stats.skyfallCombos]);
 
   const onGifDownloadClick = useCallback(async () => {
 	  const blob = gifBlobRef.current;
@@ -1657,68 +1740,78 @@ const App = () => {
 	  return { x: P.x + r.x * t, y: P.y + r.y * t, t };
 	};
 
-	const pushBumpWholeRun = (A, D, W) => {
-	  const dx = D.x - A.x;
-	  const dy = D.y - A.y;
-	  const L  = hypot(dx, dy);
+	const pushBumpWholeRun = (C, A, B, D) => {
+  // m = A->B
+  const mdx = B.x - A.x;
+  const mdy = B.y - A.y;
+  const mL  = hypot(mdx, mdy);
 
-	  if (L <= eps) {
-		out.push(D);
-		return;
-	  }
+  // 不夠資訊 / 退化：直接回到 D
+  if (mL <= eps) {
+    out.push(D);
+    return;
+  }
 
-	  const ux = dx / L, uy = dy / L;
-	  const nx = -uy, ny = ux;
+  // m 的單位方向 u 與法線 n（鼓包方向用 +n）
+  const ux = mdx / mL, uy = mdy / mL;
+  const nx = -uy, ny = ux;
 
-	  const t = Math.max(2, Math.min(bumpRamp, L * 0.33));
-	  const h = Math.min(bump, L * 0.25);
+  // bump 最大距離 h（沿法線）
+  // 你原本就是這樣算的：h = min(bump, L*0.25)
+  // 這裡 L 用 A->D（run 的長度）讓長 run 不會 h 過大
+  const rdx = D.x - A.x;
+  const rdy = D.y - A.y;
+  const rL  = hypot(rdx, rdy);
+  const h   = Math.min(bump, rL * 0.25);
 
-	  const bumpIn = { x: A.x + ux * t + nx * h, y: A.y + uy * t + ny * h };
+  // 平行線 n：通過 (A + n*h)，方向 = u
+  const P = { x: A.x + nx * h, y: A.y + ny * h };
+  const r = { x: ux, y: uy };
 
-	  // 預設（舊行為）
-	  let bumpOut = { x: D.x - ux * t + nx * h, y: D.y - uy * t + ny * h };
-	  let endPt   = D;
+   // ✅ 沒有 C（run 在最前面）或退化：直接走 fallback 鼓包
+  if (!C || mL <= eps || rL <= eps) {
+    const nx = mL > eps ? -(mdy / mL) : 0;
+    const ny = mL > eps ?  (mdx / mL) : 0;
+    const h  = Math.min(bump, rL * 0.25);
+    const L  = Math.max(rL, 1);
+    const t  = Math.max(2, Math.min(bumpRamp, L * 0.33));
 
-	  if (W) {
-		const wx = W.x - D.x;
-		const wy = W.y - D.y;
-		const WL = hypot(wx, wy);
+    const bumpIn  = { x: A.x + (rdx / L) * t + nx * h, y: A.y + (rdy / L) * t + ny * h };
+    const bumpOut = { x: D.x - (rdx / L) * t + nx * h, y: D.y - (rdy / L) * t + ny * h };
 
-		if (WL > eps) {
-		  const wux = wx / WL, wuy = wy / WL;
+    out.push(bumpIn, bumpOut, D);
+    return;
+  }
 
-		  // ✅ 鼓包方向(法線方向) 與 下一段 w 同向？
-		  // 如果你未來會改 h 正負，這裡也能改成 dot((n*sign(h)), w) > 0
-		  const dotNW = nx * wux + ny * wuy;
+  // C2 = (C->A 的延長線) ∩ n
+  const rCA = { x: A.x - C.x, y: A.y - C.y };
+  const hitC = lineIntersection(P, r, C, rCA, 1e-9);
 
-		  if (dotNW > 0.0001) {
-			// 偏移線：穿過 bumpIn，方向是 u（與原段平行，距離=最大鼓包距離）
-			const P = bumpIn;
-			const r = { x: ux, y: uy };
+  // D2 = (B->D 的延長線) ∩ n
+  const rBD = { x: D.x - B.x, y: D.y - B.y };
+  const hitD = lineIntersection(P, r, B, rBD, 1e-9);
 
-			// 下一段延長線：穿過 D，方向 w
-			const Q = D;
-			const s = { x: wux, y: wuy };
+  // 任一交點不存在：fallback 回你原本鼓包
+  if (!hitC || !hitD) {
+    const L = rL;
+    if (L <= eps) { out.push(D); return; }
 
-			const hit = lineIntersection(P, r, Q, s);
+    const t = Math.max(2, Math.min(bumpRamp, L * 0.33));
+    const bumpIn  = { x: A.x + (rdx / L) * t + nx * h, y: A.y + (rdy / L) * t + ny * h };
+    const bumpOut = { x: D.x - (rdx / L) * t + nx * h, y: D.y - (rdy / L) * t + ny * h };
 
-			// ✅ 只採用「往前」的交點：t 必須為正（避免交點在 bumpIn 後方）
-			if (hit && hit.t > 0.0) {
-			  // 用交點當新的落點（你說的 “直線和 w 的預相交位置”）
-			  endPt = { x: hit.x, y: hit.y };
+    out.push(bumpIn, bumpOut, D);
+    return;
+  }
 
-			  // bumpOut 改成 endPt 本身（讓結構變：A -> bumpIn -> endPt）
-			  // 但為了讓 rounded 有轉角可圓，你通常還是留一個 bumpOut 比較圓滑：
-			  // 我建議 bumpOut 取 endPt 往回一點點（沿 u 往回），再讓 endPt 做轉向點
-			  const back = Math.min(t, 10); // 可調 6~14
-			  bumpOut = { x: endPt.x - ux * back, y: endPt.y - uy * back };
-			}
-		  }
-		}
-	  }
+  // ✅ 你的需求：把 C、D 偏移到交點，使鼓包段變直線（沿 n）
+  const C2 = { x: hitC.x, y: hitC.y };
+  const D2 = { x: hitD.x, y: hitD.y };
 
-	  out.push(bumpIn, bumpOut, endPt);
-	};
+  // out 目前通常已經有 A（外面 out = [pts[0]]，且你在 run 分支直接 pushBumpWholeRun）
+  // 所以這裡補上 C2->D2->D
+  out.push(C2, D2, D);
+};
 
   let i = 0;
   while (i < pts.length - 1) {
@@ -1752,8 +1845,9 @@ const App = () => {
     const triggerSuffix = (!fullOverlapped) && (s >= suffixMinEdges);
 
     if (triggerFull || triggerPrefix || triggerSuffix) {
-      const W = (j < pts.length - 1) ? pts[j + 1] : null;
-	  pushBumpWholeRun(A, D, W);
+      const C = (i > 0) ? pts[i - 1] : null;     // run 前一點（可能沒有）
+  const B = pts[j - 1];                      // run 最後一條邊的起點（一定有）
+  pushBumpWholeRun(C, A, B, D);
 
       // ✅ 把 run 中「新邊」加入 visited，避免後續判斷錯
       // - 前綴重合：新增的是後半 [i+p .. j-1]
@@ -1782,6 +1876,49 @@ const App = () => {
 
 //1122
   const hypot = (x, y) => Math.hypot(x, y);
+
+  // 回傳：把 C-A-B-D 的 A->B 鼓包，改成沿著「與 AB 平行且距離 h」的直線 detour
+// 會產生 C' 與 D'：
+//   C' = line(C->A) 與 line_n 的交點
+//   D' = line(B->D) 與 line_n 的交點
+  const straightenBumpToParallelLine = (C, A, B, D, h, eps = 1e-6) => {
+	  const hypot = (x, y) => Math.hypot(x, y);
+
+	  const abx = B.x - A.x, aby = B.y - A.y;
+	  const LAB = hypot(abx, aby);
+	  if (LAB < eps) return null;
+
+	  // m 的方向 u 與法線 n
+	  const ux = abx / LAB, uy = aby / LAB;
+	  const nx0 = -uy, ny0 = ux;
+
+	  // 你原本鼓包可能在法線正向或反向：選一邊讓 detour 不會「跑到反方向」
+	  // 用「看 C 在哪邊」來決定：讓 n 朝向遠離 C 的那側（通常比較符合鼓包外凸）
+	  const acx = C.x - A.x, acy = C.y - A.y;
+	  const side = Math.sign(acx * nx0 + acy * ny0); // C 在法線哪側
+	  const sign = (side >= 0) ? -1 : 1;            // 取反側當外凸
+	  const nx = nx0 * sign, ny = ny0 * sign;
+
+	  // 平行線 n：穿過 A + n*h，方向 u
+	  const Pn = { x: A.x + nx * h, y: A.y + ny * h };
+	  const rn = { x: ux, y: uy };
+
+	  // 交點：n 與 CA 延長線
+	  const rCA = { x: A.x - C.x, y: A.y - C.y };
+	  const hitC = lineIntersection(Pn, rn, C, rCA, 1e-9);
+
+	  // 交點：n 與 BD 延長線
+	  const rBD = { x: D.x - B.x, y: D.y - B.y };
+	  const hitD = lineIntersection(Pn, rn, B, rBD, 1e-9);
+
+	  if (!hitC || !hitD) return null;
+
+	  return {
+		C2: { x: hitC.x, y: hitC.y }, // C'
+		D2: { x: hitD.x, y: hitD.y }, // D'
+		nx, ny, ux, uy
+	  };
+	};
 
   const laneOf = (count) => {
 	  // 0, +1, -1, +2, -2 ...
@@ -2230,10 +2367,10 @@ const App = () => {
 				  步數 <Footprints size={14} />
 				</button>
 			  </div>
-			  {/* 天降 - 佔 1/6 */}
+			  {/* 疊珠 - 佔 1/6 */}
 			  <div className="col-span-1 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
 				<button onClick={() => setSkyfallEnabled(!skyfallEnabled)} className={`flex-1 flex items-center justify-center rounded-lg font-black transition-all ${skyfallEnabled ? 'bg-purple-600 text-white' : 'text-neutral-500 hover:bg-neutral-800'}`}>
-				  天降 <CloudLightning size={14} />
+				  疊珠 <CloudLightning size={14} />
 				</button>
 			  </div>
 			  {/* 斜轉 - 佔 1/6 */}
@@ -2679,15 +2816,39 @@ const App = () => {
 						/>
 					  </div>
 					)}
-				</div>
-			  {solving && (<div className="absolute inset-0 bg-neutral-950/90 rounded-3xl flex flex-col items-center justify-center z-20 backdrop-blur-xl">
-				  <div className="relative w-24 h-24 mb-6">
-					<div className="absolute inset-0 border-4 border-indigo-500/10 rounded-full"></div>
-					<div className="absolute inset-0 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-					{priorityMode === 'steps' ? <Footprints className="absolute inset-0 m-auto text-amber-400 animate-pulse" size={32} /> : <Trophy className="absolute inset-0 m-auto text-emerald-400 animate-pulse" size={32} />}
 				  </div>
-				  <p className="font-black text-xl text-indigo-500 tracking-[0.2em] animate-pulse uppercase">{skyfallEnabled ? 'Skyfall Analysis' : priorityMode === 'steps' ? 'Optimizing Time' : 'Deep Searching'}</p>
-				</div>)}
+				  {solving && (<div className="absolute inset-0 bg-neutral-950/90 rounded-3xl flex flex-col items-center justify-center z-20 backdrop-blur-xl">
+					  <div className="relative w-24 h-24 mb-6">
+						<div className="absolute inset-0 border-4 border-indigo-500/10 rounded-full"></div>
+						<div className="absolute inset-0 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+						{priorityMode === 'steps' ? <Footprints className="absolute inset-0 m-auto text-amber-400 animate-pulse" size={32} /> : <Trophy className="absolute inset-0 m-auto text-emerald-400 animate-pulse" size={32} />}
+					  </div>
+					  <p className="font-black text-xl text-indigo-500 tracking-[0.2em] animate-pulse uppercase">{skyfallEnabled ? 'Skyfall Analysis' : priorityMode === 'steps' ? 'Optimizing Time' : 'Deep Searching'}</p>
+					</div>)}
+				   {/* ✅ GIF footer：會被 toCanvas 一起截進去 */}
+					{gifCaptureMode && (
+					  <div
+						className="w-full flex items-center justify-center text-[12px] font-black tracking-wide"
+						style={{
+						  height: GIF_FOOTER_H,
+						  marginTop: 0,
+						  background: "rgba(0,0,0,0.55)",
+						  borderTop: "1px solid rgba(255,255,255,0.12)",
+						}}
+					  >
+						<span className="text-white/90">
+						  segment: {gifFooter.segment}/{gifFooter.segmentTotal}
+						</span>
+						<span className="mx-2 text-white/30">|</span>
+						<span className="text-fuchsia-200">
+						  combo: {gifFooter.comboText}
+						</span>
+						<span className="mx-2 text-white/30">|</span>
+						<span className="text-emerald-200">
+						  step: {gifFooter.step}/{gifFooter.stepTotal}
+						</span>
+					  </div>
+					)}
 			   </div>
 			</div>
 
@@ -3049,7 +3210,7 @@ const App = () => {
 			  <div>
 				<strong className="text-indigo-400 block mb-1 text-base">功能介紹：</strong>
 				 <strong className="block text-xs">
-				  自動轉珠模擬器，全自動搜尋最優路徑。自訂盤面模擬、天降與斜轉判定、
+				  自動轉珠模擬器，全自動搜尋最優路徑。自訂盤面模擬、疊珠與斜轉判定、
 				  完整顯示 Combo 數、總消除符石數與移動步數。
 				  可設定目標 Combo、步數上限與回放速度。
 				</strong>
