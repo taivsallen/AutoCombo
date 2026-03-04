@@ -54,7 +54,6 @@ export default function ImportCropModal({
 
   // ====== pointer 狀態（支援兩指 pinch） ======
   const pointersRef = useRef(new Map()); // pointerId -> {x,y}
-  const gestureRef = useRef(null); // pinch init snapshot
   const dragRef = useRef(null); // drag snapshot
   const resizeRef = useRef(null); // resize snapshot { corner, ... }
 
@@ -156,26 +155,41 @@ export default function ImportCropModal({
     resizeRef.current = { id: e.pointerId, corner, x0: e.clientX, y0: e.clientY, r0 };
   };
 
+  useEffect(() => {
+	  if (!open) return;
+
+	  const prevOverflow = document.body.style.overflow;
+	  const prevTouchAction = document.body.style.touchAction;
+
+	  document.body.style.overflow = "hidden";   // ✅ 禁止頁面滾動
+	  document.body.style.touchAction = "none";  // ✅ iOS/Safari 也比較不會亂縮放
+
+	  return () => {
+		document.body.style.overflow = prevOverflow;
+		document.body.style.touchAction = prevTouchAction;
+	  };
+	}, [open]);
+
   // ====== 拖曳裁切框（單指/滑鼠拖 box 本體） ======
   const onBoxPointerDown = (e) => {
-    if (importing) return;
+	  if (importing) return;
 
-    e.preventDefault();
-    e.stopPropagation();
+	  e.preventDefault();
+	  e.stopPropagation();
 
-    wrapRef.current?.setPointerCapture?.(e.pointerId);
+	  // ✅ 第二指不處理（拿掉兩指縮放）
+	  if (pointersRef.current.size >= 1) return;
 
-    cacheBounds();
-    cacheRects();
+	  wrapRef.current?.setPointerCapture?.(e.pointerId);
 
-    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+	  cacheBounds();
+	  cacheRects();
 
-    // 若此時已經有兩指 → 交給 pinch
-    if (pointersRef.current.size >= 2) return;
+	  pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-    const r0 = cropRectRef.current;
-    dragRef.current = { id: e.pointerId, x0: e.clientX, y0: e.clientY, r0 };
-  };
+	  const r0 = cropRectRef.current;
+	  dragRef.current = { id: e.pointerId, x0: e.clientX, y0: e.clientY, r0 };
+	};
 
   const onWrapPointerMove = useCallback(
     (e) => {
@@ -183,47 +197,6 @@ export default function ImportCropModal({
 
       if (pointersRef.current.has(e.pointerId)) {
         pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      }
-
-      // 1) pinch
-      if (pointersRef.current.size >= 2) {
-        const pts = Array.from(pointersRef.current.values());
-        const pA = pts[0],
-          pB = pts[1];
-        const cx = (pA.x + pB.x) / 2;
-        const cy = (pA.y + pB.y) / 2;
-        const dist = Math.hypot(pA.x - pB.x, pA.y - pB.y);
-
-        if (!gestureRef.current) {
-          cacheBounds();
-          cacheRects();
-          const r0 = cropRectRef.current;
-          gestureRef.current = { dist0: Math.max(10, dist), r0 };
-          return;
-        }
-
-        const g = gestureRef.current;
-        const ratioRaw = dist / Math.max(1, g.dist0);
-        const ratio = clamp(ratioRaw, 0.25, 4); // ✅ 防止縮到爆/放大爆
-
-        const wrapRect = rectCacheRef.current.wrapRect;
-        if (!wrapRect) return;
-
-        const ax = cx - wrapRect.left;
-        const ay = cy - wrapRect.top;
-
-        const rBase = g.r0;
-        const w1 = rBase.w * ratio;
-        const h1 = w1 * ASPECT;
-
-        const x1 = ax - (ax - rBase.x) * ratio;
-        const y1 = ay - (ay - rBase.y) * ratio;
-
-        const r1 = fitRectIntoBounds({ x: x1, y: y1, w: w1, h: h1 });
-        scheduleApply(r1);
-        return;
-      } else {
-        gestureRef.current = null;
       }
 
       // 2) resize
@@ -276,8 +249,6 @@ export default function ImportCropModal({
 
       if (dragRef.current?.id === e.pointerId) dragRef.current = null;
       if (resizeRef.current?.id === e.pointerId) resizeRef.current = null;
-
-      if (pointersRef.current.size < 2) gestureRef.current = null;
 
       // ✅ 只有全部手指都離開才 commit（避免 pinch 斷線/卡住）
       if (pointersRef.current.size === 0) {
@@ -362,15 +333,27 @@ export default function ImportCropModal({
           <div
             ref={wrapRef}
             className="relative w-full aspect-[6/5] bg-black rounded-2xl overflow-hidden border border-white/10 touch-none"
-            onPointerDown={(e) => {
-              if (importing) return;
-              wrapRef.current?.setPointerCapture?.(e.pointerId);
+            style={{
+				touchAction: "none",            // ✅ 禁止瀏覽器手勢（滾動/縮放/回彈）
+				overscrollBehavior: "contain",  // ✅ 防止滾動鏈到 body（Chrome/Android 很有效）
+				WebkitUserSelect: "none",
+				userSelect: "none",
+			  }}
+			onPointerDown={(e) => {
+			  if (importing) return;
 
-              pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+			  e.preventDefault();
+			  e.stopPropagation();
 
-              cacheBounds();
-              cacheRects();
-            }}
+			  // ✅ 若已經有一指在操作，第二指直接忽略（拿掉兩指縮放）
+			  if (pointersRef.current.size >= 1) return;
+
+			  wrapRef.current?.setPointerCapture?.(e.pointerId);
+			  pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+			  cacheBounds();
+			  cacheRects();
+			}}
             onPointerMove={onWrapPointerMove}
             onPointerUp={endPointer}
             onPointerCancel={endPointer}
@@ -392,7 +375,7 @@ export default function ImportCropModal({
             <div
               ref={boxRef}
               className="absolute left-0 top-0 rounded-xl border-2 border-fuchsia-400 shadow-[0_0_20px_rgba(217,70,239,0.35)] touch-none will-change-transform"
-              style={rectToStyle(cropRect)}
+              style={{ ...rectToStyle(cropRect), touchAction: "none" }}
               onPointerDown={onBoxPointerDown}
 			  onPointerMove={onWrapPointerMove}
 			  onPointerUp={endPointer}
