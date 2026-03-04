@@ -52,7 +52,7 @@ export default function ImportCropModal({
   // ====== 匯入狀態 ======
   const [importing, setImporting] = useState(false);
 
-  // ====== pointer 狀態（支援兩指 pinch） ======
+  // ====== pointer 狀態 ======
   const pointersRef = useRef(new Map()); // pointerId -> {x,y}
   const dragRef = useRef(null); // drag snapshot
   const resizeRef = useRef(null); // resize snapshot { corner, ... }
@@ -135,6 +135,130 @@ export default function ImportCropModal({
 
     return () => clearTimeout(t);
   }, [open, cacheBounds, fitRectIntoBounds, applyRectToDOM]);
+
+  // 在圖片像素座標中，快速抓出「非黑邊內容」的 bounding box
+  const detectContentBounds = (imgEl) => {
+	  const natW = imgEl.naturalWidth;
+	  const natH = imgEl.naturalHeight;
+
+	  // 縮小掃描，超快
+	  const targetW = Math.min(420, natW);
+	  const s = targetW / natW;
+	  const W = Math.max(1, Math.round(natW * s));
+	  const H = Math.max(1, Math.round(natH * s));
+
+	  const c = document.createElement("canvas");
+	  c.width = W;
+	  c.height = H;
+	  const ctx = c.getContext("2d", { willReadFrequently: true });
+	  ctx.drawImage(imgEl, 0, 0, W, H);
+	  const { data } = ctx.getImageData(0, 0, W, H);
+
+	  // 判斷「黑邊」：亮度太低視為黑
+	  const lum = (i) => {
+		const r = data[i], g = data[i + 1], b = data[i + 2];
+		return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+	  };
+
+	  const TH = 18;       // 亮度門檻：越大越不會吃到暗角，但可能多留一點邊
+	  const RUN = 6;       // 連續 RUN 行/列都達標才算進入內容（抗雜訊）
+	  const DENS = 0.08;   // 一行/列中「非黑」像素比例門檻
+
+	  const rowNonBlackRatio = (y) => {
+		let cnt = 0;
+		const base = y * W * 4;
+		for (let x = 0; x < W; x++) {
+		  const i = base + x * 4;
+		  if (lum(i) > TH) cnt++;
+		}
+		return cnt / W;
+	  };
+
+	  const colNonBlackRatio = (x) => {
+		let cnt = 0;
+		const step = W * 4;
+		let i = x * 4;
+		for (let y = 0; y < H; y++) {
+		  if (lum(i) > TH) cnt++;
+		  i += step;
+		}
+		return cnt / H;
+	  };
+
+	  const findEdge = (max, ratioFn, dir) => {
+		// dir=+1 從 0 往內找；dir=-1 從 max-1 往內找
+		let run = 0;
+		let lastGood = dir === 1 ? 0 : max - 1;
+
+		for (let k = dir === 1 ? 0 : max - 1; dir === 1 ? k < max : k >= 0; k += dir) {
+		  const r = ratioFn(k);
+		  if (r > DENS) {
+			run++;
+			if (run >= RUN) return k - dir * (RUN - 1); // 回到第一個達標點
+			lastGood = k;
+		  } else {
+			run = 0;
+		  }
+		}
+		return lastGood;
+	  };
+
+	  let top = findEdge(H, rowNonBlackRatio, +1);
+	  let bottom = findEdge(H, rowNonBlackRatio, -1);
+	  let left = findEdge(W, colNonBlackRatio, +1);
+	  let right = findEdge(W, colNonBlackRatio, -1);
+
+	  // 小 padding，避免切到外框陰影（你可調）
+	  const pad = 6;
+	  top = Math.max(0, top - pad);
+	  left = Math.max(0, left - pad);
+	  bottom = Math.min(H - 1, bottom + pad);
+	  right = Math.min(W - 1, right + pad);
+
+	  // 轉回原圖像素座標
+	  const inv = 1 / s;
+	  const x0 = left * inv;
+	  const y0 = top * inv;
+	  const x1 = (right + 1) * inv;
+	  const y1 = (bottom + 1) * inv;
+
+	  return {
+		sx: x0,
+		sy: y0,
+		sw: Math.max(1, x1 - x0),
+		sh: Math.max(1, y1 - y0),
+	  };
+	};
+
+	// 在 wrap 座標中，產生「符合 ASPECT、最大、貼底」的 cropRect
+  const makeCropRectFromBounds = (wrapW, wrapH, imgEl) => {
+	  const { drawX, drawY, drawW, drawH } = getContainContentRect(
+		wrapW,
+		wrapH,
+		imgEl.naturalWidth,
+		imgEl.naturalHeight
+	  );
+
+	  // 1) 找「內容」在原圖中的 bounds
+	  const b = detectContentBounds(imgEl);
+
+	  // 2) 把 bounds（原圖像素）投影到 wrap 的 drawRect 座標
+	  const bx = drawX + (b.sx / imgEl.naturalWidth) * drawW;
+	  const by = drawY + (b.sy / imgEl.naturalHeight) * drawH;
+	  const bw = (b.sw / imgEl.naturalWidth) * drawW;
+	  const bh = (b.sh / imgEl.naturalHeight) * drawH;
+
+	  // 3) 在 bounds 裡放「最大且符合 ASPECT」的矩形，並貼底
+	  let w = Math.min(bw, bh / ASPECT);
+	  let h = w * ASPECT;
+
+	  // 置中 + 貼底（你要的底盤）
+	  let x = bx + (bw - w) / 2;
+	  let y = by + (bh - h);
+
+	  // 4) 最後保險：不要跑出 wrap
+	  return fitRectIntoBounds({ x, y, w, h });
+	};
 
   // ====== 角落縮放（桌機/單指也可） ======
   const startResize = (corner) => (e) => {
@@ -332,7 +456,7 @@ export default function ImportCropModal({
         <div className="p-4">
           <div
             ref={wrapRef}
-            className="relative w-full aspect-[6/5] bg-black rounded-2xl overflow-hidden border border-white/10 touch-none"
+            className="relative w-full aspect-[6/5] bg-black rounded-2xl border border-white/10 touch-none"
             style={{
 				touchAction: "none",            // ✅ 禁止瀏覽器手勢（滾動/縮放/回彈）
 				overscrollBehavior: "contain",  // ✅ 防止滾動鏈到 body（Chrome/Android 很有效）
@@ -366,15 +490,23 @@ export default function ImportCropModal({
               className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
               draggable={false}
               onLoad={() => {
-                cacheBounds();
-                requestAnimationFrame(() => applyRectToDOM(cropRectRef.current));
-              }}
+				  cacheBounds();
+				  const wrap = wrapRef.current;
+				  const img = imgRef.current;
+				  if (!wrap || !img) return;
+
+				  const r = makeCropRectFromBounds(wrap.clientWidth, wrap.clientHeight, img);
+
+				  cropRectRef.current = r;
+				  setCropRect(r);
+				  requestAnimationFrame(() => applyRectToDOM(r));
+				}}
             />
 
             {/* 裁切框 */}
             <div
               ref={boxRef}
-              className="absolute left-0 top-0 rounded-xl border-2 border-fuchsia-400 shadow-[0_0_20px_rgba(217,70,239,0.35)] touch-none will-change-transform"
+              className="absolute left-0 top-0 rounded-none border-2 border-fuchsia-400 shadow-[0_0_20px_rgba(217,70,239,0.35)] touch-none will-change-transform"
               style={{ ...rectToStyle(cropRect), touchAction: "none" }}
               onPointerDown={onBoxPointerDown}
 			  onPointerMove={onWrapPointerMove}
@@ -386,18 +518,14 @@ export default function ImportCropModal({
                   key={corner}
                   onPointerDown={startResize(corner)}
                   className={[
-                    "absolute w-4 h-4 bg-fuchsia-400 rounded-[6px] border border-black/40 touch-none",
-                    corner === "tl" ? "left-[-8px] top-[-8px] cursor-nwse-resize" : "",
-                    corner === "tr" ? "right-[-8px] top-[-8px] cursor-nesw-resize" : "",
-                    corner === "bl" ? "left-[-8px] bottom-[-8px] cursor-nesw-resize" : "",
-                    corner === "br" ? "right-[-8px] bottom-[-8px] cursor-nwse-resize" : "",
+                    "absolute w-7 h-7 bg-fuchsia-400 rounded-none border border-black/40 touch-none",
+					corner === "tl" ? "left-[-14px] top-[-14px] cursor-nwse-resize" : "",
+					corner === "tr" ? "right-[-14px] top-[-14px] cursor-nesw-resize" : "",
+					corner === "bl" ? "left-[-14px] bottom-[-14px] cursor-nesw-resize" : "",
+					corner === "br" ? "right-[-14px] bottom-[-14px] cursor-nwse-resize" : "",
                   ].join(" ")}
                 />
               ))}
-
-              <div className="absolute left-2 top-2 px-2 py-1 rounded-lg bg-black/60 text-white text-xs font-black">
-                兩指縮放 / 拖曳移動
-              </div>
             </div>
 
             {importing && (
