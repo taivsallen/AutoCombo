@@ -114,6 +114,21 @@ export default function ImportCropModal({
     [applyRectToDOM]
   );
 
+  useEffect(() => {
+	  if (!open) return;
+
+	  const prevOverflow = document.body.style.overflow;
+	  const prevTouchAction = document.body.style.touchAction;
+
+	  document.body.style.overflow = "hidden";   // ✅ 禁止頁面滾動
+	  document.body.style.touchAction = "none";  // ✅ iOS/Safari 也比較不會亂縮放
+
+	  return () => {
+		document.body.style.overflow = prevOverflow;
+		document.body.style.touchAction = prevTouchAction;
+	  };
+	}, [open]);
+
   // 初次打開時：給一個居中的裁切框（你要的：最寬+貼底）
   useEffect(() => {
     if (!open) return;
@@ -361,8 +376,14 @@ export default function ImportCropModal({
         <div className="p-4">
           <div
             ref={wrapRef}
-            className="relative w-full aspect-[6/5] bg-black rounded-2xl overflow-hidden border border-white/10 touch-none"
-            onPointerDown={(e) => {
+            className="relative w-full aspect-[6/5] bg-black rounded-2xl overflow-hidden border border-white/10 select-none"
+			  style={{
+				touchAction: "none",            // ✅ 禁止瀏覽器手勢（滾動/縮放/回彈）
+				overscrollBehavior: "contain",  // ✅ 防止滾動鏈到 body（Chrome/Android 很有效）
+				WebkitUserSelect: "none",
+				userSelect: "none",
+			  }}
+			  onPointerDown={(e) => {
               if (importing) return;
               wrapRef.current?.setPointerCapture?.(e.pointerId);
 
@@ -392,7 +413,7 @@ export default function ImportCropModal({
             <div
               ref={boxRef}
               className="absolute left-0 top-0 rounded-xl border-2 border-fuchsia-400 shadow-[0_0_20px_rgba(217,70,239,0.35)] touch-none will-change-transform"
-              style={rectToStyle(cropRect)}
+              style={rectToStyle(cropRect), touchAction: "none" }
               onPointerDown={onBoxPointerDown}
 			  onPointerMove={onWrapPointerMove}
 			  onPointerUp={endPointer}
