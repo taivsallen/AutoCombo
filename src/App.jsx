@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { toCanvas } from "html-to-image";
+import ImportCropModal from "./ImportCropModal";
 import GIF from "gif.js.optimized";
 import gifWorkerUrl from "gif.js.optimized/dist/gif.worker.js?url";
 import gifsicle from "gifsicle-wasm-browser";
@@ -40,11 +41,11 @@ const DIRS_4 = [[0, 1], [0, -1], [1, 0], [-1, 0]];
 const DIRS_8 = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
 const DEFAULT_CONFIG = {
-  beamWidth: 200,    
+  beamWidth: 700,    
   maxSteps: 30,      
-  maxNodes: 120000,  
-  stepPenalty: 250,  
-  potentialWeight: 800, 
+  maxNodes: 400000,  
+  stepPenalty: 800,  
+  potentialWeight: 2500, 
   clearedWeight: 300,
   replaySpeed: 250, 
 };
@@ -60,6 +61,11 @@ const App = () => {
   const rafRef = useRef(0);
   const [isPaused, setIsPaused] = useState(false);
   const gifBlobRef = useRef(null);
+  
+  const [importBusy, setImportBusy] = useState(false);
+  const [showImportCrop, setShowImportCrop] = useState(false);
+  const [importImgUrl, setImportImgUrl] = useState("");
+  const importFileRef = useRef(null);
   
   const [exportingGif, setExportingGif] = useState(false);
   const [gifProgress, setGifProgress] = useState({ cur: 0, total: 0, pct: 0 });
@@ -158,6 +164,40 @@ const App = () => {
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [gifCaptureMode, setGifCaptureMode] = useState(false);
 
+  const templateCacheRef = useRef({ db: [], ready: false });
+
+  useEffect(() => {
+	  let cancelled = false;
+
+	  const prepare = async () => {
+		// 1) 為每個 type 建一個 Image 物件
+		const types = Object.values(ORB_TYPES);
+		for (const t of types) {
+		  if (!t.imgEl) {
+			const im = new Image();
+			im.crossOrigin = "anonymous"; // 本地 assets 一般不影響，但加著保險
+			im.src = t.img;
+			t.imgEl = im;
+		  }
+		}
+
+		// 2) 建模板 DB
+		await Promise.all(types.map(t => ensureImageLoaded(t.imgEl)));
+		const built = await buildTemplateDB(ORB_TYPES);
+
+		if (!cancelled) {
+		  templateCacheRef.current = { ...built, ready: true };
+		  console.log("[detect] template DB ready:", built.db.map(x => x.id));
+		}
+	  };
+
+  prepare().catch(err => {
+    console.error("[detect] template init failed:", err);
+  });
+
+  return () => { cancelled = true; };
+}, []);
+
   const solverConfig = React.useMemo(() => {
 	  const { replaySpeed, ...rest } = config; // ✅ 排除播放速度
 	  return rest;
@@ -166,31 +206,30 @@ const App = () => {
   const getBoardKey = (b) => b.flat().join(',');
 
   const refreshTarget = useCallback((newBoard) => {
-  const counts = Array(6).fill(0);
+	  const counts = Array(6).fill(0);
 
-  for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const o = orbOf(newBoard[r][c]);
-      if (o !== -1) counts[o]++;
-    }
-  }
+	  for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+		for (let c = 0; c < COLS; c++) {
+		  const o = orbOf(newBoard[r][c]);
+		  if (o !== -1) counts[o]++;
+		}
+	  }
 
-  const base = counts.reduce((acc, x) => acc + Math.floor(x / 3), 0);
+	  const base = counts.reduce((acc, x) => acc + Math.floor(x / 3), 0);
 
-  let best = base;
-  for (let c = 0; c < COLS; c++) {
-    const t = orbOf(newBoard[0][c]); // ✅ row0
-    let s = 0;
-    for (let i = 0; i < 6; i++) {
-      s += Math.floor((counts[i] + (i === t ? 1 : 0)) / 3);
-    }
-    if (s > best) best = s;
-  }
+	  let best = base;
+	  for (let c = 0; c < COLS; c++) {
+		const t = orbOf(newBoard[0][c]); // ✅ row0
+		let s = 0;
+		for (let i = 0; i < 6; i++) {
+		  s += Math.floor((counts[i] + (i === t ? 1 : 0)) / 3);
+		}
+		if (s > best) best = s;
+	  }
 
-  setStats(prev => ({ ...prev, theoreticalMax: best }));
-  setTargetCombos(best);
-}, []);
-
+	  setStats(prev => ({ ...prev, theoreticalMax: best }));
+	  setTargetCombos(best);
+	}, []);
 
   const initBoard = useCallback((random = true, providedBoard = null) => {
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
@@ -237,7 +276,7 @@ const App = () => {
 	  solverCache.current.clear();
 	}, [refreshTarget]);
 
-	  useEffect(() => {
+  useEffect(() => {
 		initBoard(false);
 	  }, [initBoard]);
 
@@ -264,6 +303,23 @@ const App = () => {
 		});
 	  };
 	}, []);
+  
+  const onImportClick = () => {
+	  console.log("import click", { importBusy, ref: importFileRef.current });
+	  if (importBusy || exportingGif || solving || isReplaying || isPaused) return;
+	  importFileRef.current?.click();
+	};
+	
+  const onImportFileChange = (e) => {
+	  const f = e.target.files?.[0];
+	  e.target.value = ""; // 讓同檔可重選
+	  if (!f) return;
+
+	  if (importImgUrl) URL.revokeObjectURL(importImgUrl);
+	  const url = URL.createObjectURL(f);
+	  setImportImgUrl(url);
+	  setShowImportCrop(true);
+	};
   
   const holeStepInPlace = (b, hole, toRC) => {
 	  const moved = b[toRC.r][toRC.c];
@@ -2328,6 +2384,228 @@ const App = () => {
 	  return labels;
 	};
   
+  // 小工具：確保 <img> 真的載入完成
+  const ensureImageLoaded = (imgEl) =>
+	  new Promise((resolve, reject) => {
+		if (!imgEl) return reject(new Error("imgEl is null"));
+		if (imgEl.complete && imgEl.naturalWidth > 0) return resolve();
+		imgEl.onload = () => resolve();
+		imgEl.onerror = () => reject(new Error("failed to load template image"));
+	  });
+
+// 取像素特徵：HSV-ish 直方圖 + 簡單亮度/邊緣資訊（全都很快）
+  const featureFromImageData = (imgData) => {
+	  const { data, width, height } = imgData;
+
+	  // bins: H(12) + S(6) + V(6) + edge(6) = 30 維
+	  const H_BINS = 12, S_BINS = 6, V_BINS = 6, E_BINS = 6;
+	  const feat = new Float32Array(H_BINS + S_BINS + V_BINS + E_BINS);
+
+	  // 先做灰階方便算 edge
+	  const gray = new Float32Array(width * height);
+
+	  let idx = 0;
+	  for (let y = 0; y < height; y++) {
+		for (let x = 0; x < width; x++, idx++) {
+		  const i = idx * 4;
+		  const r = data[i] / 255;
+		  const g = data[i + 1] / 255;
+		  const b = data[i + 2] / 255;
+		  const a = data[i + 3] / 255;
+
+		  // 透明像素略過（模板圖可能有透明背景）
+		  if (a < 0.15) {
+			gray[idx] = 0;
+			continue;
+		  }
+
+		  // brightness / gray
+		  const v = Math.max(r, g, b);
+		  const m = Math.min(r, g, b);
+		  const c = v - m;
+		  const s = v > 1e-6 ? (c / v) : 0;
+
+		  // hue
+		  let h = 0;
+		  if (c > 1e-6) {
+			if (v === r) h = ((g - b) / c) % 6;
+			else if (v === g) h = (b - r) / c + 2;
+			else h = (r - g) / c + 4;
+			h = (h * 60);
+			if (h < 0) h += 360;
+		  }
+
+		  // histogram
+		  const hb = Math.min(H_BINS - 1, Math.floor(h / 360 * H_BINS));
+		  const sb = Math.min(S_BINS - 1, Math.floor(s * S_BINS));
+		  const vb = Math.min(V_BINS - 1, Math.floor(v * V_BINS));
+
+		  feat[hb] += 1;
+		  feat[H_BINS + sb] += 1;
+		  feat[H_BINS + S_BINS + vb] += 1;
+
+		  // 灰階 (感知亮度)
+		  gray[idx] = (0.2126 * r + 0.7152 * g + 0.0722 * b);
+		}
+	  }
+
+	  // edge histogram (簡單 Sobel-ish，用差分近似)
+	  // 用來區分圖案結構，提升準度
+	  let eCount = 0;
+	  for (let y = 1; y < height - 1; y++) {
+		for (let x = 1; x < width - 1; x++) {
+		  const p = y * width + x;
+		  const gx = (gray[p + 1] - gray[p - 1]);
+		  const gy = (gray[p + width] - gray[p - width]);
+		  const mag = Math.min(1, Math.hypot(gx, gy) * 2.2); // 放大一點
+		  const eb = Math.min(E_BINS - 1, Math.floor(mag * E_BINS));
+		  feat[H_BINS + S_BINS + V_BINS + eb] += 1;
+		  eCount++;
+		}
+	  }
+
+	  // normalize (L2)
+	  let norm = 0;
+	  for (let i = 0; i < feat.length; i++) norm += feat[i] * feat[i];
+	  norm = Math.sqrt(norm) || 1;
+	  for (let i = 0; i < feat.length; i++) feat[i] /= norm;
+
+	  return feat;
+	};
+
+  const dot = (a, b) => {
+	  let s = 0;
+	  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
+	  return s;
+	};
+
+// 判斷一格是不是「幾乎全黑/空」：避免被硬比到某顆符石
+  const isProbablyEmptyCell = (imgData) => {
+	  const { data } = imgData;
+	  let n = 0;
+	  let mean = 0, m2 = 0;
+
+	  // 取樣（每 4px 取一次）
+	  for (let i = 0; i < data.length; i += 16) {
+		const a = data[i + 3];
+		if (a < 30) continue;
+		const r = data[i], g = data[i + 1], b = data[i + 2];
+		const y = (0.2126 * r + 0.7152 * g + 0.0722 * b);
+		n++;
+		const d = y - mean;
+		mean += d / n;
+		m2 += d * (y - mean);
+	  }
+	  if (n < 40) return true; // 幾乎全透明/全空
+
+	  const varY = m2 / n;
+	  // 你盤面背景通常偏暗且變化小（黑格/空格）
+	  return (mean < 35 && varY < 120);
+	};
+
+// 建立模板庫（用你 ORB_TYPES 的圖片）
+  const buildTemplateDB = async (ORB_TYPES) => {
+	  const types = Object.values(ORB_TYPES);
+
+	  // 確保模板圖都載入
+	  await Promise.all(types.map(t => ensureImageLoaded(t.imgEl || null)));
+
+	  const SIZE = 28; // 模板抽樣尺寸（小但夠用）
+	  const cvs = document.createElement("canvas");
+	  cvs.width = SIZE; cvs.height = SIZE;
+	  const ctx = cvs.getContext("2d", { willReadFrequently: true });
+
+	  const db = [];
+	  for (const t of types) {
+		// t.imgEl：你最好在 ORB_TYPES 裡放一個已載入的 Image 物件
+		// 如果你現在 ORB_TYPES 只有 img URL，我下面也提供改法（第 2 節）
+		ctx.clearRect(0, 0, SIZE, SIZE);
+		ctx.drawImage(t.imgEl, 0, 0, SIZE, SIZE);
+		const imgData = ctx.getImageData(0, 0, SIZE, SIZE);
+		const feat = featureFromImageData(imgData);
+		db.push({ id: t.id, feat });
+	  }
+	  return { db, size: SIZE };
+	};
+
+// 偵測主函式
+  const detectFromCroppedCanvas = (cropCanvas, ORB_TYPES, templateCacheRef, opts = {}) => {
+	  const rows = opts.rows ?? 5;
+	  const cols = opts.cols ?? 6;
+
+	  // innerPad：避開格線/邊框（很重要，會提升準度）
+	  const innerPad = opts.innerPad ?? 0.12; // 12% padding
+	  const sampleSize = opts.sampleSize ?? 28;
+
+	  const cache = templateCacheRef.current;
+	  if (!cache || !cache.db || cache.db.length === 0) {
+		throw new Error("template DB not ready");
+	  }
+
+	  const W = cropCanvas.width;
+	  const H = cropCanvas.height;
+	  const cellW = W / cols;
+	  const cellH = H / rows;
+
+	  const out = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+	  const tmp = document.createElement("canvas");
+	  tmp.width = sampleSize;
+	  tmp.height = sampleSize;
+	  const tctx = tmp.getContext("2d", { willReadFrequently: true });
+
+	  const cctx = cropCanvas.getContext("2d", { willReadFrequently: true });
+
+	  for (let r = 0; r < rows; r++) {
+		for (let c = 0; c < cols; c++) {
+		  const x0 = c * cellW;
+		  const y0 = r * cellH;
+
+		  // 內縮取樣區，避開邊框/格線
+		  const px = x0 + cellW * innerPad;
+		  const py = y0 + cellH * innerPad;
+		  const pw = cellW * (1 - innerPad * 2);
+		  const ph = cellH * (1 - innerPad * 2);
+
+		  // draw to small canvas
+		  tctx.clearRect(0, 0, sampleSize, sampleSize);
+		  tctx.drawImage(cropCanvas, px, py, pw, ph, 0, 0, sampleSize, sampleSize);
+
+		  const imgData = tctx.getImageData(0, 0, sampleSize, sampleSize);
+
+		  // 空格判斷（可選）
+		  if (opts.allowEmpty && isProbablyEmptyCell(imgData)) {
+			out[r][c] = -1;
+			continue;
+		  }
+
+		  const feat = featureFromImageData(imgData);
+
+		  // 比對模板（cosine: 因為特徵已 L2 normalize，所以 dot 就是 cosine）
+		  let bestId = cache.db[0].id;
+		  let bestScore = -1;
+
+		  for (let i = 0; i < cache.db.length; i++) {
+			const s = dot(feat, cache.db[i].feat);
+			if (s > bestScore) {
+			  bestScore = s;
+			  bestId = cache.db[i].id;
+			}
+		  }
+
+		  // 可加一道門檻：太不像就當空/未知
+		  const minScore = opts.minScore ?? 0.55;
+		  if (opts.allowUnknown && bestScore < minScore) {
+			out[r][c] = -1; // 或你想用 0 / null
+		  } else {
+			out[r][c] = bestId;
+		  }
+		}
+	  }
+
+	  return out;
+	};
+  
   return (
     <div className="min-h-screen bg-neutral-950 text-white font-sans">
 		<div className="sticky top-0 z-[3000] bg-neutral-900/95 backdrop-blur border-b border-white/10">
@@ -2482,12 +2760,53 @@ const App = () => {
 				<button onClick={() => setShowConfig(!showConfig)} className="flex items-center gap-2 text-[14px] font-bold text-neutral-400 pl-2"><Settings2 size={18} /> 進階搜尋參數調優</button>
 				<div className="flex items-center gap-3 pr-2"><button onClick={resetAdvanced} className="flex items-center gap-1.5 px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs font-bold transition-all border border-neutral-700 shadow-sm"><RotateCcw size={14} /> 恢復預設</button><span className="text-xs text-neutral-600 uppercase font-bold cursor-pointer" onClick={() => setShowConfig(!showConfig)}>{showConfig ? '收起' : '展開'}</span></div>
 			  </div>
-			  {showConfig && (<div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 border-t border-neutral-800 bg-neutral-900/40">
-				  <ParamSlider label="束寬 (Beam Width)" value={config.beamWidth} min={40} max={1050} step={10} onChange={(v) => updateParam('beamWidth', v)} />
-				  <ParamSlider label="潛在權重 (Potential)" value={config.potentialWeight} min={0} max={4500} step={50} onChange={(v) => updateParam('potentialWeight', v)} />
-				  <ParamSlider label="節點上限" value={config.maxNodes} min={10000} max={600000} step={10000} onChange={(v) => updateParam('maxNodes', v)} />
-				  <ParamSlider label="達標後步數懲罰" value={config.stepPenalty} min={0} max={1500} step={50} onChange={(v) => updateParam('stepPenalty', v)} />
-				</div>)}
+			  {showConfig && (
+				  <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 border-t border-neutral-800 bg-neutral-900/40">
+					<ParamSlider
+					  label="束寬 (Beam Width)"
+					  value={config.beamWidth}
+					  min={40}
+					  max={1050}
+					  step={10}
+					  inputMode="numeric"
+					  formatInput={(v) => String(v)}
+					  onChange={(v) => updateParam("beamWidth", Number(v))}
+					/>
+
+					<ParamSlider
+					  label="潛在權重 (Potential)"
+					  value={config.potentialWeight}
+					  min={0}
+					  max={4500}
+					  step={50}
+					  inputMode="numeric"
+					  formatInput={(v) => String(v)}
+					  onChange={(v) => updateParam("potentialWeight", Number(v))}
+					/>
+
+					<ParamSlider
+					  label="節點上限"
+					  value={config.maxNodes}
+					  min={10000}
+					  max={600000}
+					  step={10000}
+					  inputMode="numeric"
+					  formatInput={(v) => String(v)}
+					  onChange={(v) => updateParam("maxNodes", Number(v))}
+					/>
+
+					<ParamSlider
+					  label="達標後步數懲罰"
+					  value={config.stepPenalty}
+					  min={0}
+					  max={1500}
+					  step={50}
+					  inputMode="numeric"
+					  formatInput={(v) => String(v)}
+					  onChange={(v) => updateParam("stepPenalty", Number(v))}
+					/>
+				  </div>
+				)}
 			</div>
 
 			{/* 棋盤容器 */}
@@ -2979,7 +3298,7 @@ const App = () => {
 			{/* Modal 編輯器 */}
 			{showEditor && (
 			  <div
-				className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+				className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
 			  >
 				<div
 				  className="bg-neutral-900 w-full max-w-xl rounded-3xl border border-neutral-800 shadow-2xl overflow-hidden
@@ -2987,7 +3306,15 @@ const App = () => {
 				  onClick={(e) => e.stopPropagation()}
 				>
 				  {/* ✅ 內容區：可滾動 */}
-				  <div className="p-6 flex-1 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }} >
+				  <div
+					  className="p-6 flex-1 overflow-y-auto overscroll-contain"
+					  style={{
+						WebkitOverflowScrolling: "touch",
+						contain: "content",           // ✅ 隔離 layout/paint
+						willChange: "transform",      // ✅ 提示做合成層
+						transform: "translateZ(0)",   // ✅ 強制上 GPU layer
+					  }}
+					>
 					<div className="flex flex-col items-center">
 					  <div className="bg-neutral-950 p-3 rounded-3xl border-2 border-neutral-800 mt-6 mb-8">
 						<div className="grid grid-cols-6 gap-0">
@@ -3187,12 +3514,25 @@ const App = () => {
 
 				  {/* ✅ 底部按鈕：固定在底部，不會被內容擠出畫面 */}
 				  <div className="sticky bottom-0 bg-neutral-900 border-t border-neutral-800 p-4">
-					<div className="grid grid-cols-2 gap-0 w-full">
+					<div className="grid grid-cols-3 gap-2 w-full">
 					  <button
 						onClick={() => setShowEditor(false)}
 						className="w-full py-5 rounded-2xl font-bold bg-neutral-800 hover:bg-neutral-700 transition-colors text-base"
 					  >
 						取消
+					  </button>
+					  {/* 中：匯入版面 */}
+					  <button
+						onClick={onImportClick}
+						disabled={importBusy}
+						className={[
+						  "w-full py-5 rounded-2xl font-black transition-all text-base border active:scale-95",
+						  importBusy ? "opacity-40 cursor-not-allowed" : "hover:brightness-110",
+						  "bg-fuchsia-600 border-fuchsia-400/30 shadow-xl shadow-fuchsia-900/20"
+						].join(" ")}
+						title="匯入截圖並自動辨識盤面"
+					  >
+						匯入版面
 					  </button>
 					  <button
 						onClick={handleApplyCustomBoard}
@@ -3228,6 +3568,68 @@ const App = () => {
 			</div>
 		  </div>
 		</div>
+		<input
+		  ref={importFileRef}
+		  type="file"
+		  accept="image/*"
+		  className="hidden"
+		  onChange={onImportFileChange}
+		/>
+		<ImportCropModal
+  open={showImportCrop}
+  imgUrl={importImgUrl}
+  onCancel={() => setShowImportCrop(false)}
+  onConfirm={async ({ cropCanvas }) => {
+    console.log("[ImportCropModal] onConfirm fired", cropCanvas);
+
+    setImportBusy(true);
+    try {
+      if (!cropCanvas) {
+        alert("cropCanvas 是空的（Modal 沒有傳出來）");
+        return;
+      }
+
+      const detected = detectFromCroppedCanvas(
+  cropCanvas,
+  ORB_TYPES,
+  templateCacheRef,
+  {
+    rows: 5,
+    cols: 6,
+    innerPad: 0.12,
+    sampleSize: 28,
+    allowEmpty: false,     // 盤面通常都滿的，先關掉更穩
+    allowUnknown: false,   // 先全都硬分類，之後你想更嚴格再開
+    minScore: 0.55,
+  }
+);
+      console.log("[detect] result", detected);
+
+      setEditingBoard(prev => {
+        const next = prev.map(r => [...r]);
+        for (let r = 0; r < 5; r++) {
+          for (let c = 0; c < 6; c++) {
+            next[r + 1][c] = detected[r][c];
+          }
+        }
+        return next;
+      });
+	  console.log("sample pixel:", cropCanvas?.getContext?.("2d")?.getImageData(0, 0, 1, 1)?.data);
+      setShowEditor(true);
+      setShowImportCrop(false);
+    } catch (err) {
+		
+      console.error("偵測流程炸掉：", err);
+  console.error("err.message:", err?.message);
+  console.error("err.stack:", err?.stack);
+  console.log("cropCanvas:", cropCanvas);
+  console.log("cropCanvas size:", cropCanvas?.width, cropCanvas?.height);
+      alert("偵測失敗（看 console 錯誤）");
+    } finally {
+      setImportBusy(false);
+    }
+  }}
+/>
     </div>
   );
 
