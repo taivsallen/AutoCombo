@@ -34,6 +34,22 @@ export default function ImportCropModal({
     h: 240 * ASPECT,
   });
 
+  const contentRectRef = useRef({ drawX: 0, drawY: 0, drawW: 0, drawH: 0 });
+
+  const cacheContentRect = useCallback(() => {
+	  const wrap = wrapRef.current;
+	  const img = imgRef.current;
+	  if (!wrap || !img || !img.naturalWidth || !img.naturalHeight) return;
+
+	  const { drawX, drawY, drawW, drawH } = getContainContentRect(
+		wrap.clientWidth,
+		wrap.clientHeight,
+		img.naturalWidth,
+		img.naturalHeight
+	  );
+	  contentRectRef.current = { drawX, drawY, drawW, drawH };
+	}, []);
+  
   const getContainContentRect = (wrapW, wrapH, naturalW, naturalH) => {
 	  const s = Math.min(wrapW / naturalW, wrapH / naturalH);
 	  const drawW = naturalW * s;
@@ -63,10 +79,11 @@ export default function ImportCropModal({
   // ✅ cache bounds（避免每 move layout）
   const boundsRef = useRef({ W: 0, H: 0 });
   const cacheBounds = useCallback(() => {
-    const wrap = wrapRef.current;
-    if (!wrap) return;
-    boundsRef.current = { W: wrap.clientWidth, H: wrap.clientHeight };
-  }, []);
+	  const wrap = wrapRef.current;
+	  if (!wrap) return;
+	  boundsRef.current = { W: wrap.clientWidth, H: wrap.clientHeight };
+	  cacheContentRect(); // ✅ 加這行
+	}, [cacheContentRect]);
 
   const cacheRects = useCallback(() => {
     const wrapRect = wrapRef.current?.getBoundingClientRect() || null;
@@ -83,23 +100,35 @@ export default function ImportCropModal({
   }, []);
 
   const fitRectIntoBounds = useCallback((r) => {
-    const { W, H } = boundsRef.current;
-    const minW = 120;
+	  const { W, H } = boundsRef.current;
+	  if (!W || !H) return r;
 
-    if (!W || !H) return r;
+	  const minW = 120;
 
-    let w = clamp(r.w, minW, W);
-    let h = w * ASPECT;
+	  // ✅ 用圖片內容矩形當邊界（不是 wrap）
+	  const { drawX, drawY, drawW, drawH } = contentRectRef.current;
 
-    if (h > H) {
-      h = H;
-      w = h / ASPECT;
-    }
+	  // 如果圖片還沒 load，退回用 wrap 夾（保底）
+	  const bx = drawW ? drawX : 0;
+	  const by = drawH ? drawY : 0;
+	  const bW = drawW ? drawW : W;
+	  const bH = drawH ? drawH : H;
 
-    const x = clamp(r.x, 0, W - w);
-    const y = clamp(r.y, 0, H - h);
-    return { x, y, w, h };
-  }, []);
+	  // 1) 尺寸先夾在內容邊界內
+	  let w = clamp(r.w, minW, bW);
+	  let h = w * ASPECT;
+
+	  if (h > bH) {
+		h = bH;
+		w = h / ASPECT;
+	  }
+
+	  // 2) 位置夾在內容邊界內
+	  const x = clamp(r.x, bx, bx + bW - w);
+	  const y = clamp(r.y, by, by + bH - h);
+
+	  return { x, y, w, h };
+	}, []);
 
   const scheduleApply = useCallback(
     (r) => {
@@ -282,15 +311,43 @@ export default function ImportCropModal({
   useEffect(() => {
 	  if (!open) return;
 
-	  const prevOverflow = document.body.style.overflow;
-	  const prevTouchAction = document.body.style.touchAction;
+	  const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
 
-	  document.body.style.overflow = "hidden";   // ✅ 禁止頁面滾動
-	  document.body.style.touchAction = "none";  // ✅ iOS/Safari 也比較不會亂縮放
+	  // 保存原本狀態
+	  const prev = {
+		overflow: document.body.style.overflow,
+		position: document.body.style.position,
+		top: document.body.style.top,
+		width: document.body.style.width,
+		touchAction: document.body.style.touchAction,
+	  };
+
+	  // ✅ iOS 最穩的鎖法：body fixed
+	  document.body.style.overflow = "hidden";
+	  document.body.style.position = "fixed";
+	  document.body.style.top = `-${scrollY}px`;
+	  document.body.style.width = "100%";
+	  document.body.style.touchAction = "none";
+
+	  // ✅ 再加一層：擋住「非可滾動區域」的 touchmove（iOS/LINE 很需要）
+	  const preventTouchMove = (e) => {
+		// 只要 modal 開著，直接阻止整頁滾動
+		e.preventDefault();
+	  };
+	  document.addEventListener("touchmove", preventTouchMove, { passive: false });
 
 	  return () => {
-		document.body.style.overflow = prevOverflow;
-		document.body.style.touchAction = prevTouchAction;
+		document.removeEventListener("touchmove", preventTouchMove);
+
+		// 還原 body
+		document.body.style.overflow = prev.overflow;
+		document.body.style.position = prev.position;
+		document.body.style.top = prev.top;
+		document.body.style.width = prev.width;
+		document.body.style.touchAction = prev.touchAction;
+
+		// 回到原本卷軸位置
+		window.scrollTo(0, scrollY);
 	  };
 	}, [open]);
 
@@ -448,7 +505,11 @@ export default function ImportCropModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur p-4 flex items-center justify-center">
+    <div
+	  className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur p-4 flex items-center justify-center"
+	  onTouchMove={(e) => e.preventDefault()}
+	  style={{ touchAction: "none" }}
+	>
       <div
         className="w-full max-w-2xl bg-neutral-900 rounded-3xl border border-neutral-800 overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -491,6 +552,7 @@ export default function ImportCropModal({
               draggable={false}
               onLoad={() => {
 				  cacheBounds();
+				  cacheContentRect(); // ✅ 加這行
 				  const wrap = wrapRef.current;
 				  const img = imgRef.current;
 				  if (!wrap || !img) return;
@@ -518,11 +580,11 @@ export default function ImportCropModal({
                   key={corner}
                   onPointerDown={startResize(corner)}
                   className={[
-                    "absolute w-7 h-7 bg-fuchsia-400 rounded-none border border-black/40 touch-none",
-					corner === "tl" ? "left-[-14px] top-[-14px] cursor-nwse-resize" : "",
-					corner === "tr" ? "right-[-14px] top-[-14px] cursor-nesw-resize" : "",
-					corner === "bl" ? "left-[-14px] bottom-[-14px] cursor-nesw-resize" : "",
-					corner === "br" ? "right-[-14px] bottom-[-14px] cursor-nwse-resize" : "",
+                    "absolute w-4 h-4 bg-fuchsia-400 rounded-none border border-black/40 touch-none",
+					corner === "tl" ? "left-[-8px] top-[-8px] cursor-nwse-resize" : "",
+					corner === "tr" ? "right-[-8px] top-[-8px] cursor-nesw-resize" : "",
+					corner === "bl" ? "left-[-8px] bottom-[-8px] cursor-nesw-resize" : "",
+					corner === "br" ? "right-[-8px] bottom-[-8px] cursor-nwse-resize" : "",
                   ].join(" ")}
                 />
               ))}
