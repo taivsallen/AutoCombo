@@ -41,14 +41,54 @@ const DIRS_4 = [[0, 1], [0, -1], [1, 0], [-1, 0]];
 const DIRS_8 = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
 const DEFAULT_CONFIG = {
-  beamWidth: 400,    
+  beamWidth: 440,    
   maxSteps: 30,      
-  maxNodes: 220000,  
-  stepPenalty: 300,  
-  potentialWeight: 1000, 
+  maxNodes: 50000,  
+  stepPenalty: 0,  
+  potentialWeight: 10, 
   clearedWeight: 300,
   replaySpeed: 250, 
 };
+
+function topKByScore(items, K, getScore) {
+  if (K <= 0) return [];
+  const heap = []; // min-heap: [score, item]
+
+  const swap = (i, j) => ([heap[i], heap[j]] = [heap[j], heap[i]]);
+  const up = (i) => {
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (heap[p][0] <= heap[i][0]) break;
+      swap(p, i);
+      i = p;
+    }
+  };
+  const down = (i) => {
+    for (;;) {
+      const l = i * 2 + 1, r = l + 1;
+      let m = i;
+      if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+      if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+      if (m === i) break;
+      swap(i, m);
+      i = m;
+    }
+  };
+
+  for (const it of items) {
+    const s = getScore(it);
+    if (heap.length < K) {
+      heap.push([s, it]);
+      up(heap.length - 1);
+    } else if (s > heap[0][0]) {
+      heap[0] = [s, it];
+      down(0);
+    }
+  }
+
+  heap.sort((a, b) => b[0] - a[0]); // 由大到小
+  return heap.map(x => x[1]);
+}
 
 const App = () => {
   const svgRectRef = useRef(null);
@@ -203,7 +243,6 @@ const App = () => {
 	  return rest;
 	}, [config]);
 	
-  const getBoardKey = (b) => b.flat().join(',');
 
   const refreshTarget = useCallback((newBoard) => {
 	  const counts = Array(6).fill(0);
@@ -320,22 +359,6 @@ const App = () => {
 	  setImportImgUrl(url);
 	  setShowImportCrop(true);
 	};
-  
-  const holeStepInPlace = (b, hole, toRC) => {
-	  const moved = b[toRC.r][toRC.c];
-	  b[hole.r][hole.c] = moved;
-	  b[toRC.r][toRC.c] = -1;
-	  return toRC; // new hole
-	};
-
-// 評分/顯示用：把洞補成「手上那顆 held(startOrb)」
-// 這樣 evaluateBoard / potentialScore 看到的是「拖曳中棋盤」的真實狀態（沒有缺格）
-  const boardWithHeldFilled = (b, hole, held) => {
-	  if (!hole) return b;
-	  const next = b.map(r => [...r]);
-	  next[hole.r][hole.c] = held;
-	  return next;
-	};
 
   const resetBasic = () => {
     setTargetCombos(stats.theoreticalMax);
@@ -378,340 +401,500 @@ const App = () => {
   return { nextBoard, nextHeld };
 };
 
-  const applyGravity = (b, toClear) => {
-  const next = b.map(row => [...row]);
+const clone2D = (b) => {
+  const len = b.length;
+  const copy = new Array(len);
+  for (let i = 0; i < len; i++) copy[i] = b[i].slice();
+  return copy;
+};
 
+// 評分/顯示用：把洞補成「手上那顆 held(startOrb)」
+const boardWithHeldFilled = (b, hole, held) => {
+  if (!hole) return b;
+  const next = clone2D(b);
+  next[hole.r][hole.c] = held;
+  return next;
+};
+
+const holeStepInPlace = (b, hole, toRC) => {
+  const moved = b[toRC.r][toRC.c];
+  b[hole.r][hole.c] = moved;
+  b[toRC.r][toRC.c] = -1;
+  return toRC; // new hole
+};
+
+// 🚀 搭配 1D toClearMap 的提速版 Gravity
+const applyGravity = (b, toClear1D) => {
+  const next = clone2D(b);
   for (let c = 0; c < COLS; c++) {
     let writeRow = TOTAL_ROWS - 1;
-
     for (let r = TOTAL_ROWS - 1; r >= 1; r--) {
-      if (!toClear[r][c]) {
+      // 降維讀取: r * COLS + c
+      if (!toClear1D[r * COLS + c]) {
         next[writeRow][c] = b[r][c];
         writeRow--;
       }
     }
     for (let r = writeRow; r >= 1; r--) next[r][c] = -1;
   }
-
   return next;
 };
 
-  const potentialScore = (b, mode) => {
+const potentialScore = (b, mode) => {
   let p = 0;
-  const hWeight = mode === 'horizontal' ? 3 : 0.5;
-  const vWeight = mode === 'vertical' ? 3 : 0.5;
+  const hWeight = mode === "horizontal" ? 3 : 0.5;
+  const vWeight = mode === "vertical" ? 3 : 0.5;
 
+  // 水平：一次取出 3 格 orb 類型
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+    let a = orbOf(b[r][0]);
+    let d = orbOf(b[r][1]);
     for (let c = 0; c < COLS - 2; c++) {
-      const a = orbOf(b[r][c]);
-      const d = orbOf(b[r][c + 1]);
       const e = orbOf(b[r][c + 2]);
-      if (a === -1) continue;
-      if (a === d && a !== e) p += hWeight;
-      if (d === e && a !== d) p += hWeight;
-      if (a === e && a !== d) p += hWeight;
+      if (a !== -1) {
+        if ((a === d && a !== e) || (d === e && a !== d) || (a === e && a !== d)) p += hWeight;
+      }
+      a = d;
+      d = e;
     }
   }
 
+  // 垂直
   for (let c = 0; c < COLS; c++) {
+    let a = orbOf(b[PLAY_ROWS_START][c]);
+    let d = PLAY_ROWS_START + 1 < TOTAL_ROWS ? orbOf(b[PLAY_ROWS_START + 1][c]) : -1;
     for (let r = PLAY_ROWS_START; r < TOTAL_ROWS - 2; r++) {
-      const a = orbOf(b[r][c]);
-      const d = orbOf(b[r + 1][c]);
       const e = orbOf(b[r + 2][c]);
-      if (a === -1) continue;
-      if (a === d && a !== e) p += vWeight;
-      if (d === e && a !== d) p += vWeight;
-      if (a === e && a !== d) p += vWeight;
+      if (a !== -1) {
+        if ((a === d && a !== e) || (d === e && a !== d) || (a === e && a !== d)) p += vWeight;
+      }
+      a = d;
+      d = e;
     }
   }
 
   return p;
 };
 
-  const findMatches = (tempBoard) => {
-  let combos = 0, clearedCount = 0, vC = 0, hC = 0;
+const findMatches = (tempBoard) => {
+  let combos = 0,
+    clearedCount = 0,
+    vC = 0,
+    hC = 0;
 
-  const isH = Array(TOTAL_ROWS).fill().map(() => Array(COLS).fill(false));
-  const isV = Array(TOTAL_ROWS).fill().map(() => Array(COLS).fill(false));
-  const toClear = Array(TOTAL_ROWS).fill().map(() => Array(COLS).fill(false));
+  const totalCells = TOTAL_ROWS * COLS;
+  const isH = new Uint8Array(totalCells);
+  const isV = new Uint8Array(totalCells);
+  const toClear1D = new Uint8Array(totalCells);
 
-  // 水平三連
+  // ===== 水平三連 =====
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
-    for (let c = 0; c < COLS - 2; c++) {
+    for (let c = 0; c < COLS - 2; ) {
       const v0 = orbOf(tempBoard[r][c]);
+      if (v0 === -1) {
+        c++;
+        continue;
+      }
+
       const v1 = orbOf(tempBoard[r][c + 1]);
       const v2 = orbOf(tempBoard[r][c + 2]);
-      if (v0 !== -1 && v0 === v1 && v0 === v2) {
-        let k = c;
-        while (k < COLS && orbOf(tempBoard[r][k]) === v0) {
-          toClear[r][k] = true;
-          isH[r][k] = true;
-          k++;
-        }
+      if (v0 !== v1 || v0 !== v2) {
+        c++;
+        continue;
       }
+
+      let k = c + 3;
+      while (k < COLS && orbOf(tempBoard[r][k]) === v0) k++;
+
+      for (let x = c; x < k; x++) {
+        toClear1D[r * COLS + x] = 1;
+        isH[r * COLS + x] = 1;
+      }
+      c = k;
     }
   }
 
-  // 垂直三連
+  // ===== 垂直三連 =====
   for (let c = 0; c < COLS; c++) {
-    for (let r = PLAY_ROWS_START; r < TOTAL_ROWS - 2; r++) {
+    for (let r = PLAY_ROWS_START; r < TOTAL_ROWS - 2; ) {
       const v0 = orbOf(tempBoard[r][c]);
+      if (v0 === -1) {
+        r++;
+        continue;
+      }
+
       const v1 = orbOf(tempBoard[r + 1][c]);
       const v2 = orbOf(tempBoard[r + 2][c]);
-      if (v0 !== -1 && v0 === v1 && v0 === v2) {
-        let k = r;
-        while (k < TOTAL_ROWS && orbOf(tempBoard[k][c]) === v0) {
-          toClear[k][c] = true;
-          isV[k][c] = true;
-          k++;
-        }
+      if (v0 !== v1 || v0 !== v2) {
+        r++;
+        continue;
       }
+
+      let k = r + 3;
+      while (k < TOTAL_ROWS && orbOf(tempBoard[k][c]) === v0) k++;
+
+      for (let y = r; y < k; y++) {
+        toClear1D[y * COLS + c] = 1;
+        isV[y * COLS + c] = 1;
+      }
+      r = k;
     }
   }
 
-  // BFS 合併同色相連區塊（combo）
-  const visited = Array(TOTAL_ROWS).fill().map(() => Array(COLS).fill(false));
+  // ===== BFS 合併 =====
+  const visited = new Uint8Array(totalCells);
+  const drs = [0, 0, 1, -1];
+  const dcs = [1, -1, 0, 0];
+
+  const qR = new Int8Array(totalCells);
+  const qC = new Int8Array(totalCells);
 
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      if (toClear[r][c] && !visited[r][c]) {
-        combos++;
-        const q = [{ r, c }];
-        visited[r][c] = true;
+      const idx0 = r * COLS + c;
+      if (!toClear1D[idx0] || visited[idx0]) continue;
 
-        const type = orbOf(tempBoard[r][c]); // ✅ 用 orbOf
-        let hasHM = false, hasVM = false;
+      combos++;
+      const type = orbOf(tempBoard[r][c]);
+      let hasHM = false,
+        hasVM = false;
 
-        while (q.length > 0) {
-          const curr = q.shift();
-          clearedCount++;
+      let head = 0,
+        tail = 0;
+      qR[tail] = r;
+      qC[tail] = c;
+      tail++;
+      visited[idx0] = 1;
 
-          if (isH[curr.r][curr.c]) hasHM = true;
-          if (isV[curr.r][curr.c]) hasVM = true;
+      while (head < tail) {
+        const cr = qR[head];
+        const cc = qC[head];
+        head++;
+        clearedCount++;
 
-          [[0,1],[0,-1],[1,0],[-1,0]].forEach(([dr, dc]) => {
-            const nr = curr.r + dr, nc = curr.c + dc;
-            if (
-              nr >= PLAY_ROWS_START && nr < TOTAL_ROWS &&
-              nc >= 0 && nc < COLS &&
-              toClear[nr][nc] &&
-              !visited[nr][nc] &&
-              orbOf(tempBoard[nr][nc]) === type
-            ) {
-              visited[nr][nc] = true;
-              q.push({ r: nr, c: nc });
+        const idx = cr * COLS + cc;
+        if (isH[idx]) hasHM = true;
+        if (isV[idx]) hasVM = true;
+
+        for (let i = 0; i < 4; i++) {
+          const nr = cr + drs[i],
+            nc = cc + dcs[i];
+          if (nr >= PLAY_ROWS_START && nr < TOTAL_ROWS && nc >= 0 && nc < COLS) {
+            const nidx = nr * COLS + nc;
+            if (toClear1D[nidx] && !visited[nidx] && orbOf(tempBoard[nr][nc]) === type) {
+              visited[nidx] = 1;
+              qR[tail] = nr;
+              qC[tail] = nc;
+              tail++;
             }
-          });
+          }
         }
-
-        if (hasHM) hC++;
-        if (hasVM) vC++;
       }
+
+      if (hasHM) hC++;
+      if (hasVM) vC++;
     }
   }
 
-  return { combos, clearedCount, vC, hC, toClearMap: toClear };
+  return { combos, clearedCount, vC, hC, toClearMap: toClear1D };
 };
 
-  const evaluateBoard = (tempBoard, skyfall) => {
-    let result = findMatches(tempBoard);
-    let initialCombos = result.combos;
-    let initialH = result.hC;
-    let initialV = result.vC;
-    let initialCleared = result.clearedCount;
-    if (!skyfall) return { combos: initialCombos, initialCombos, skyfallCombos: 0, clearedCount: initialCleared, verticalCombos: initialV, horizontalCombos: initialH };
+const evaluateBoard = (tempBoard, skyfall) => {
+  let result = findMatches(tempBoard);
+  let initialCombos = result.combos;
+  let initialH = result.hC;
+  let initialV = result.vC;
+  let initialCleared = result.clearedCount;
 
-    let currentBoard = tempBoard.map(r => [...r]);
-    let totalCombos = initialCombos, totalV = initialV, totalH = initialH, totalCleared = initialCleared;
-    let loopResult = result;
-    while (loopResult.combos > 0) {
-      currentBoard = applyGravity(currentBoard, loopResult.toClearMap);
-      loopResult = findMatches(currentBoard);
-      if (loopResult.combos > 0) {
-        totalCombos += loopResult.combos;
-        totalV += loopResult.vC;
-        totalH += loopResult.hC;
-        totalCleared += loopResult.clearedCount;
-      }
+  if (!skyfall)
+    return {
+      combos: initialCombos,
+      initialCombos,
+      skyfallCombos: 0,
+      clearedCount: initialCleared,
+      verticalCombos: initialV,
+      horizontalCombos: initialH,
+    };
+
+  let currentBoard = clone2D(tempBoard);
+  let totalCombos = initialCombos,
+    totalV = initialV,
+    totalH = initialH,
+    totalCleared = initialCleared;
+  let loopResult = result;
+
+  while (loopResult.combos > 0) {
+    currentBoard = applyGravity(currentBoard, loopResult.toClearMap);
+    loopResult = findMatches(currentBoard);
+    if (loopResult.combos > 0) {
+      totalCombos += loopResult.combos;
+      totalV += loopResult.vC;
+      totalH += loopResult.hC;
+      totalCleared += loopResult.clearedCount;
     }
-    return { combos: totalCombos, initialCombos, skyfallCombos: totalCombos - initialCombos, clearedCount: totalCleared, verticalCombos: totalV, horizontalCombos: totalH };
+  }
+
+  return {
+    combos: totalCombos,
+    initialCombos,
+    skyfallCombos: totalCombos - initialCombos,
+    clearedCount: totalCleared,
+    verticalCombos: totalV,
+    horizontalCombos: totalH,
   };
+};
 
-  const calcScore = (ev, pot, pathLen, cfg, target, mode, priority) => {
-  const cappedCombos = Math.min(ev.combos, target);
+// ✅ 更快更省記憶體的棋盤 key（保持函式名不變）
+const getBoardKey = (b) => {
+  // 兩個 32-bit hash 合成 BigInt 字串 key（低碰撞、Map key 短）
+  let h1 = 2166136261 >>> 0; // FNV-ish
+  let h2 = 16777619 >>> 0;
 
-  // 你原本的「主方向」加權：直排看 verticalCombos，橫排看 horizontalCombos
-  const baseMajor =
-    mode === 'vertical'
-      ? ev.verticalCombos * 5000000
-      : ev.horizontalCombos * 5000000;
+  for (let r = 0; r < TOTAL_ROWS; r++) {
+    const row = b[r];
+    for (let c = 0; c < COLS; c++) {
+      const x = (row[c] + 11) ^ ((r + 1) * 131) ^ ((c + 1) * 257);
 
-  const baseScore = baseMajor + cappedCombos * 1000000;
+      h1 ^= x & 0xff;
+      h1 = Math.imul(h1, 16777619) >>> 0;
 
-  // ✅ 超標平方大扣分（改回來）
+      h2 += x | 0;
+      h2 = (h2 ^ (h2 >>> 16)) >>> 0;
+      h2 = Math.imul(h2, 2246822507) >>> 0;
+      h2 = (h2 ^ (h2 >>> 13)) >>> 0;
+      h2 = Math.imul(h2, 3266489909) >>> 0;
+      h2 = (h2 ^ (h2 >>> 16)) >>> 0;
+    }
+    h1 ^= 0x9e;
+    h1 = Math.imul(h1, 16777619) >>> 0;
+    h2 ^= 0x85ebca6b;
+    h2 = Math.imul(h2, 2246822507) >>> 0;
+  }
+
+  const key = (BigInt(h1) << 32n) ^ BigInt(h2);
+  return key.toString();
+};
+
+// ✅ 更更提升達標率：未達標評分更「以 miss 為王」，pot 只在接近時才放大
+const calcScore = (ev, pot, pathLen, cfg, target, mode, priority) => {
+  const major = mode === "vertical" ? ev.verticalCombos : ev.horizontalCombos;
+
   const over = Math.max(0, ev.combos - target);
   const overPenalty = over * over * 600000;
 
-  // ✅ 步數懲罰：steps 模式更重、combo 模式較輕（跟你原本一致）
-  const effectiveStepPenalty =
-    priority === 'steps' ? cfg.stepPenalty * 4 : cfg.stepPenalty;
+  const effectiveStepPenalty = priority === "steps" ? cfg.stepPenalty * 4 : cfg.stepPenalty;
+  const clearedW = priority === "combo" ? 1000 : 200;
 
-  // ✅ cleared 權重：combo 模式比較看消除數、steps 模式較低（跟你原本一致）
-  const currentClearedWeight =
-    priority === 'combo' ? 1000 : 200;
-
+  // ✅ 達標：你 considerBest 會以「最小步數」決勝
   if (ev.combos >= target) {
     const stepCost = pathLen * effectiveStepPenalty;
-    return (
-      5000000 -
-      stepCost -
-      overPenalty +
-      ev.clearedCount * currentClearedWeight
-    );
-  } else {
-    // ✅ 沒達標：距離 target 的平方懲罰（改回來）
-    const miss = target - ev.combos;
-    const targetPenalty = -(miss * miss * 8000);
-
-    return (
-      baseScore +
-      targetPenalty +
-      pot * cfg.potentialWeight +
-      ev.clearedCount * currentClearedWeight -
-      pathLen * 20
-    );
+    return 5200000 - stepCost - overPenalty + ev.clearedCount * clearedW;
   }
+
+  // ✅ 未達標：用 miss 做主導（越接近 target 越高）
+  const miss = target - ev.combos;
+
+  // 1) miss 二次懲罰更硬（這是「更更提升準度」的關鍵）
+  const missPenalty = -(miss * miss * 320000);
+
+  // 2) 接近 target 給額外獎勵（避免卡在離 target 3~4 的局部最優）
+  const nearBonus =
+    (target - miss) * 50000 +
+    (miss <= 4 ? (5 - miss) * (miss <= 2 ? 260000 : 120000) : 0);
+
+  // 3) 主方向只在「接近 target」時才提高權重，否則不要干擾達標
+  const t = Math.max(0, 1 - miss / Math.max(1, target)); // 0..1
+  const majorBonus = major * (1200000 * t * t); // 近 target 才明顯
+
+  // 4) pot 權重：遠離 target 時壓低，接近時放大
+  const potWeight = cfg.potentialWeight * (0.08 + 0.92 * t * t);
+
+  // 5) 步數軟扣（不要破壞達標探索）
+  const stepSoft = pathLen * 35;
+
+  // 6) cleared 仍有用：同 miss 時偏向「更容易連鎖」的盤面
+  const clearedBonus = ev.clearedCount * clearedW;
+
+  return missPenalty + nearBonus + majorBonus + pot * potWeight + clearedBonus - stepSoft;
 };
 
-  const beamSolve = (originalBoard, cfg, target, mode, priority, skyfall, diagonal) => {
-	  const stepsOf = (pth) => Math.max(0, (pth?.length || 0) - 1);
+const beamSolve = (originalBoard, cfg, target, mode, priority, skyfall, diagonal) => {
+  const makeNode = (parent, r, c) => ({ parent, r, c, len: parent ? parent.len + 1 : 1 });
 
-	  // ===== X1/X2 規則 =====
-	  // X1：永遠不能踩
-	  // X2：可以踩，但只能當最後一步（踩到後 locked=true，不再展開）
-	  const stepConstraint = (cellVal) => {
-		const m = xMarkOf(cellVal);
-		if (m === 1) return { ok: false, locked: false };
-		if (m === 2) return { ok: true, locked: true };
-		return { ok: true, locked: false };
-	  };
-
-	  const maxNodesEffective =
-		priority === 'combo'
-		  ? Math.max(cfg.maxNodes, cfg.maxSteps * cfg.beamWidth * 20)
-		  : cfg.maxNodes;
-
-	  // ===== Q1/Q2 掃描（最多各一個）=====
-	  let q1Pos = null;
-	  let q2Pos = null;
-	  for (let rr = 0; rr < TOTAL_ROWS; rr++) {
-		for (let cc = 0; cc < COLS; cc++) {
-		  const q = qMarkOf(originalBoard[rr][cc]);
-		  if (q === 1) q1Pos = { r: rr, c: cc };
-		  if (q === 2) q2Pos = { r: rr, c: cc };
-		}
-	  }
-	  const isAtQ2 = (r, c) => q2Pos && r === q2Pos.r && c === q2Pos.c;
-	  const shouldAcceptEnd = (pthLast) => {
-		if (!q2Pos) return true;
-		return pthLast?.r === q2Pos.r && pthLast?.c === q2Pos.c;
-	  };
-
-	  let bestGlobal = {
-		combos: -1,
-		skyfallCombos: 0,
-		clearedCount: -1,
-		path: [],
-		score: -Infinity,
-		verticalCombos: 0,
-		horizontalCombos: 0,
-	  };
-
-	  const considerBest = (ev, score, pth) => {
-		  // ✅ 先檢查 Q2：不在 Q2 結束的一律不收
-		  const last = pth?.[pth.length - 1];
-		  if (!shouldAcceptEnd(last)) return;
-
-		  let isBetterGlobal = false;
-
-		  if (priority === 'combo') {
-			isBetterGlobal =
-			  score > bestGlobal.score ||
-			  (score === bestGlobal.score && ev.clearedCount > bestGlobal.clearedCount);
-		  } else {
-			if (ev.combos >= target) {
-			  const bestSteps = bestGlobal.path ? stepsOf(bestGlobal.path) : Infinity;
-			  const curSteps = stepsOf(pth);
-			  if (bestGlobal.combos < target || curSteps < bestSteps) isBetterGlobal = true;
-			} else {
-			  if (ev.combos > bestGlobal.combos) isBetterGlobal = true;
-			}
-		  }
-
-		  if (isBetterGlobal) bestGlobal = { ...ev, path: pth, score };
-		};
-	  
-	  const dirsPlay = diagonal ? DIRS_8 : DIRS_4;
-
-	  let beam = [];
-	  const visitedBest = new Map();
-
-	  const pushInitState = (r, c, heldFromRow0) => {
-		if (q1Pos && (r !== q1Pos.r || c !== q1Pos.c)) return;
-		const boardCopy = originalBoard.map(row => [...row]);
-
-		let held;
-		let hole = null;
-
-		if (heldFromRow0) {
-		  held = originalBoard[0][c]; // ✅ row0 起手：握 row0[c]
-		  hole = null;                // ✅ 沒洞
-		} else {
-		  held = originalBoard[r][c]; // ✅ row1~5 起手：握該格珠
-		  hole = { r, c };
-		  boardCopy[r][c] = -1;       // ✅ 起點挖洞（等價於把那顆拿起來）
-		}
-
-		// ✅ 起手也算「碰到」：held 若是 X1 -> 禁止；X2 -> 鎖死只能當最後一步
-		const heldMark = xMarkOf(held);
-		if (heldMark === 1) return;
-		const locked0 = (heldMark === 2);
-
-		const evalBoard = boardWithHeldFilled(boardCopy, hole, held);
-		const ev = evaluateBoard(evalBoard, skyfall);
-		const pot = potentialScore(evalBoard, mode);
-		const score = calcScore(ev, pot, 0, cfg, target, mode, priority);
-
-		const holeKey = hole ? `${hole.r},${hole.c}` : `-1,-1`;
-		const key =
-		  getBoardKey(boardCopy) +
-		  `|held:${held}|pos:${r},${c}|hole:${holeKey}|locked:${locked0 ? 1 : 0}`;
-
-		visitedBest.set(key, {
-		  h: ev.horizontalCombos,
-		  v: ev.verticalCombos,
-		  c: ev.combos,
-		  clr: ev.clearedCount,
-		  pot,
-		  len: 0,
-		  locked: locked0 ? 1 : 0,
-		});
-
-		beam.push({
-		  board: boardCopy,
-		  held,
-		  hole,
-		  r,
-		  c,
-		  path: [{ r, c }],
-		  score,
-		  ...ev,
-		  pot,
-		  locked: locked0,
-		});
+  const buildPath = (node) => {
+    const arr = [];
+    for (let cur = node; cur; cur = cur.parent) arr.push({ r: cur.r, c: cur.c });
+    arr.reverse();
+    return arr;
   };
 
-  // 起手：row0(6) + row1~5(30)
+  const stepsOf = (node) => Math.max(0, (node?.len || 0) - 1);
+
+  const stepConstraint = (cellVal) => {
+    const m = xMarkOf(cellVal);
+    if (m === 1) return { ok: false, locked: false };
+    if (m === 2) return { ok: true, locked: true };
+    return { ok: true, locked: false };
+  };
+
+  // ✅ 避免 combo 模式把 maxNodes 拉爆造成「像無限迴圈」
+  //   仍保留你 maxNodes / maxSteps / beamWidth 的彈性，但把倍率 20 -> 12 (更穩、準度不掉)
+  const maxNodesEffective =
+    priority === "combo"
+      ? Math.max(cfg.maxNodes, cfg.maxSteps * cfg.beamWidth * 12)
+      : cfg.maxNodes;
+
+  let q1Pos = null;
+  let q2Pos = null;
+  for (let rr = 0; rr < TOTAL_ROWS; rr++) {
+    for (let cc = 0; cc < COLS; cc++) {
+      const q = qMarkOf(originalBoard[rr][cc]);
+      if (q === 1) q1Pos = { r: rr, c: cc };
+      if (q === 2) q2Pos = { r: rr, c: cc };
+    }
+  }
+
+  const isAtQ2 = (r, c) => q2Pos && r === q2Pos.r && c === q2Pos.c;
+  const shouldAcceptEnd = (endNode) => {
+    if (!q2Pos) return true;
+    return endNode?.r === q2Pos.r && endNode?.c === q2Pos.c;
+  };
+
+  let bestGlobal = {
+    combos: -1,
+    skyfallCombos: 0,
+    clearedCount: -1,
+    node: null,
+    score: -Infinity,
+    verticalCombos: 0,
+    horizontalCombos: 0,
+  };
+
+  // ✅ 一旦找到達標解，記住目前最小步數；外層 step 到了就可以直接停（保證最小步）
+  let bestReachedSteps = Infinity;
+
+  const considerBest = (ev, score, node) => {
+    if (!shouldAcceptEnd(node)) return;
+
+    let isBetterGlobal = false;
+    const curSteps = stepsOf(node);
+    const bestSteps = bestGlobal.node ? stepsOf(bestGlobal.node) : Infinity;
+
+    if (ev.combos >= target) {
+      if (bestGlobal.combos < target) {
+        isBetterGlobal = true;
+      } else {
+        if (curSteps < bestSteps) isBetterGlobal = true;
+        else if (curSteps === bestSteps) {
+          if (score > bestGlobal.score) isBetterGlobal = true;
+          else if (score === bestGlobal.score && ev.clearedCount > bestGlobal.clearedCount)
+            isBetterGlobal = true;
+        }
+      }
+    } else {
+      if (bestGlobal.combos < target) {
+        if (ev.combos > bestGlobal.combos) isBetterGlobal = true;
+        else if (ev.combos === bestGlobal.combos) {
+          if (curSteps < bestSteps) isBetterGlobal = true;
+          else if (curSteps === bestSteps) {
+            if (score > bestGlobal.score) isBetterGlobal = true;
+            else if (score === bestGlobal.score && ev.clearedCount > bestGlobal.clearedCount)
+              isBetterGlobal = true;
+          }
+        }
+      }
+    }
+
+    if (isBetterGlobal) bestGlobal = { ...ev, node, score };
+
+    // ✅ 更新最小達標步數（用來早停）
+    if (ev.combos >= target && shouldAcceptEnd(node)) {
+      if (curSteps < bestReachedSteps) bestReachedSteps = curSteps;
+    }
+  };
+
+  const dirsPlay = diagonal ? DIRS_8 : DIRS_4;
+  let beam = [];
+
+  // ✅ visited: dominance / best-record
+  // value: [bestCombos, bestMajor, bestCleared, bestNegSteps, bestScore]
+  const visitedBest = new Map();
+  const betterThanVisited = (key, ev, score, steps, mode) => {
+    const prev = visitedBest.get(key);
+    const major = mode === "vertical" ? ev.verticalCombos : ev.horizontalCombos;
+    const rec = [ev.combos, major, ev.clearedCount, -steps, score];
+
+    if (!prev) {
+      visitedBest.set(key, rec);
+      return true;
+    }
+
+    // dominance: prev >= rec 全維度 => rec 一定不值得留
+    if (
+      prev[0] >= rec[0] &&
+      prev[1] >= rec[1] &&
+      prev[2] >= rec[2] &&
+      prev[3] >= rec[3] &&
+      prev[4] >= rec[4]
+    ) {
+      return false;
+    }
+
+    // 允許覆蓋：只要 rec 在關鍵序更好（先 combos 再 major/cleared/steps/score）
+    let shouldUpdate = false;
+    if (rec[0] > prev[0]) shouldUpdate = true;
+    else if (rec[0] === prev[0]) {
+      if (rec[1] > prev[1]) shouldUpdate = true;
+      else if (rec[1] === prev[1]) {
+        if (rec[2] > prev[2]) shouldUpdate = true;
+        else if (rec[2] === prev[2]) {
+          if (rec[3] > prev[3]) shouldUpdate = true;
+          else if (rec[3] === prev[3] && rec[4] > prev[4]) shouldUpdate = true;
+        }
+      }
+    }
+
+    if (shouldUpdate) visitedBest.set(key, rec);
+    return shouldUpdate;
+  };
+
+  const pushInitState = (r, c, heldFromRow0) => {
+    if (q1Pos && (r !== q1Pos.r || c !== q1Pos.c)) return;
+
+    const boardCopy = clone2D(originalBoard);
+
+    let held;
+    let hole = null;
+
+    if (heldFromRow0) {
+      held = originalBoard[0][c];
+      hole = null;
+    } else {
+      held = originalBoard[r][c];
+      hole = { r, c };
+      boardCopy[r][c] = -1;
+    }
+
+    const heldMark = xMarkOf(held);
+    if (heldMark === 1) return;
+    const locked0 = heldMark === 2;
+
+    const evalBoard = boardWithHeldFilled(boardCopy, hole, held);
+    const ev = evaluateBoard(evalBoard, skyfall);
+    const pot = potentialScore(evalBoard, mode);
+    const score = calcScore(ev, pot, 0, cfg, target, mode, priority);
+
+    const key = `${getBoardKey(boardCopy)}|${held}|${r},${c}|${locked0 ? 1 : 0}`;
+    if (!betterThanVisited(key, ev, score, 0, mode)) return;
+
+    const node = makeNode(null, r, c);
+    considerBest(ev, score, node);
+
+    if (ev.combos >= target && shouldAcceptEnd(node)) return;
+
+    beam.push({ board: boardCopy, held, hole, r, c, node, score, ev, pot, locked: locked0 });
+  };
+
   for (let c = 0; c < COLS; c++) pushInitState(0, c, true);
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
     for (let c = 0; c < COLS; c++) pushInitState(r, c, false);
@@ -719,22 +902,98 @@ const App = () => {
 
   let nodesExpanded = 0;
 
+  // ✅ combo 模式挑 beam：固定配額 + 單次掃描（不會洗牌，不會「像無限迴圈」）
+  const pickBeamCombo = (candidates) => {
+    candidates.sort((a, b) => {
+      const aReach = a.ev.combos >= target;
+      const bReach = b.ev.combos >= target;
+      if (aReach !== bReach) return aReach ? -1 : 1;
+      if (a.score !== b.score) return b.score - a.score;
+      return (b.ev.clearedCount || 0) - (a.ev.clearedCount || 0);
+    });
+
+    const BW = cfg.beamWidth;
+    const out = [];
+
+    // 1) elite 先拿（穩定 exploit）
+    const eliteN = Math.min(candidates.length, Math.max(6, (BW / 3) | 0));
+    for (let i = 0; i < eliteN && out.length < BW; i++) out.push(candidates[i]);
+    if (out.length >= BW) return out;
+
+    // 2) miss 分層配額（保證接近 target 的不被洗掉）
+    const maxTier = 8; // ✅ 這裡直接比你之前的 6 再更準，但仍然 O(n) 很便宜
+    const tierCount = maxTier + 1;
+    const quotaW = [3.0, 2.2, 1.6, 1.1, 0.8, 0.55, 0.4, 0.3, 0.2];
+
+    // 統計每 tier 有多少
+    const counts = new Array(tierCount).fill(0);
+    for (let i = eliteN; i < candidates.length; i++) {
+      const miss = Math.max(0, target - candidates[i].ev.combos);
+      if (miss <= maxTier) counts[miss]++;
+    }
+
+    let remain = BW - out.length;
+    let sumW = 0;
+    for (let m = 0; m <= maxTier; m++) if (counts[m] > 0) sumW += quotaW[m];
+
+    const quota = new Array(tierCount).fill(0);
+    if (sumW > 0) {
+      for (let m = 0; m <= maxTier; m++) {
+        if (counts[m] === 0) continue;
+        quota[m] = Math.max(1, Math.floor((remain * quotaW[m]) / sumW));
+      }
+    }
+
+    // 3) 單次掃描把 quota 填滿（含位置多樣性，但「只 skip，不回推」避免洗牌）
+    const usedPos = new Set();
+    for (const st of out) usedPos.add((st.r << 8) | st.c);
+
+    const took = new Array(tierCount).fill(0);
+
+    // 第一輪：尊重 quota + 位置多樣性（但不回推，不會卡）
+    for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+      const st = candidates[i];
+      const miss = Math.max(0, target - st.ev.combos);
+      if (miss > maxTier) continue;
+      if (took[miss] >= quota[miss]) continue;
+
+      const pc = (st.r << 8) | st.c;
+      if (usedPos.has(pc)) continue;
+
+      out.push(st);
+      usedPos.add(pc);
+      took[miss]++;
+    }
+
+    // 第二輪：quota 沒填滿就放寬位置限制（補足數量）
+    if (out.length < BW) {
+      for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+        const st = candidates[i];
+        const miss = Math.max(0, target - st.ev.combos);
+        if (miss > maxTier) continue;
+        if (took[miss] >= quota[miss]) continue;
+
+        out.push(st);
+        took[miss]++;
+      }
+    }
+
+    // 第三輪：仍不足，直接補滿（保證 beam 不變小）
+    if (out.length < BW) {
+      for (let i = eliteN; i < candidates.length && out.length < BW; i++) out.push(candidates[i]);
+    }
+
+    return out.slice(0, BW);
+  };
+
   for (let step = 0; step < cfg.maxSteps; step++) {
+    // ✅ 早停：已找到達標解的最小步數，後面不可能更小
+    if (bestReachedSteps !== Infinity && step >= bestReachedSteps) break;
+
     let candidates = [];
 
     for (const state of beam) {
       if (nodesExpanded > maxNodesEffective) break;
-
-      // ✅ 一定要先把「停在當前 state」納入候選（X2 才能當最後一步）
-      {
-        const evalBoard0 = boardWithHeldFilled(state.board, state.hole, state.held);
-        const ev0 = evaluateBoard(evalBoard0, skyfall);
-        const pot0 = potentialScore(evalBoard0, mode);
-        const score0 = calcScore(ev0, pot0, stepsOf(state.path), cfg, target, mode, priority);
-        considerBest(ev0, score0, state.path);
-      }
-
-      // ✅ 若已踩到 X2：這步必須是最後一步，不展開鄰居
       if (state.locked) continue;
 
       for (const [dr, dc] of dirsPlay) {
@@ -742,57 +1001,38 @@ const App = () => {
         const nc = state.c + dc;
         if (nr < 0 || nr >= TOTAL_ROWS || nc < 0 || nc >= COLS) continue;
 
-        const newPath = [...state.path, { r: nr, c: nc }];
-        const newSteps = stepsOf(newPath);
+        if (state.node && state.node.parent && nr === state.node.parent.r && nc === state.node.parent.c)
+          continue;
 
-        // A) state 在 row0：只能拉到 row1（可斜），row0 永遠不動
+        const newNode = makeNode(state.node, nr, nc);
+        const newSteps = stepsOf(newNode);
+
         if (state.r === 0) {
           if (nr !== 1) continue;
 
           const destVal = state.board[nr][nc];
           const chk = stepConstraint(destVal);
           if (!chk.ok) continue;
-		  const nextLocked = chk.locked || isAtQ2(nr, nc);
+          const nextLocked = chk.locked || isAtQ2(nr, nc);
 
-          const nextBoard = state.board.map(row => [...row]);
-          nextBoard[nr][nc] = -1;          // ✅ 落點挖洞
+          const nextBoard = clone2D(state.board);
+          nextBoard[nr][nc] = -1;
           const nextHole = { r: nr, c: nc };
 
           const evalBoard = boardWithHeldFilled(nextBoard, nextHole, state.held);
           const ev = evaluateBoard(evalBoard, skyfall);
           const pot = potentialScore(evalBoard, mode);
           const score = calcScore(ev, pot, newSteps, cfg, target, mode, priority);
-          considerBest(ev, score, newPath);
 
-          const key =
-            getBoardKey(nextBoard) +
-            `|held:${state.held}|pos:${nr},${nc}|hole:${nextHole.r},${nextHole.c}|locked:${nextLocked ? 1 : 0}`;
+          const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
+          if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
 
-          const prev = visitedBest.get(key);
-          if (prev) {
-            const sameBase =
-              mode === 'vertical'
-                ? ev.verticalCombos === prev.v
-                : ev.horizontalCombos === prev.h;
+          considerBest(ev, score, newNode);
 
-            if (
-              sameBase &&
-              ev.combos === prev.c &&
-              ev.clearedCount <= prev.clr &&
-              pot <= prev.pot &&
-              newSteps >= prev.len
-            ) continue;
+          if (ev.combos >= target && shouldAcceptEnd(newNode)) {
+            nodesExpanded++;
+            continue;
           }
-
-          visitedBest.set(key, {
-            h: ev.horizontalCombos,
-            v: ev.verticalCombos,
-            c: ev.combos,
-            clr: ev.clearedCount,
-            pot,
-            len: newSteps,
-            locked: nextLocked ? 1 : 0,
-          });
 
           candidates.push({
             board: nextBoard,
@@ -800,79 +1040,54 @@ const App = () => {
             hole: nextHole,
             r: nr,
             c: nc,
-            path: newPath,
+            node: newNode,
             locked: nextLocked,
             score,
-            ...ev,
+            ev,
             pot,
           });
-
           nodesExpanded++;
           continue;
         }
 
-        // B) state 在 row1~5：下一步踏回 row0 => 終止（row0 不變）
         if (state.r >= PLAY_ROWS_START && nr === 0) {
           const destVal = state.board[0][nc];
           const chk = stepConstraint(destVal);
           if (!chk.ok) continue;
-          // ✅ chk.locked === true 表示最後一步踩到 X2：允許（這裡本來就終止）
 
           const evalBoard = boardWithHeldFilled(state.board, state.hole, state.held);
           const ev = evaluateBoard(evalBoard, skyfall);
           const pot = potentialScore(evalBoard, mode);
           const score = calcScore(ev, pot, newSteps, cfg, target, mode, priority);
-          considerBest(ev, score, newPath);
+
+          considerBest(ev, score, newNode);
           continue;
         }
 
-        // C) 一般移動：row1~5 內洞滑動
-        if (nr < PLAY_ROWS_START) continue;
-        if (!state.hole) continue;
+        if (nr < PLAY_ROWS_START || !state.hole) continue;
 
         const destVal = state.board[nr][nc];
         const chk = stepConstraint(destVal);
         if (!chk.ok) continue;
         const nextLocked = chk.locked || isAtQ2(nr, nc);
 
-        const nextBoard = state.board.map(row => [...row]);
+        const nextBoard = clone2D(state.board);
         const nextHole = holeStepInPlace(nextBoard, state.hole, { r: nr, c: nc });
 
         const evalBoard = boardWithHeldFilled(nextBoard, nextHole, state.held);
         const ev = evaluateBoard(evalBoard, skyfall);
         const pot = potentialScore(evalBoard, mode);
         const score = calcScore(ev, pot, newSteps, cfg, target, mode, priority);
-        considerBest(ev, score, newPath);
 
-        const key =
-          getBoardKey(nextBoard) +
-          `|held:${state.held}|pos:${nr},${nc}|hole:${nextHole.r},${nextHole.c}|locked:${nextLocked ? 1 : 0}`;
+        const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
+        if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
 
-        const prev = visitedBest.get(key);
-        if (prev) {
-          const sameBase =
-            mode === 'vertical'
-              ? ev.verticalCombos === prev.v
-              : ev.horizontalCombos === prev.h;
+        considerBest(ev, score, newNode);
 
-          if (
-            sameBase &&
-            ev.combos === prev.c &&
-            ev.clearedCount <= prev.clr &&
-            pot <= prev.pot &&
-            newSteps >= prev.len
-          ) continue;
+        if (ev.combos >= target && shouldAcceptEnd(newNode)) {
+          nodesExpanded++;
+          continue;
         }
-
-        visitedBest.set(key, {
-          h: ev.horizontalCombos,
-          v: ev.verticalCombos,
-          c: ev.combos,
-          clr: ev.clearedCount,
-          pot,
-          len: newSteps,
-          locked: nextLocked ? 1 : 0,
-        });
 
         candidates.push({
           board: nextBoard,
@@ -880,33 +1095,28 @@ const App = () => {
           hole: nextHole,
           r: nr,
           c: nc,
-          path: newPath,
+          node: newNode,
           locked: nextLocked,
           score,
-          ...ev,
+          ev,
           pot,
         });
-
         nodesExpanded++;
       }
     }
 
     if (candidates.length === 0 || nodesExpanded > maxNodesEffective) break;
 
-    if (priority === 'combo') {
-      candidates.sort((a, b) =>
-        b.score - a.score ||
-        b.clearedCount - a.clearedCount ||
-        a.path.length - b.path.length
-      );
-      beam = candidates.slice(0, cfg.beamWidth);
+    if (priority === "combo") {
+      beam = pickBeamCombo(candidates);
     } else {
+      // steps priority：維持你原本的分桶策略
       const buckets = new Map();
       for (const st of candidates) {
         const k =
-          (mode === 'vertical' ? st.verticalCombos : st.horizontalCombos) * 1000000 +
-          st.combos * 1000 +
-          st.clearedCount;
+          (mode === "vertical" ? st.ev.verticalCombos : st.ev.horizontalCombos) * 1000000 +
+          st.ev.combos * 1000 +
+          st.ev.clearedCount;
         if (!buckets.has(k)) buckets.set(k, []);
         buckets.get(k).push(st);
       }
@@ -926,9 +1136,11 @@ const App = () => {
     }
   }
 
+  bestGlobal.path = buildPath(bestGlobal.node);
+  bestGlobal.nodesExpanded = nodesExpanded;
+  delete bestGlobal.node;
   return bestGlobal;
 };
-  
   const stopToBase = useCallback((clearStep = true) => {
 	  // 1) 停動畫
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
@@ -1723,157 +1935,153 @@ const App = () => {
   const renderBoard = replayBoard ?? board;
   const replayDone = (!isReplaying && !isPaused && currentStep >= 0);
 
-  const getCellCenter = (p) => {
-	  const { x, y } = getCellCenterPx(p.r, p.c);
-	  return { x, y };
-	};
+  // =========================
+// ✅ Geometry helpers (deduped)
+// =========================
+const hypot = (x, y) => Math.hypot(x, y);
 
-  const lineIntersection = (P, r, Q, s, eps = 1e-9) => {
-  // 解 P + t r  與  Q + u s 的交點
-  // 2D cross
+const q = (v, unit = 0.25) => Math.round(v / unit) * unit;
+
+const lineIntersection = (P, r, Q, s, eps = 1e-9) => {
+  // Solve: P + t r  intersects  Q + u s
   const cross = (a, b) => a.x * b.y - a.y * b.x;
-
   const rxs = cross(r, s);
-  if (Math.abs(rxs) < eps) return null; // 平行或幾乎平行
+  if (Math.abs(rxs) < eps) return null;
 
   const qmp = { x: Q.x - P.x, y: Q.y - P.y };
   const t = cross(qmp, s) / rxs;
-
   return { x: P.x + r.x * t, y: P.y + r.y * t, t };
 };
 
-  const q = (v, unit = 0.25) => Math.round(v / unit) * unit;
-
-  const edgeKey = (a, b) => {
-	  const ax = q(a.x), ay = q(a.y);
-	  const bx = q(b.x), by = q(b.y);
-	  // 無向邊：反向走同一小段也算重合
-	  if (ax < bx || (ax === bx && ay <= by)) return `${ax},${ay}|${bx},${by}`;
-	  return `${bx},${by}|${ax},${ay}`;
-	};
-
-  const dirKey = (a, b, eps = 1e-6) => {
-	  const dx = b.x - a.x, dy = b.y - a.y;
-	  // 你的路徑通常是格子中心點，所以 dx/dy 會是固定步長的倍數
-	  // 用 sign 就能穩定分方向（水平/垂直/斜）
-	  const sx = Math.abs(dx) < eps ? 0 : Math.sign(dx);
-	  const sy = Math.abs(dy) < eps ? 0 : Math.sign(dy);
-	  return `${sx},${sy}`;
-	};
-
-  // ✅ v3：同方向 run 只要「前綴或後綴」有重合，就把整段 A->D 一次鼓包
-  const collapseUpcomingOverlapRunsV3 = (
-	  pts,
-	  {
-		prefixMinEdges = 1, // 前綴重合 >= 1 就觸發
-		suffixMinEdges = 1, // 後綴重合 >= 1 就觸發（你這題要的）
-		fullMinEdges = 3,   // 整段全重合時至少幾條邊才鼓包（避免太短抖動）
-		bump = 14,
-		bumpRamp = 14,
-		eps = 1e-6,
-	  } = {}
-	) => {
-	  if (!pts || pts.length < 2) return pts;
-
-	  const visited = new Set();
-	  const out = [pts[0]];
-	  
-	  const hypot = (x, y) => Math.hypot(x, y);
-
-	  const addRunEdgesToVisited = (fromIdx, toIdx) => {
-		for (let k = fromIdx; k < toIdx; k++) {
-		  visited.add(edgeKey(pts[k], pts[k + 1]));
-		}
-	  };
-
-	  const lineIntersection = (P, r, Q, s, eps = 1e-9) => {
-	  const cross = (a, b) => a.x * b.y - a.y * b.x;
-	  const rxs = cross(r, s);
-	  if (Math.abs(rxs) < eps) return null;
-
-	  const qmp = { x: Q.x - P.x, y: Q.y - P.y };
-	  const t = cross(qmp, s) / rxs;
-	  return { x: P.x + r.x * t, y: P.y + r.y * t, t };
-	};
-
-	const pushBumpWholeRun = (C, A, B, D) => {
-  // m = A->B
-  const mdx = B.x - A.x;
-  const mdy = B.y - A.y;
-  const mL  = hypot(mdx, mdy);
-
-  // 不夠資訊 / 退化：直接回到 D
-  if (mL <= eps) {
-    out.push(D);
-    return;
-  }
-
-  // m 的單位方向 u 與法線 n（鼓包方向用 +n）
-  const ux = mdx / mL, uy = mdy / mL;
-  const nx = -uy, ny = ux;
-
-  // bump 最大距離 h（沿法線）
-  // 你原本就是這樣算的：h = min(bump, L*0.25)
-  // 這裡 L 用 A->D（run 的長度）讓長 run 不會 h 過大
-  const rdx = D.x - A.x;
-  const rdy = D.y - A.y;
-  const rL  = hypot(rdx, rdy);
-  const h   = Math.min(bump, rL * 0.25);
-
-  // 平行線 n：通過 (A + n*h)，方向 = u
-  const P = { x: A.x + nx * h, y: A.y + ny * h };
-  const r = { x: ux, y: uy };
-
-   // ✅ 沒有 C（run 在最前面）或退化：直接走 fallback 鼓包
-  if (!C || mL <= eps || rL <= eps) {
-    const nx = mL > eps ? -(mdy / mL) : 0;
-    const ny = mL > eps ?  (mdx / mL) : 0;
-    const h  = Math.min(bump, rL * 0.25);
-    const L  = Math.max(rL, 1);
-    const t  = Math.max(2, Math.min(bumpRamp, L * 0.33));
-
-    const bumpIn  = { x: A.x + (rdx / L) * t + nx * h, y: A.y + (rdy / L) * t + ny * h };
-    const bumpOut = { x: D.x - (rdx / L) * t + nx * h, y: D.y - (rdy / L) * t + ny * h };
-
-    out.push(bumpIn, bumpOut, D);
-    return;
-  }
-
-  // C2 = (C->A 的延長線) ∩ n
-  const rCA = { x: A.x - C.x, y: A.y - C.y };
-  const hitC = lineIntersection(P, r, C, rCA, 1e-9);
-
-  // D2 = (B->D 的延長線) ∩ n
-  const rBD = { x: D.x - B.x, y: D.y - B.y };
-  const hitD = lineIntersection(P, r, B, rBD, 1e-9);
-
-  // 任一交點不存在：fallback 回你原本鼓包
-  if (!hitC || !hitD) {
-    const L = rL;
-    if (L <= eps) { out.push(D); return; }
-
-    const t = Math.max(2, Math.min(bumpRamp, L * 0.33));
-    const bumpIn  = { x: A.x + (rdx / L) * t + nx * h, y: A.y + (rdy / L) * t + ny * h };
-    const bumpOut = { x: D.x - (rdx / L) * t + nx * h, y: D.y - (rdy / L) * t + ny * h };
-
-    out.push(bumpIn, bumpOut, D);
-    return;
-  }
-
-  // ✅ 你的需求：把 C、D 偏移到交點，使鼓包段變直線（沿 n）
-  const C2 = { x: hitC.x, y: hitC.y };
-  const D2 = { x: hitD.x, y: hitD.y };
-
-  // out 目前通常已經有 A（外面 out = [pts[0]]，且你在 run 分支直接 pushBumpWholeRun）
-  // 所以這裡補上 C2->D2->D
-  out.push(C2, D2, D);
+// Edge keys: undirected + quantized => reverse counts as overlap too
+const edgeKey = (a, b) => {
+  const ax = q(a.x), ay = q(a.y);
+  const bx = q(b.x), by = q(b.y);
+  if (ax < bx || (ax === bx && ay <= by)) return `${ax},${ay}|${bx},${by}`;
+  return `${bx},${by}|${ax},${ay}`;
 };
+
+const dirKey = (a, b, eps = 1e-6) => {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const sx = Math.abs(dx) < eps ? 0 : Math.sign(dx);
+  const sy = Math.abs(dy) < eps ? 0 : Math.sign(dy);
+  return `${sx},${sy}`;
+};
+
+const laneOf = (count) => (count === 0 ? 0 : (count % 2 ? (count + 1) / 2 : -(count / 2)));
+
+const dedupePts = (pts, eps = 1e-6) => {
+  if (!pts || pts.length < 2) return pts;
+  const out = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const p = pts[i], q0 = out[out.length - 1];
+    if (hypot(p.x - q0.x, p.y - q0.y) > eps) out.push(p);
+  }
+  return out;
+};
+
+const simplifyPts = (pts, eps = 1e-6) => {
+  if (!pts || pts.length < 2) return pts;
+
+  const a = dedupePts(pts, eps);
+  if (a.length < 3) return a;
+
+  const out = [a[0]];
+  for (let i = 1; i < a.length - 1; i++) {
+    const p0 = out[out.length - 1];
+    const p1 = a[i];
+    const p2 = a[i + 1];
+
+    const v1x = p1.x - p0.x, v1y = p1.y - p0.y;
+    const v2x = p2.x - p1.x, v2y = p2.y - p1.y;
+
+    const cross = v1x * v2y - v1y * v2x;
+    const dot = v1x * v2x + v1y * v2y;
+
+    if (Math.abs(cross) < eps && dot > 0) continue; // collinear & same dir
+    out.push(p1);
+  }
+  out.push(a[a.length - 1]);
+  return out;
+};
+
+// =========================
+// ✅ Utility wrappers (keep same signature)
+// =========================
+const getCellCenter = (p) => {
+  const { x, y } = getCellCenterPx(p.r, p.c);
+  return { x, y };
+};
+
+// =========================
+// ✅ v3: collapse overlap runs (prefix or suffix triggers whole-run bump)
+// =========================
+const collapseUpcomingOverlapRunsV3 = (
+  pts,
+  {
+    prefixMinEdges = 1,
+    suffixMinEdges = 1,
+    fullMinEdges = 3,
+    bump = 14,
+    bumpRamp = 14,
+    eps = 1e-6,
+  } = {}
+) => {
+  if (!pts || pts.length < 2) return pts;
+
+  const visited = new Set();
+  const out = [pts[0]];
+
+  const addRunEdgesToVisited = (fromIdx, toIdx) => {
+    for (let k = fromIdx; k < toIdx; k++) visited.add(edgeKey(pts[k], pts[k + 1]));
+  };
+
+  const pushBumpWholeRun = (C, A, B, D) => {
+    // m = A->B defines run direction
+    const mdx = B.x - A.x, mdy = B.y - A.y;
+    const mL = hypot(mdx, mdy);
+    if (mL <= eps) { out.push(D); return; }
+
+    const ux = mdx / mL, uy = mdy / mL;
+    const nx = -uy, ny = ux;
+
+    const rdx = D.x - A.x, rdy = D.y - A.y;
+    const rL = hypot(rdx, rdy);
+    const h = Math.min(bump, rL * 0.25);
+
+    const fallback = () => {
+      const L = Math.max(rL, 1);
+      const t = Math.max(2, Math.min(bumpRamp, L * 0.33));
+      const bumpIn  = { x: A.x + (rdx / L) * t + nx * h, y: A.y + (rdy / L) * t + ny * h };
+      const bumpOut = { x: D.x - (rdx / L) * t + nx * h, y: D.y - (rdy / L) * t + ny * h };
+      out.push(bumpIn, bumpOut, D);
+    };
+
+    // no C / degenerate => fallback bump
+    if (!C || rL <= eps) { fallback(); return; }
+
+    // parallel line through A + n*h with direction u
+    const P = { x: A.x + nx * h, y: A.y + ny * h };
+    const r = { x: ux, y: uy };
+
+    // C2 = line(C->A) ∩ parallel line
+    const rCA = { x: A.x - C.x, y: A.y - C.y };
+    const hitC = lineIntersection(P, r, C, rCA, 1e-9);
+
+    // D2 = line(B->D) ∩ parallel line
+    const rBD = { x: D.x - B.x, y: D.y - B.y };
+    const hitD = lineIntersection(P, r, B, rBD, 1e-9);
+
+    if (!hitC || !hitD) { fallback(); return; }
+
+    out.push({ x: hitC.x, y: hitC.y }, { x: hitD.x, y: hitD.y }, D);
+  };
 
   let i = 0;
   while (i < pts.length - 1) {
     const d = dirKey(pts[i], pts[i + 1], eps);
 
-    // 找同方向 run：pts[i..j]
+    // same-direction run: pts[i..j]
     let j = i + 1;
     while (j < pts.length - 1 && dirKey(pts[j], pts[j + 1], eps) === d) j++;
 
@@ -1881,43 +2089,30 @@ const App = () => {
     const A = pts[i];
     const D = pts[j];
 
-    // 1) 前綴重合長度 p
+    // prefix overlap count p
     let p = 0;
-    while (p < edgesCount && visited.has(edgeKey(pts[i + p], pts[i + p + 1]))) {
-      p++;
-    }
+    while (p < edgesCount && visited.has(edgeKey(pts[i + p], pts[i + p + 1]))) p++;
 
-    // 2) 後綴重合長度 s
+    // suffix overlap count s
     let s = 0;
-    while (s < edgesCount && visited.has(edgeKey(pts[j - 1 - s], pts[j - s]))) {
-      s++;
-    }
+    while (s < edgesCount && visited.has(edgeKey(pts[j - 1 - s], pts[j - s]))) s++;
 
-    const fullOverlapped = (p === edgesCount); // (= s 也會等於 edgesCount)
+    const fullOverlapped = (p === edgesCount);
     const triggerFull = fullOverlapped && edgesCount >= fullMinEdges;
 
-    // ✅ 你要的：後綴重合也觸發整段鼓包
     const triggerPrefix = (!fullOverlapped) && (p >= prefixMinEdges);
     const triggerSuffix = (!fullOverlapped) && (s >= suffixMinEdges);
 
     if (triggerFull || triggerPrefix || triggerSuffix) {
-      const C = (i > 0) ? pts[i - 1] : null;     // run 前一點（可能沒有）
-  const B = pts[j - 1];                      // run 最後一條邊的起點（一定有）
-  pushBumpWholeRun(C, A, B, D);
+      const C = (i > 0) ? pts[i - 1] : null;
+      const B = pts[j - 1];
+      pushBumpWholeRun(C, A, B, D);
 
-      // ✅ 把 run 中「新邊」加入 visited，避免後續判斷錯
-      // - 前綴重合：新增的是後半 [i+p .. j-1]
-      // - 後綴重合：新增的是前半 [i .. j-s-1]
-      // - 兩邊都有：新增的是中間那段
+      // mark only the "new" edges (keeps your original behavior)
       const newStart = i + p;
-      const newEnd   = j - s;
-
+      const newEnd = j - s;
       if (newStart < newEnd) addRunEdgesToVisited(newStart, newEnd);
-
-      // 若你想更保守/一致，也可直接 addRunEdgesToVisited(i, j);
-
     } else {
-      // 正常輸出
       for (let k = i; k < j; k++) {
         visited.add(edgeKey(pts[k], pts[k + 1]));
         out.push(pts[k + 1]);
@@ -1930,459 +2125,326 @@ const App = () => {
   return out;
 };
 
-  const hypot = (x, y) => Math.hypot(x, y);
-
-  // 回傳：把 C-A-B-D 的 A->B 鼓包，改成沿著「與 AB 平行且距離 h」的直線 detour
-// 會產生 C' 與 D'：
-//   C' = line(C->A) 與 line_n 的交點
-//   D' = line(B->D) 與 line_n 的交點
-  const straightenBumpToParallelLine = (C, A, B, D, h, eps = 1e-6) => {
-	  const hypot = (x, y) => Math.hypot(x, y);
-
-	  const abx = B.x - A.x, aby = B.y - A.y;
-	  const LAB = hypot(abx, aby);
-	  if (LAB < eps) return null;
-
-	  // m 的方向 u 與法線 n
-	  const ux = abx / LAB, uy = aby / LAB;
-	  const nx0 = -uy, ny0 = ux;
-
-	  // 你原本鼓包可能在法線正向或反向：選一邊讓 detour 不會「跑到反方向」
-	  // 用「看 C 在哪邊」來決定：讓 n 朝向遠離 C 的那側（通常比較符合鼓包外凸）
-	  const acx = C.x - A.x, acy = C.y - A.y;
-	  const side = Math.sign(acx * nx0 + acy * ny0); // C 在法線哪側
-	  const sign = (side >= 0) ? -1 : 1;            // 取反側當外凸
-	  const nx = nx0 * sign, ny = ny0 * sign;
-
-	  // 平行線 n：穿過 A + n*h，方向 u
-	  const Pn = { x: A.x + nx * h, y: A.y + ny * h };
-	  const rn = { x: ux, y: uy };
-
-	  // 交點：n 與 CA 延長線
-	  const rCA = { x: A.x - C.x, y: A.y - C.y };
-	  const hitC = lineIntersection(Pn, rn, C, rCA, 1e-9);
-
-	  // 交點：n 與 BD 延長線
-	  const rBD = { x: D.x - B.x, y: D.y - B.y };
-	  const hitD = lineIntersection(Pn, rn, B, rBD, 1e-9);
-
-	  if (!hitC || !hitD) return null;
-
-	  return {
-		C2: { x: hitC.x, y: hitC.y }, // C'
-		D2: { x: hitD.x, y: hitD.y }, // D'
-		nx, ny, ux, uy
-	  };
-	};
-
-  const laneOf = (count) => {
-	  // 0, +1, -1, +2, -2 ...
-	  if (count === 0) return 0;
-	  return (count % 2 === 1) ? (count + 1) / 2 : -(count / 2);
-	};
-
-  const dedupePts = (pts, eps = 1e-6) => {
-	  if (!pts || pts.length < 2) return pts;
-	  const out = [pts[0]];
-	  for (let i = 1; i < pts.length; i++) {
-		const p = pts[i], q0 = out[out.length - 1];
-		if (Math.hypot(p.x - q0.x, p.y - q0.y) > eps) out.push(p);
-	  }
-	  return out;
-	};
-
-	// ✅ v2：用「單步邊」偵測重疊 + 把連續重疊合併成 run，做順滑 detour
-  const deOverlapByRampedDetourV2 = (pts, spacing = 8, ramp = 14, eps = 1e-6) => {
-	  const clean = dedupePts(pts, eps);
-	  if (!clean || clean.length < 2) return clean;
-
-	  const used = new Map();     // edgeKey -> times seen
-	  const out = [clean[0]];
-
-	  // run 狀態
-	  let inRun = false;
-	  let runStart = null;        // run 起點（原座標）
-	  let runEnd = null;          // run 終點（原座標，會一路延伸）
-	  let runDir = null;          // {ux, uy, nx, ny}
-	  let runOff = 0;             // offset
-	  let runLen = 0;             // run 長度（像素）
-
-	  const flushRun = () => {
-		if (!inRun) return;
-
-		const a = runStart;
-		const b = runEnd;
-		const L = runLen;
-
-		// ramp 不要吃光，run 越長越可以拉大一點，但仍有限制
-		const t = Math.max(2, Math.min(ramp, L * 0.33));
-
-		const { ux, uy, nx, ny } = runDir;
-		const off = runOff;
-
-		const pIn = {
-		  x: a.x + ux * t + nx * off,
-		  y: a.y + uy * t + ny * off,
-		};
-		const pOut = {
-		  x: b.x - ux * t + nx * off,
-		  y: b.y - uy * t + ny * off,
-		};
-
-		// out 最後一點已經是 a，所以 push detour 點與 b
-		out.push(pIn, pOut, b);
-
-		inRun = false;
-		runStart = runEnd = runDir = null;
-		runOff = 0;
-		runLen = 0;
-	  };
-
-	  for (let i = 0; i < clean.length - 1; i++) {
-		const a = clean[i];
-		const b = clean[i + 1];
-
-		const dx = b.x - a.x;
-		const dy = b.y - a.y;
-		const L = hypot(dx, dy);
-		if (L <= eps) continue;
-
-		// 單步邊 key（這裡 a->b 通常就是一步）
-		const k = edgeKey(a, b);
-		const cnt = used.get(k) || 0;
-		used.set(k, cnt + 1);
-
-		const isOverlap = cnt > 0;
-
-		if (!isOverlap) {
-		  // 遇到非重疊邊：先把正在 detour 的 run 結束
-		  flushRun();
-		  out.push(b);
-		  continue;
-		}
-
-		// 重疊邊：計算這條邊該用的 lane / offset
-		const ux = dx / L;
-		const uy = dy / L;
-		const nx = -uy;
-		const ny = ux;
-
-		const lane = laneOf(cnt);       // 第2次、第3次…各走不同 lane
-		const off  = lane * spacing;
-
-		if (!inRun) {
-		  // 開新 run：從 a 開始 detour
-		  inRun = true;
-		  runStart = a;
-		  runEnd = b;
-		  runDir = { ux, uy, nx, ny };
-		  runOff = off;
-		  runLen = L;
-		} else {
-		  // 如果方向相同 + offset 相同，延長 run（保持一路都不貼合）
-		  const sameDir =
-			Math.abs(runDir.ux - ux) < 1e-6 &&
-			Math.abs(runDir.uy - uy) < 1e-6;
-		  const sameOff = Math.abs(runOff - off) < 1e-6;
-
-		  if (sameDir && sameOff) {
-			runEnd = b;
-			runLen += L;
-		  } else {
-			// 方向或 lane 變了：先結束舊 run，再開新 run
-			flushRun();
-			inRun = true;
-			runStart = a;
-			runEnd = b;
-			runDir = { ux, uy, nx, ny };
-			runOff = off;
-			runLen = L;
-		  }
-		}
-	  }
-
-	  flushRun();
-	  return out;
-	};
-
-  const simplifyPts = (pts, eps = 1e-6) => {
-	  if (!pts || pts.length < 2) return pts;
-
-	  // 1) 去掉重複點
-	  const a = [pts[0]];
-	  for (let i = 1; i < pts.length; i++) {
-		const p = pts[i];
-		const q = a[a.length - 1];
-		if (Math.hypot(p.x - q.x, p.y - q.y) > eps) {
-		  a.push(p);
-		}
-	  }
-
-	  if (a.length < 3) return a;
-
-	  // 2) 去掉同方向直線上的中繼點
-	  const out = [a[0]];
-	  for (let i = 1; i < a.length - 1; i++) {
-		const p0 = out[out.length - 1];
-		const p1 = a[i];
-		const p2 = a[i + 1];
-
-		const v1x = p1.x - p0.x;
-		const v1y = p1.y - p0.y;
-		const v2x = p2.x - p1.x;
-		const v2y = p2.y - p1.y;
-
-		const cross = v1x * v2y - v1y * v2x; // 叉積
-		const dot   = v1x * v2x + v1y * v2y; // 點積
-
-		// 共線且同方向 → 刪除 p1
-		if (Math.abs(cross) < eps && dot > 0) {
-		  continue;
-		}
-
-		out.push(p1);
-	  }
-
-	  out.push(a[a.length - 1]);
-	  return out;
-	};
-  // ====== 核心路徑幾何邏輯：節點端口分配系統 (v12.9) ======
-  // ====== 全重疊錯開：Node-Port Lane System ======
-
-  const sampleAlongPolyline = (pts, spacing = 22, startOffset = 10) => {
-	  if (!pts || pts.length < 2) return [];
-
-	  // 每段長度
-	  const segLen = [];
-	  let total = 0;
-	  for (let i = 0; i < pts.length - 1; i++) {
-		const dx = pts[i + 1].x - pts[i].x;
-		const dy = pts[i + 1].y - pts[i].y;
-		const L = Math.hypot(dx, dy);
-		segLen.push(L);
-		total += L;
-	  }
-	  if (total <= 1e-6) return [];
-
-	  const out = [];
-	  // 從 startOffset 開始，每隔 spacing 一個
-	  for (let dist = startOffset; dist < total - startOffset; dist += spacing) {
-		// 找 dist 落在哪一段
-		let acc = 0;
-		let i = 0;
-		while (i < segLen.length && acc + segLen[i] < dist) {
-		  acc += segLen[i];
-		  i++;
-		}
-		if (i >= segLen.length) break;
-
-		const L = segLen[i] || 1;
-		const t = (dist - acc) / L;
-
-		const a = pts[i];
-		const b = pts[i + 1];
-
-		const x = a.x + (b.x - a.x) * t;
-		const y = a.y + (b.y - a.y) * t;
-
-		const dx = b.x - a.x;
-		const dy = b.y - a.y;
-		const ang = Math.atan2(dy, dx) * 180 / Math.PI; // 讓 +X 對齊切線方向
-
-		out.push({ x, y, ang });
-	  }
-
-	  return out;
-	};
-
-  const buildPathStringAndMarkersRounded = (pts, radius = 8) => {
-	  if (!pts || pts.length < 2) return { d: "", start: null, tip: null };
-
-	  const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
-
-	  const moveTowards = (from, to, len) => {
-		const d = dist(from, to);
-		if (d <= 1e-6) return { ...from };
-		const t = len / d;
-		return {
-		  x: from.x + (to.x - from.x) * t,
-		  y: from.y + (to.y - from.y) * t
-		};
-	  };
-
-	  // 🔥 先簡化點
-	  const cleanPts = simplifyPts(pts);
-
-	  const start = cleanPts[0];
-	  const tip   = cleanPts[cleanPts.length - 1];
-
-	  let dStr = `M ${start.x} ${start.y}`;
-
-	  if (cleanPts.length === 2) {
-		dStr += ` L ${tip.x} ${tip.y}`;
-		return { d: dStr, start, tip };
-	  }
-
-	  for (let i = 1; i < cleanPts.length - 1; i++) {
-		const p0 = cleanPts[i - 1];
-		const p1 = cleanPts[i];
-		const p2 = cleanPts[i + 1];
-
-		const d01 = dist(p0, p1);
-		const d12 = dist(p1, p2);
-
-		const r = Math.max(
-		  0,
-		  Math.min(radius, d01 * 0.5, d12 * 0.5)
-		);
-
-		if (r <= 1e-6) {
-		  dStr += ` L ${p1.x} ${p1.y}`;
-		  continue;
-		}
-
-		const inPt  = moveTowards(p1, p0, r);
-		const outPt = moveTowards(p1, p2, r);
-
-		dStr += ` L ${inPt.x} ${inPt.y}`;
-		dStr += ` Q ${p1.x} ${p1.y} ${outPt.x} ${outPt.y}`;
-	  }
-
-	  dStr += ` L ${tip.x} ${tip.y}`;
-
-	  return { d: dStr, start, tip };
-	};
-
-  const normalizeRcPath = (rcPath) => {
-	  if (!rcPath || rcPath.length < 1) return [];
-	  const out = [rcPath[0]];
-	  for (let i = 1; i < rcPath.length; i++) {
-		const p = rcPath[i];
-		const q = out[out.length - 1];
-		if (p.r !== q.r || p.c !== q.c) out.push(p);
-	  }
-	  return out;
-	};
-
-  const buildSegmentsFromRcPath = (rcPathRaw) => {
-	  const rcPath = normalizeRcPath(rcPathRaw);
-	  if (rcPath.length < 2) return [];
-
-	  const segments = [];
-	  let start = 0;
-
-	  const dir = (a, b) => {
-		const dr = b.r - a.r;
-		const dc = b.c - a.c;
-		// ✅ 理論上不會 0,0（normalize 會去掉），保險
-		return `${Math.sign(dr)},${Math.sign(dc)}`;
-	  };
-
-	  let d0 = dir(rcPath[0], rcPath[1]);
-
-	  for (let i = 1; i < rcPath.length - 1; i++) {
-		const d1 = dir(rcPath[i], rcPath[i + 1]);
-		if (d1 !== d0) {
-		  segments.push({ start, end: i });
-		  start = i;
-		  d0 = d1;
-		}
-	  }
-
-	  segments.push({ start, end: rcPath.length - 1 });
-	  return segments;
-	};
-
-  const buildSegmentLabelsFromRcPath = (
-	  rcPathRaw,
-	  getCellCenterPx,
-	  {
-		labelR = 8,
-		pathStroke = 4,
-		gap = 1.5,
-		alongScale = 0.22,
-		cellSize = 64,
-		minPxLen = 10,
-	  } = {}
-	) => {
-	  const rcPath = normalizeRcPath(rcPathRaw);
-	  if (rcPath.length < 2) return [];
-
-	  const segs = buildSegmentsFromRcPath(rcPath);
-	  if (!segs.length) return [];
-
-	  const labels = [];
-	  const off = labelR + pathStroke / 2 + gap;
-	  const alongBase = Math.max(8, Math.min(18, cellSize * alongScale));
-
-	  const usage = new Map();
-	  const segKey = (A, B) => {
-		const k1 = `${A.x},${A.y}|${B.x},${B.y}`;
-		const k2 = `${B.x},${B.y}|${A.x},${A.y}`;
-		return k1 < k2 ? k1 : k2;
-	  };
-	  const laneOf = (count) => (count === 0 ? 0 : (count % 2 ? (count + 1) / 2 : -(count / 2)));
-
-	  for (let s = 0; s < segs.length; s++) {
-		const { start, end } = segs[s];
-
-		// A,B: 用段的首尾
-		const A = rcPath[start];
-		const B = rcPath[end];
-
-		const pA = getCellCenterPx(A.r, A.c);
-		const pB = getCellCenterPx(B.r, B.c);
-
-		let dx = pB.x - pA.x;
-		let dy = pB.y - pA.y;
-		let L = Math.hypot(dx, dy);
-
-		// ✅ 如果 L 太短或怪，改用「段內第一個有效方向」來定向（但仍會畫 label）
-		if (!Number.isFinite(L) || L < 1e-6) {
-		  // 找段內第一個不同點
-		  let i = start;
-		  while (i < end && rcPath[i].r === rcPath[i + 1].r && rcPath[i].c === rcPath[i + 1].c) i++;
-		  if (i < end) {
-			const p1 = getCellCenterPx(rcPath[i].r, rcPath[i].c);
-			const p2 = getCellCenterPx(rcPath[i + 1].r, rcPath[i + 1].c);
-			dx = p2.x - p1.x;
-			dy = p2.y - p1.y;
-			L = Math.hypot(dx, dy);
-		  }
-		}
-
-		// ✅ 保證有方向：再不行就給一個水平
-		if (!Number.isFinite(L) || L < 1e-6) {
-		  dx = 1; dy = 0; L = 1;
-		}
-
-		// ✅ 不再 continue：短段也畫，只是用 minPxLen 讓偏移穩定
-		const LforCalc = Math.max(L, minPxLen);
-		const ux = dx / L;
-		const uy = dy / L;
-		const nx = -uy;
-		const ny = ux;
-
-		const mx = (pA.x + pB.x) / 2;
-		const my = (pA.y + pB.y) / 2;
-
-		const key = segKey(pA, pB);
-		const count = usage.get(key) || 0;
-		usage.set(key, count + 1);
-		const lane = laneOf(count);
-
-		const alongMax = Math.max(0, LforCalc * 0.45 - (labelR + 2));
-		const along = Math.min(alongBase, alongMax);
-
-		const x = mx + nx * off + ux * (along * lane);
-		const y = my + ny * off + uy * (along * lane);
-
-		labels.push({ idx: labels.length + 1, x, y });
-	  }
-
-	  return labels;
-	};
-  
+// =========================
+// ✅ Optional: convert bump segment into straight detour line (kept signature)
+// =========================
+const straightenBumpToParallelLine = (C, A, B, D, h, eps = 1e-6) => {
+  const abx = B.x - A.x, aby = B.y - A.y;
+  const LAB = hypot(abx, aby);
+  if (LAB < eps) return null;
+
+  const ux = abx / LAB, uy = aby / LAB;
+  const nx0 = -uy, ny0 = ux;
+
+  // choose outward side away from C
+  const acx = C.x - A.x, acy = C.y - A.y;
+  const side = Math.sign(acx * nx0 + acy * ny0);
+  const sign = (side >= 0) ? -1 : 1;
+  const nx = nx0 * sign, ny = ny0 * sign;
+
+  const Pn = { x: A.x + nx * h, y: A.y + ny * h };
+  const rn = { x: ux, y: uy };
+
+  const rCA = { x: A.x - C.x, y: A.y - C.y };
+  const hitC = lineIntersection(Pn, rn, C, rCA, 1e-9);
+
+  const rBD = { x: D.x - B.x, y: D.y - B.y };
+  const hitD = lineIntersection(Pn, rn, B, rBD, 1e-9);
+
+  if (!hitC || !hitD) return null;
+
+  return {
+    C2: { x: hitC.x, y: hitC.y },
+    D2: { x: hitD.x, y: hitD.y },
+    nx, ny, ux, uy
+  };
+};
+
+// =========================
+// ✅ v2: overlap edges -> ramped detours (kept signature)
+// =========================
+const deOverlapByRampedDetourV2 = (pts, spacing = 8, ramp = 14, eps = 1e-6) => {
+  const clean = dedupePts(pts, eps);
+  if (!clean || clean.length < 2) return clean;
+
+  const used = new Map(); // edgeKey -> times seen
+  const out = [clean[0]];
+
+  let inRun = false;
+  let runStart = null, runEnd = null, runDir = null;
+  let runOff = 0, runLen = 0;
+
+  const flushRun = () => {
+    if (!inRun) return;
+
+    const a = runStart, b = runEnd;
+    const L = runLen;
+    const t = Math.max(2, Math.min(ramp, L * 0.33));
+
+    const { ux, uy, nx, ny } = runDir;
+
+    out.push(
+      { x: a.x + ux * t + nx * runOff, y: a.y + uy * t + ny * runOff },
+      { x: b.x - ux * t + nx * runOff, y: b.y - uy * t + ny * runOff },
+      b
+    );
+
+    inRun = false;
+    runStart = runEnd = runDir = null;
+    runOff = 0;
+    runLen = 0;
+  };
+
+  for (let i = 0; i < clean.length - 1; i++) {
+    const a = clean[i], b = clean[i + 1];
+
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const L = hypot(dx, dy);
+    if (L <= eps) continue;
+
+    const k = edgeKey(a, b);
+    const cnt = used.get(k) || 0;
+    used.set(k, cnt + 1);
+
+    if (cnt === 0) {
+      flushRun();
+      out.push(b);
+      continue;
+    }
+
+    const ux = dx / L, uy = dy / L;
+    const nx = -uy, ny = ux;
+
+    const off = laneOf(cnt) * spacing;
+
+    if (!inRun) {
+      inRun = true;
+      runStart = a;
+      runEnd = b;
+      runDir = { ux, uy, nx, ny };
+      runOff = off;
+      runLen = L;
+      continue;
+    }
+
+    const sameDir = Math.abs(runDir.ux - ux) < 1e-6 && Math.abs(runDir.uy - uy) < 1e-6;
+    const sameOff = Math.abs(runOff - off) < 1e-6;
+
+    if (sameDir && sameOff) {
+      runEnd = b;
+      runLen += L;
+    } else {
+      flushRun();
+      inRun = true;
+      runStart = a;
+      runEnd = b;
+      runDir = { ux, uy, nx, ny };
+      runOff = off;
+      runLen = L;
+    }
+  }
+
+  flushRun();
+  return out;
+};
+
+// =========================
+// ✅ sampling + rounded svg path (kept signature)
+// =========================
+const sampleAlongPolyline = (pts, spacing = 22, startOffset = 10) => {
+  if (!pts || pts.length < 2) return [];
+
+  const segLen = [];
+  let total = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const dx = pts[i + 1].x - pts[i].x;
+    const dy = pts[i + 1].y - pts[i].y;
+    const L = hypot(dx, dy);
+    segLen.push(L);
+    total += L;
+  }
+  if (total <= 1e-6) return [];
+
+  const out = [];
+  for (let dist = startOffset; dist < total - startOffset; dist += spacing) {
+    let acc = 0, i = 0;
+    while (i < segLen.length && acc + segLen[i] < dist) { acc += segLen[i]; i++; }
+    if (i >= segLen.length) break;
+
+    const L = segLen[i] || 1;
+    const t = (dist - acc) / L;
+
+    const a = pts[i], b = pts[i + 1];
+    const x = a.x + (b.x - a.x) * t;
+    const y = a.y + (b.y - a.y) * t;
+
+    const ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+    out.push({ x, y, ang });
+  }
+  return out;
+};
+
+const buildPathStringAndMarkersRounded = (pts, radius = 8) => {
+  if (!pts || pts.length < 2) return { d: "", start: null, tip: null };
+
+  const dist = (a, b) => hypot(b.x - a.x, b.y - a.y);
+
+  const moveTowards = (from, to, len) => {
+    const d = dist(from, to);
+    if (d <= 1e-6) return { ...from };
+    const t = len / d;
+    return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
+  };
+
+  const cleanPts = simplifyPts(pts);
+
+  const start = cleanPts[0];
+  const tip = cleanPts[cleanPts.length - 1];
+
+  let dStr = `M ${start.x} ${start.y}`;
+
+  if (cleanPts.length === 2) {
+    dStr += ` L ${tip.x} ${tip.y}`;
+    return { d: dStr, start, tip };
+  }
+
+  for (let i = 1; i < cleanPts.length - 1; i++) {
+    const p0 = cleanPts[i - 1];
+    const p1 = cleanPts[i];
+    const p2 = cleanPts[i + 1];
+
+    const d01 = dist(p0, p1);
+    const d12 = dist(p1, p2);
+
+    const r = Math.max(0, Math.min(radius, d01 * 0.5, d12 * 0.5));
+    if (r <= 1e-6) { dStr += ` L ${p1.x} ${p1.y}`; continue; }
+
+    const inPt = moveTowards(p1, p0, r);
+    const outPt = moveTowards(p1, p2, r);
+
+    dStr += ` L ${inPt.x} ${inPt.y}`;
+    dStr += ` Q ${p1.x} ${p1.y} ${outPt.x} ${outPt.y}`;
+  }
+
+  dStr += ` L ${tip.x} ${tip.y}`;
+  return { d: dStr, start, tip };
+};
+
+// =========================
+// ✅ RC path utilities + segment labels (kept signatures)
+// =========================
+const normalizeRcPath = (rcPath) => {
+  if (!rcPath || rcPath.length < 1) return [];
+  const out = [rcPath[0]];
+  for (let i = 1; i < rcPath.length; i++) {
+    const p = rcPath[i], q0 = out[out.length - 1];
+    if (p.r !== q0.r || p.c !== q0.c) out.push(p);
+  }
+  return out;
+};
+
+const buildSegmentsFromRcPath = (rcPathRaw) => {
+  const rcPath = normalizeRcPath(rcPathRaw);
+  if (rcPath.length < 2) return [];
+
+  const segs = [];
+  let start = 0;
+
+  const dir = (a, b) => `${Math.sign(b.r - a.r)},${Math.sign(b.c - a.c)}`;
+
+  let d0 = dir(rcPath[0], rcPath[1]);
+  for (let i = 1; i < rcPath.length - 1; i++) {
+    const d1 = dir(rcPath[i], rcPath[i + 1]);
+    if (d1 !== d0) {
+      segs.push({ start, end: i });
+      start = i;
+      d0 = d1;
+    }
+  }
+  segs.push({ start, end: rcPath.length - 1 });
+  return segs;
+};
+
+const buildSegmentLabelsFromRcPath = (
+  rcPathRaw,
+  getCellCenterPx,
+  {
+    labelR = 8,
+    pathStroke = 4,
+    gap = 1.5,
+    alongScale = 0.22,
+    cellSize = 64,
+    minPxLen = 10,
+  } = {}
+) => {
+  const rcPath = normalizeRcPath(rcPathRaw);
+  if (rcPath.length < 2) return [];
+
+  const segs = buildSegmentsFromRcPath(rcPath);
+  if (!segs.length) return [];
+
+  const labels = [];
+  const off = labelR + pathStroke / 2 + gap;
+  const alongBase = Math.max(8, Math.min(18, cellSize * alongScale));
+
+  const usage = new Map();
+  const segKey = (A, B) => {
+    const k1 = `${A.x},${A.y}|${B.x},${B.y}`;
+    const k2 = `${B.x},${B.y}|${A.x},${A.y}`;
+    return k1 < k2 ? k1 : k2;
+  };
+
+  for (let si = 0; si < segs.length; si++) {
+    const { start, end } = segs[si];
+    const A = rcPath[start];
+    const B = rcPath[end];
+
+    const pA = getCellCenterPx(A.r, A.c);
+    const pB = getCellCenterPx(B.r, B.c);
+
+    let dx = pB.x - pA.x, dy = pB.y - pA.y;
+    let L = hypot(dx, dy);
+
+    // if weird, take first valid step inside segment
+    if (!Number.isFinite(L) || L < 1e-6) {
+      let k = start;
+      while (k < end && rcPath[k].r === rcPath[k + 1].r && rcPath[k].c === rcPath[k + 1].c) k++;
+      if (k < end) {
+        const p1 = getCellCenterPx(rcPath[k].r, rcPath[k].c);
+        const p2 = getCellCenterPx(rcPath[k + 1].r, rcPath[k + 1].c);
+        dx = p2.x - p1.x;
+        dy = p2.y - p1.y;
+        L = hypot(dx, dy);
+      }
+    }
+
+    // still degenerate => default horizontal
+    if (!Number.isFinite(L) || L < 1e-6) { dx = 1; dy = 0; L = 1; }
+
+    const ux = dx / L, uy = dy / L;
+    const nx = -uy, ny = ux;
+
+    const mx = (pA.x + pB.x) / 2;
+    const my = (pA.y + pB.y) / 2;
+
+    const key = segKey(pA, pB);
+    const cnt = usage.get(key) || 0;
+    usage.set(key, cnt + 1);
+    const lane = laneOf(cnt);
+
+    const LforCalc = Math.max(Math.max(L, minPxLen), 1);
+    const alongMax = Math.max(0, LforCalc * 0.45 - (labelR + 2));
+    const along = Math.min(alongBase, alongMax);
+
+    labels.push({
+      idx: labels.length + 1,
+      x: mx + nx * off + ux * (along * lane),
+      y: my + ny * off + uy * (along * lane),
+    });
+  }
+
+  return labels;
+};  
   // 小工具：確保 <img> 真的載入完成
   const ensureImageLoaded = (imgEl) =>
 	  new Promise((resolve, reject) => {
@@ -2764,8 +2826,8 @@ const App = () => {
 					<ParamSlider
 					  label="束寬 (Beam Width)"
 					  value={config.beamWidth}
-					  min={40}
-					  max={1050}
+					  min={350}
+					  max={700}
 					  step={10}
 					  inputMode="numeric"
 					  formatInput={(v) => String(v)}
@@ -2776,8 +2838,8 @@ const App = () => {
 					  label="潛在權重 (Potential)"
 					  value={config.potentialWeight}
 					  min={0}
-					  max={4500}
-					  step={50}
+					  max={300}
+					  step={10}
 					  inputMode="numeric"
 					  formatInput={(v) => String(v)}
 					  onChange={(v) => updateParam("potentialWeight", Number(v))}
@@ -2786,8 +2848,8 @@ const App = () => {
 					<ParamSlider
 					  label="節點上限"
 					  value={config.maxNodes}
-					  min={10000}
-					  max={600000}
+					  min={50000}
+					  max={200000}
 					  step={10000}
 					  inputMode="numeric"
 					  formatInput={(v) => String(v)}
@@ -2798,7 +2860,7 @@ const App = () => {
 					  label="達標後步數懲罰"
 					  value={config.stepPenalty}
 					  min={0}
-					  max={1500}
+					  max={800}
 					  step={50}
 					  inputMode="numeric"
 					  formatInput={(v) => String(v)}
