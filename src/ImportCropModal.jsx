@@ -64,6 +64,53 @@ export default function ImportCropModal({
   useEffect(() => {
     cropRectRef.current = cropRect;
   }, [cropRect]);
+  
+  const [previewBox, setPreviewBox] = useState({ w: 0, h: 0 });
+  const updatePreviewBox = useCallback((imgEl = imgRef.current) => {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // modal 外層 p-4 + 內容區 p-4，大概抓安全邊距
+  const horizontalPadding = 32 + 32;
+  const availW = Math.min(vw - horizontalPadding, 900);
+  const availH = Math.max(260, vh - 220); // 預留按鈕/上下 padding 空間
+
+  const isMobilePortrait = vw < 768 && vh > vw;
+
+  const imgW = imgEl?.naturalWidth || COLS;
+  const imgH = imgEl?.naturalHeight || ROWS;
+  const imgIsPortrait = imgH > imgW;
+
+  let boxW = 0;
+  let boxH = 0;
+
+  if (isMobilePortrait && imgIsPortrait) {
+    // ✅ 直立手機 + 直立圖：預覽框跟著圖片走，盡量放大
+    const ratio = imgW / imgH; // width / height，直立圖通常 < 1
+    boxH = Math.min(availH, vh * 0.72);
+    boxW = boxH * ratio;
+
+    if (boxW > availW) {
+      boxW = availW;
+      boxH = boxW / ratio;
+    }
+  } else {
+    // ✅ 其他情況：維持你原本偏橫向的預覽框
+    const ratio = COLS / ROWS; // 6/5
+    boxW = availW;
+    boxH = boxW / ratio;
+
+    if (boxH > availH) {
+      boxH = availH;
+      boxW = boxH * ratio;
+    }
+  }
+
+  setPreviewBox({
+    w: Math.round(boxW),
+    h: Math.round(boxH),
+  });
+}, []);
 
   // ====== 匯入狀態 ======
   const [importing, setImporting] = useState(false);
@@ -130,6 +177,24 @@ export default function ImportCropModal({
 	  return { x, y, w, h };
 	}, []);
 
+  useEffect(() => {
+  if (!open) return;
+
+  const onResize = () => {
+    updatePreviewBox();
+    requestAnimationFrame(() => {
+      cacheBounds();
+      const r = fitRectIntoBounds(cropRectRef.current);
+      cropRectRef.current = r;
+      setCropRect(r);
+      applyRectToDOM(r);
+    });
+  };
+
+  window.addEventListener("resize", onResize);
+  return () => window.removeEventListener("resize", onResize);
+}, [open, updatePreviewBox, cacheBounds, fitRectIntoBounds, applyRectToDOM]);
+
   const scheduleApply = useCallback(
     (r) => {
       cropRectRef.current = r;
@@ -144,9 +209,12 @@ export default function ImportCropModal({
 
   // 初次打開時：給一個居中的裁切框（你要的：最寬+貼底）
   useEffect(() => {
-    if (!open) return;
+  if (!open) return;
 
-    const t = setTimeout(() => {
+  const t = setTimeout(() => {
+    updatePreviewBox();
+
+    requestAnimationFrame(() => {
       cacheBounds();
       const { W, H } = boundsRef.current;
       if (!W || !H) return;
@@ -158,12 +226,14 @@ export default function ImportCropModal({
       const y = H - h;
 
       const r = fitRectIntoBounds({ x, y, w, h });
+      cropRectRef.current = r;
       setCropRect(r);
-      requestAnimationFrame(() => applyRectToDOM(r));
-    }, 0);
+      applyRectToDOM(r);
+    });
+  }, 0);
 
-    return () => clearTimeout(t);
-  }, [open, cacheBounds, fitRectIntoBounds, applyRectToDOM]);
+  return () => clearTimeout(t);
+}, [open, updatePreviewBox, cacheBounds, fitRectIntoBounds, applyRectToDOM]);
 
   // 在圖片像素座標中，快速抓出「非黑邊內容」的 bounding box
   const detectContentBounds = (imgEl) => {
@@ -506,7 +576,7 @@ export default function ImportCropModal({
 
   return (
     <div
-	  className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur p-4 flex items-center justify-center"
+	  className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur p-4 flex items-start sm:items-center justify-center overflow-y-auto"
 	  onTouchMove={(e) => e.preventDefault()}
 	  style={{ touchAction: "none" }}
 	>
@@ -516,14 +586,17 @@ export default function ImportCropModal({
       >
         <div className="p-4">
           <div
-            ref={wrapRef}
-            className="relative w-full aspect-[6/5] bg-black rounded-2xl border border-white/10 touch-none"
-            style={{
-				touchAction: "none",            // ✅ 禁止瀏覽器手勢（滾動/縮放/回彈）
-				overscrollBehavior: "contain",  // ✅ 防止滾動鏈到 body（Chrome/Android 很有效）
-				WebkitUserSelect: "none",
-				userSelect: "none",
-			  }}
+  ref={wrapRef}
+  className="relative mx-auto bg-black rounded-2xl border border-white/10 touch-none"
+  style={{
+    width: previewBox.w ? `${previewBox.w}px` : "100%",
+    height: previewBox.h ? `${previewBox.h}px` : undefined,
+    maxWidth: "100%",
+    touchAction: "none",
+    overscrollBehavior: "contain",
+    WebkitUserSelect: "none",
+    userSelect: "none",
+  }}
 			onPointerDown={(e) => {
 			  if (importing) return;
 
@@ -551,18 +624,27 @@ export default function ImportCropModal({
               className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
               draggable={false}
               onLoad={() => {
-				  cacheBounds();
-				  cacheContentRect(); // ✅ 加這行
-				  const wrap = wrapRef.current;
-				  const img = imgRef.current;
-				  if (!wrap || !img) return;
+  const img = imgRef.current;
+  const wrap = wrapRef.current;
+  if (!wrap || !img) return;
 
-				  const r = makeCropRectFromBounds(wrap.clientWidth, wrap.clientHeight, img);
+  updatePreviewBox(img);
 
-				  cropRectRef.current = r;
-				  setCropRect(r);
-				  requestAnimationFrame(() => applyRectToDOM(r));
-				}}
+  requestAnimationFrame(() => {
+    cacheBounds();
+    cacheContentRect();
+
+    const r = makeCropRectFromBounds(
+      wrap.clientWidth,
+      wrap.clientHeight,
+      img
+    );
+
+    cropRectRef.current = r;
+    setCropRect(r);
+    applyRectToDOM(r);
+  });
+}}
             />
 
             {/* 裁切框 */}
