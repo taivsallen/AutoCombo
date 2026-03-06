@@ -93,6 +93,8 @@ function topKByScore(items, K, getScore) {
 
 const App = () => {
 
+const manualStartFromRow0Ref = useRef(false);
+
 const moveFlushRAFRef = useRef(0);
 const pointerLastClientRef = useRef({ x: 0, y: 0 });
 
@@ -241,6 +243,10 @@ const [manualActive, setManualActive] = useState(false); // 轉珠是否已開�
   
   const updateParam = (key, val) => setConfig(prev => ({ ...prev, [key]: key === 'replaySpeed' ? Math.round(parseFloat(val)) : parseFloat(val) }));
   const renderBoard = replayBoard ?? board;
+  const manualHiddenCell =
+  isManual && isDragging && floating && path.length > 0
+    ? path[path.length - 1]
+    : null;
   const replayDone = (!isReplaying && !isPaused && currentStep >= 0);
 
   const templateCacheRef = useRef({ db: [], ready: false });
@@ -478,7 +484,7 @@ const traceCellsBetweenPoints = useCallback(
 
 const tryMoveToCell = useCallback(
   (r, c) => {
-    if (!isDraggingRef.current || manualLocked || r === 0) return false;
+    if (!isDraggingRef.current || manualLocked) return false;
     if (r < 0 || c < 0 || r >= TOTAL_ROWS || c >= COLS) return false;
 
     const currentPath = pathRef.current;
@@ -489,12 +495,17 @@ const tryMoveToCell = useCallback(
 
     const dr = Math.abs(last.r - r);
     const dc = Math.abs(last.c - c);
-    if (dr + dc !== 1) return false;
+
+    const isOrthogonal = dr + dc === 1;
+    const isDiagonal = dr === 1 && dc === 1;
+
+    if (diagonalEnabled) {
+      if (!isOrthogonal && !isDiagonal) return false;
+    } else {
+      if (!isOrthogonal) return false;
+    }
 
     const currentBoard = boardRef.current;
-    if (!currentBoard?.[r]?.[c]) {
-      // 這裡若值可能為 0(水珠) 不能用 ! 判斷，所以改下行
-    }
     if (currentBoard?.[r]?.[c] === undefined) return false;
 
     const targetOrb = currentBoard[r][c];
@@ -502,21 +513,69 @@ const tryMoveToCell = useCallback(
 
     if (xMark === 1) return false;
 
-    const next = clone2D(currentBoard);
-    const temp = next[last.r][last.c];
-    next[last.r][last.c] = next[r][c];
-    next[r][c] = temp;
+    const lastIsRow0 = last.r === 0;
+    const nextIsRow0 = r === 0;
+    const startedFromRow0 = manualStartFromRow0Ref.current;
 
-    boardRef.current = next;
-    pendingBoardRef.current = next;
+    // case A: 從 row0 起手，離開後不可再回 row0
+    if (startedFromRow0 && !lastIsRow0 && nextIsRow0) {
+      handleManualEndRef.current?.();
+      return false;
+    }
 
+    // case D: row0 -> row0 不允許
+    if (lastIsRow0 && nextIsRow0) {
+      return false;
+    }
+
+    // 先更新 path
     const newPath = [...currentPath, { r, c }];
     pathRef.current = newPath;
     pendingPathRef.current = newPath;
     pendingCurrentStepRef.current = newPath.length - 1;
     pendingStepsRef.current = newPath.length - 1;
-
     lastPosRef.current = { r, c };
+
+    // case B: row0 -> row1~5
+	// ✅ 第一次拉下來時，row1~5 該格直接顯示 row0 那顆
+	// ✅ 但 row0 本身不變
+	if (lastIsRow0 && !nextIsRow0) {
+	  const nextBoard = clone2D(currentBoard);
+
+	  // 把目前要進入的格子，覆蓋成 row0 那顆的樣式
+	  nextBoard[r][c] = currentBoard[last.r][last.c];
+
+	  boardRef.current = nextBoard;
+	  pendingBoardRef.current = nextBoard;
+
+	  scheduleManualVisualFlush();
+	  return true;
+	}
+
+    // case C: row1~5 -> row0
+    // 前一步變成 row0 的樣式，但 row0 不變
+    if (!lastIsRow0 && nextIsRow0) {
+      const nextBoard = clone2D(currentBoard);
+
+      // 把前一步覆蓋成 row0 的珠
+      nextBoard[last.r][last.c] = currentBoard[r][c];
+
+      boardRef.current = nextBoard;
+      pendingBoardRef.current = nextBoard;
+
+      scheduleManualVisualFlush();
+      handleManualEndRef.current?.();
+      return true;
+    }
+
+    // case E: row1~5 之間正常交換
+    const nextBoard = clone2D(currentBoard);
+    const temp = nextBoard[last.r][last.c];
+    nextBoard[last.r][last.c] = nextBoard[r][c];
+    nextBoard[r][c] = temp;
+
+    boardRef.current = nextBoard;
+    pendingBoardRef.current = nextBoard;
 
     scheduleManualVisualFlush();
 
@@ -526,7 +585,7 @@ const tryMoveToCell = useCallback(
 
     return true;
   },
-  [manualLocked, scheduleManualVisualFlush]
+  [manualLocked, scheduleManualVisualFlush, diagonalEnabled]
 );
 
 const triggerMoveEndedOverlay = useCallback(
@@ -638,6 +697,7 @@ const handleToggleMode = (manual) => {
   isDraggingRef.current = false;
   manualEndCalledRef.current = false;
   pointerLastClientRef.current = null;
+  manualStartFromRow0Ref.current = false;
 
   if (floatingRAFRef.current) {
     cancelAnimationFrame(floatingRAFRef.current);
@@ -679,15 +739,19 @@ const handleToggleMode = (manual) => {
     setCurrentStep(-1);
   }
 };
+
 const handleManualStart = (r, c, e) => {
-  if (!isManual || manualLocked || solving || isReplaying || r === 0) return;
+  if (!isManual || manualLocked || solving || isReplaying) return;
 
   const currentBoard = boardRef.current;
   const startOrb = currentBoard?.[r]?.[c];
   if (startOrb === undefined) return;
+
+  // 起手不能是 X1 / X2
   if (xMarkOf(startOrb) !== 0) return;
 
   baseBoardRef.current = clone2D(currentBoard);
+  manualStartFromRow0Ref.current = (r === 0);
 
   isDraggingRef.current = true;
   setIsDragging(true);
@@ -783,16 +847,39 @@ const handleManualMove = (r, c, e) => {
   pointerLastClientRef.current = { x: clientX, y: clientY };
 
   if (crossedCells.length > 0) {
-    for (const cell of crossedCells) {
-      tryMoveToCell(cell.r, cell.c);
-      if (!isDraggingRef.current) break;
-    }
-    return;
-  }
+  for (const cell of crossedCells) {
+    const ok = tryMoveToCell(cell.r, cell.c);
 
-  if (typeof r === "number" && typeof c === "number" && r >= 0 && c >= 0) {
-    tryMoveToCell(r, c);
+    // ✅ 如果 sample 出來的格子因為跳格/漏格沒走成功
+    // 就改用 chase 一步一步補追
+    if (!ok) {
+      chaseToTargetCell(cell.r, cell.c);
+    }
+
+    if (!isDraggingRef.current) break;
   }
+}
+
+// ✅ 不管 crossedCells 有沒有，都再用「目前實際指標所在格」補一次
+const liveCell = getCellFromClientPoint(clientX, clientY);
+if (liveCell && isDraggingRef.current) {
+  const ok = tryMoveToCell(liveCell.r, liveCell.c);
+  if (!ok) {
+    chaseToTargetCell(liveCell.r, liveCell.c);
+  }
+} else if (
+  typeof r === "number" &&
+  typeof c === "number" &&
+  r >= 0 &&
+  c >= 0 &&
+  isDraggingRef.current
+) {
+  const ok = tryMoveToCell(r, c);
+  if (!ok) {
+    chaseToTargetCell(r, c);
+  }
+}
+  
 };
 
 const handleManualEnd = useCallback(() => {
@@ -875,6 +962,51 @@ useEffect(() => {
     pendingPathRef.current = null;
   };
 }, [stopManualTimer]);
+
+const chaseToTargetCell = useCallback(
+  (targetR, targetC) => {
+    if (!isDraggingRef.current || manualLocked) return false;
+    if (targetR < 0 || targetC < 0 || targetR >= TOTAL_ROWS || targetC >= COLS) return false;
+
+    let moved = false;
+    let guard = 0;
+
+    while (guard++ < 20) {
+      const currentPath = pathRef.current;
+      const last = currentPath[currentPath.length - 1];
+      if (!last) break;
+      if (last.r === targetR && last.c === targetC) break;
+
+      const dr = targetR - last.r;
+      const dc = targetC - last.c;
+
+      let stepR = last.r;
+      let stepC = last.c;
+
+      if (diagonalEnabled) {
+        stepR += dr === 0 ? 0 : dr > 0 ? 1 : -1;
+        stepC += dc === 0 ? 0 : dc > 0 ? 1 : -1;
+      } else {
+        if (Math.abs(dr) >= Math.abs(dc)) {
+          stepR += dr === 0 ? 0 : dr > 0 ? 1 : -1;
+        } else {
+          stepC += dc === 0 ? 0 : dc > 0 ? 1 : -1;
+        }
+      }
+
+      if (stepR === last.r && stepC === last.c) break;
+
+      const ok = tryMoveToCell(stepR, stepC);
+      if (!ok) break;
+      moved = true;
+
+      if (!isDraggingRef.current) break;
+    }
+
+    return moved;
+  },
+  [manualLocked, diagonalEnabled, tryMoveToCell]
+);
 
 ////////////
  
@@ -3231,6 +3363,8 @@ const buildSegmentLabelsFromRcPath = (
 	  return out;
 	};
   
+  
+  
   return (
   <div className="min-h-screen bg-neutral-950 text-white font-sans">
     <div className="sticky top-0 z-[3000] bg-neutral-900/95 backdrop-blur border-b border-white/10">
@@ -3671,103 +3805,109 @@ const buildSegmentLabelsFromRcPath = (
                   {!solving && r === 1 && (
                     <div className="overflow-visible col-span-6 h-2 bg-white z-50 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
                   )}
+				  
+				  {row.map((orb, c) => {
+  const isMoving =
+    !solving &&
+    isReplaying &&
+    currentStep >= 0 &&
+    path[currentStep]?.r === r &&
+    path[currentStep]?.c === c;
 
-                  {row.map((orb, c) => {
-                    const isMoving =
-                      !solving &&
-                      isReplaying &&
-                      currentStep >= 0 &&
-                      path[currentStep]?.r === r &&
-                      path[currentStep]?.c === c;
+  const isManualHidden =
+    manualHiddenCell &&
+    manualHiddenCell.r === r &&
+    manualHiddenCell.c === c;
 
-                    return (
-                      <div
-                        key={`${r}-${c}`}
-                        data-cell={`${r}-${c}`}
-                        onMouseDown={(e) => {
-                          if (isManual && !manualLocked) {
-                            handleManualStart(r, c, e);
-                          }
-                        }}
-                        onTouchStart={(e) => {
-                          if (isManual && !manualLocked) {
-                            handleManualStart(r, c, e);
-                          }
-                        }}
-                        onMouseUp={() => {
-                          if (isManual) {
-                            lastPosRef.current = { r: -1, c: -1 };
-                            handleManualEnd();
-                          }
-                        }}
-                        onTouchEnd={() => {
-                          if (isManual) {
-                            lastPosRef.current = { r: -1, c: -1 };
-                            handleManualEnd();
-                          }
-                        }}
-                        className={`relative w-16 h-16 md:w-20 md:h-20 flex items-center justify-center transition-all duration-75
-                          ${
-                            r === 0
-                              ? "ring-2 ring-yellow-400 z-10 rounded-2xl"
-                              : "rounded-2xl"
-                          }
-                          ${isMoving ? "opacity-20 z-40" : "opacity-100"}
-                        `}
-                        style={{ backgroundColor: "#171717" }}
-                      >
-                        {orb === -1 ? (
-                          <div className="w-[96%] h-[96%] rounded-2xl bg-black/40 border border-white/10" />
-                        ) : (
-                          <>
-                            <img
-                              src={
-                                Object.values(ORB_TYPES).find(
-                                  (t) => t.id === orbOf(orb)
-                                )?.img
-                              }
-                              className="w-[100%] h-[100%] object-contain pointer-events-none select-none"
-                              draggable={false}
-                              alt=""
-                            />
+  return (
+    <div
+      key={`${r}-${c}`}
+      data-cell={`${r}-${c}`}
+      onMouseDown={(e) => {
+        if (isManual && !manualLocked) {
+          handleManualStart(r, c, e);
+        }
+      }}
+      onTouchStart={(e) => {
+        if (isManual && !manualLocked) {
+          handleManualStart(r, c, e);
+        }
+      }}
+      onMouseUp={() => {
+        if (isManual) {
+          lastPosRef.current = { r: -1, c: -1 };
+          handleManualEnd();
+        }
+      }}
+      onTouchEnd={() => {
+        if (isManual) {
+          lastPosRef.current = { r: -1, c: -1 };
+          handleManualEnd();
+        }
+      }}
+      className={`relative w-16 h-16 md:w-20 md:h-20 flex items-center justify-center transition-all duration-75
+        ${
+          r === 0
+            ? "ring-2 ring-yellow-400 z-10 rounded-2xl"
+            : "rounded-2xl"
+        }
+        ${isMoving ? "opacity-20 z-40" : "opacity-100"}
+      `}
+      style={{ backgroundColor: "#171717" }}
+    >
+      {orb === -1 || isManualHidden ? (
+        <div className="w-[96%] h-[96%] rounded-2xl bg-black/40 border border-white/10" />
+      ) : (
+        <>
+          <img
+            src={
+              Object.values(ORB_TYPES).find(
+                (t) => t.id === orbOf(orb)
+              )?.img
+            }
+            className="w-[100%] h-[100%] object-contain pointer-events-none select-none"
+            draggable={false}
+            alt=""
+          />
 
-                            {xMarkOf(orb) === 1 && !isManual && (
-                              <img
-                                src={x1Img}
-                                className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-                                draggable={false}
-                                alt=""
-                              />
-                            )}
+          {xMarkOf(orb) === 1 && !isManual && (
+            <img
+              src={x1Img}
+              className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+              draggable={false}
+              alt=""
+            />
+          )}
 
-                            {xMarkOf(orb) === 2 && (
-                              <img
-                                src={x2Img}
-                                className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-                                draggable={false}
-                                alt=""
-                              />
-                            )}
+          {xMarkOf(orb) === 2 && (
+            <img
+              src={x2Img}
+              className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+              draggable={false}
+              alt=""
+            />
+          )}
 
-                            {qMarkOf(orb) === 1 &&
-                              !isManual &&
-                              !(r === 0 && replayDone) && (
-                                <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
-                                  Start
-                                </div>
-                              )}
+          {qMarkOf(orb) === 1 &&
+            !isManual &&
+            !(r === 0 && replayDone) && (
+              <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
+                Start
+              </div>
+            )}
 
-                            {qMarkOf(orb) === 2 && !isManual && (
-                              <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
-                                End
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-                </React.Fragment>
+          {qMarkOf(orb) === 2 && !isManual && (
+            <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
+              End
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+})}
+
+				</React.Fragment>
               ))}
             </div>
 
