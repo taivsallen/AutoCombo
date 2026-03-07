@@ -94,7 +94,7 @@ function topKByScore(items, K, getScore) {
 const App = () => {
 	
 const diagAssistRef = useRef(null);
-const DIAG_WINDOW_MS = 70;
+const DIAG_WINDOW_MS = 40;
 
 const manualStartFromRow0Ref = useRef(false);
 
