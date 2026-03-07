@@ -1089,6 +1089,8 @@ const chaseToTargetCell = useCallback(
 	  setBoard(finalBoard.map((row) => [...row]));
 	  setEditingBoard(finalBoard.map((row) => [...row]));
 	  baseBoardRef.current = finalBoard.map((row) => [...row]);
+	  setOriginalBoard(finalBoard.map((row) => [...row]));
+		boardRef.current = finalBoard.map((row) => [...row]);
 
 	  setShowEditor(false);
 	};
