@@ -386,33 +386,45 @@ const [manualActive, setManualActive] = useState(false); // 轉珠是否已開�
 	  return rest;
 	}, [config]);
 	
+const orbForTheoreticalMax = (cellVal) => {
+  if (cellVal < 0) return -1;
 
-  const refreshTarget = useCallback((newBoard) => {
-	  const counts = Array(6).fill(0);
+  // n1 永遠不可消，不算進理論上限
+  if (nMarkOf(cellVal) === 1) return -1;
 
-	  for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
-		for (let c = 0; c < COLS; c++) {
-		  const o = orbOf(newBoard[r][c]);
-		  if (o !== -1) counts[o]++;
-		}
-	  }
+  // n2 可在首批後消除，所以仍算普通珠
+  return orbOf(cellVal);
+};
 
-	  const base = counts.reduce((acc, x) => acc + Math.floor(x / 3), 0);
+const refreshTarget = useCallback((newBoard) => {
+  const counts = Array(6).fill(0);
 
-	  let best = base;
-	  for (let c = 0; c < COLS; c++) {
-		const t = orbOf(newBoard[0][c]); // ✅ row0
-		let s = 0;
-		for (let i = 0; i < 6; i++) {
-		  s += Math.floor((counts[i] + (i === t ? 1 : 0)) / 3);
-		}
-		if (s > best) best = s;
-	  }
+  for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const o = orbForTheoreticalMax(newBoard[r][c]);
+      if (o !== -1) counts[o]++;
+    }
+  }
 
-	  setStats(prev => ({ ...prev, theoreticalMax: best }));
-	  setTargetCombos(best);
-	}, []);
+  const base = counts.reduce((acc, x) => acc + Math.floor(x / 3), 0);
 
+  let best = base;
+
+  for (let c = 0; c < COLS; c++) {
+    const t = orbForTheoreticalMax(newBoard[0][c]); // row0 也套同規則
+    let s = 0;
+
+    for (let i = 0; i < 6; i++) {
+      s += Math.floor((counts[i] + (i === t ? 1 : 0)) / 3);
+    }
+
+    if (s > best) best = s;
+  }
+
+  setStats((prev) => ({ ...prev, theoreticalMax: best }));
+  setTargetCombos(best);
+}, []);
+  
   const initBoard = useCallback((random = true, providedBoard = null) => {
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
 	  replayAnimRef.current.raf = 0;
@@ -1252,20 +1264,29 @@ const applyGravity = (b, toClear1D) => {
   return next;
 };
 
-const potentialScore = (b, mode) => {
+const potentialScore = (b, mode, phase = "initial") => {
   let p = 0;
   const hWeight = mode === "horizontal" ? 3 : 0.5;
   const vWeight = mode === "vertical" ? 3 : 0.5;
 
-  // 水平：一次取出 3 格 orb 類型
+  // 水平
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
-    let a = orbOf(b[r][0]);
-    let d = orbOf(b[r][1]);
+    let a = getOrbForMatchPhase(b[r][0], phase);
+    let d = getOrbForMatchPhase(b[r][1], phase);
+
     for (let c = 0; c < COLS - 2; c++) {
-      const e = orbOf(b[r][c + 2]);
+      const e = getOrbForMatchPhase(b[r][c + 2], phase);
+
       if (a !== -1) {
-        if ((a === d && a !== e) || (d === e && a !== d) || (a === e && a !== d)) p += hWeight;
+        if (
+          (a === d && a !== e) ||
+          (d === e && a !== d) ||
+          (a === e && a !== d)
+        ) {
+          p += hWeight;
+        }
       }
+
       a = d;
       d = e;
     }
@@ -1273,13 +1294,25 @@ const potentialScore = (b, mode) => {
 
   // 垂直
   for (let c = 0; c < COLS; c++) {
-    let a = orbOf(b[PLAY_ROWS_START][c]);
-    let d = PLAY_ROWS_START + 1 < TOTAL_ROWS ? orbOf(b[PLAY_ROWS_START + 1][c]) : -1;
+    let a = getOrbForMatchPhase(b[PLAY_ROWS_START][c], phase);
+    let d =
+      PLAY_ROWS_START + 1 < TOTAL_ROWS
+        ? getOrbForMatchPhase(b[PLAY_ROWS_START + 1][c], phase)
+        : -1;
+
     for (let r = PLAY_ROWS_START; r < TOTAL_ROWS - 2; r++) {
-      const e = orbOf(b[r + 2][c]);
+      const e = getOrbForMatchPhase(b[r + 2][c], phase);
+
       if (a !== -1) {
-        if ((a === d && a !== e) || (d === e && a !== d) || (a === e && a !== d)) p += vWeight;
+        if (
+          (a === d && a !== e) ||
+          (d === e && a !== d) ||
+          (a === e && a !== d)
+        ) {
+          p += vWeight;
+        }
       }
+
       a = d;
       d = e;
     }
@@ -1412,6 +1445,104 @@ const getSpecialScore = (ev, special) => {
   const lack = Math.max(0, want - got);
 
   return sat * 40000000 - lack * 3000000;
+};
+
+const hasInitialN2Clear = (board, toClear1D) => {
+  if (!toClear1D) return false;
+
+  for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const idx = r * COLS + c;
+      if (toClear1D[idx] && nMarkOf(board[r][c]) === 2) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
+const getInitialMatchCheck = (board) => {
+  const initial = findMatches(board, "initial");
+
+  return {
+    initial,
+    // ✅ 只要 n2 出現在「普通首消排列」裡，就直接違規
+    violatesN2: hasN2InVanillaInitialPattern(board),
+  };
+};
+
+const getVanillaInitialClearMap = (board) => {
+  const totalCells = TOTAL_ROWS * COLS;
+  const toClear1D = new Uint8Array(totalCells);
+
+  // 水平
+  for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+    for (let c = 0; c < COLS - 2; ) {
+      const v0 = orbOf(board[r][c]);
+      if (v0 === -1) {
+        c++;
+        continue;
+      }
+
+      const v1 = orbOf(board[r][c + 1]);
+      const v2 = orbOf(board[r][c + 2]);
+      if (v0 !== v1 || v0 !== v2) {
+        c++;
+        continue;
+      }
+
+      let k = c + 3;
+      while (k < COLS && orbOf(board[r][k]) === v0) k++;
+
+      for (let x = c; x < k; x++) {
+        toClear1D[r * COLS + x] = 1;
+      }
+      c = k;
+    }
+  }
+
+  // 垂直
+  for (let c = 0; c < COLS; c++) {
+    for (let r = PLAY_ROWS_START; r < TOTAL_ROWS - 2; ) {
+      const v0 = orbOf(board[r][c]);
+      if (v0 === -1) {
+        r++;
+        continue;
+      }
+
+      const v1 = orbOf(board[r + 1][c]);
+      const v2 = orbOf(board[r + 2][c]);
+      if (v0 !== v1 || v0 !== v2) {
+        r++;
+        continue;
+      }
+
+      let k = r + 3;
+      while (k < TOTAL_ROWS && orbOf(board[k][c]) === v0) k++;
+
+      for (let y = r; y < k; y++) {
+        toClear1D[y * COLS + c] = 1;
+      }
+      r = k;
+    }
+  }
+
+  return toClear1D;
+};
+
+const hasN2InVanillaInitialPattern = (board) => {
+  const toClear1D = getVanillaInitialClearMap(board);
+
+  for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const idx = r * COLS + c;
+      if (toClear1D[idx] && nMarkOf(board[r][c]) === 2) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 };
 
 const findMatches = (tempBoard, phase = "initial") => {
@@ -1570,36 +1701,69 @@ while (k < TOTAL_ROWS && getOrbForMatchPhase(tempBoard[k][c], phase) === v0) k++
   };
 };
 
-const evaluateBoard = (tempBoard, skyfall) => {
-  let result = findMatches(tempBoard, "initial");
-  let initialCombos = result.combos;
-  let initialH = result.hC;
-  let initialV = result.vC;
-  let initialCleared = result.clearedCount;
+const unlockN2Board = (b) => {
+  const next = clone2D(b);
+  for (let r = 0; r < TOTAL_ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (nMarkOf(next[r][c]) === 2) {
+        next[r][c] = setNMark(next[r][c], 0);
+      }
+    }
+  }
+  return next;
+};
+
+const combinedPotentialScore = (b, mode) => {
+  const potInitial = potentialScore(b, mode, "initial");
+
+  // 疊珠思考時，至少先把 n2 解鎖
+  const unlocked = unlockN2Board(b);
+  const potSkyfall = potentialScore(unlocked, mode, "skyfall");
+
+  return potInitial * 0.75 + potSkyfall * 0.25;
+};
+
+const evaluateBoard = (tempBoard, skyfall, initialResult = null) => {
+  const result = initialResult ?? findMatches(tempBoard, "initial");
+
+  const initialCombos = result.combos;
+  const initialH = result.hC;
+  const initialV = result.vC;
+  const initialCleared = result.clearedCount;
   const initialPatternCounts = result.patternCounts;
 
-  if (!skyfall)
+  if (!skyfall) {
     return {
       combos: initialCombos,
       initialCombos,
       skyfallCombos: 0,
       clearedCount: initialCleared,
-      initialClearedCount: initialCleared, // ✅ 特優先只看首消
+      initialClearedCount: initialCleared,
       verticalCombos: initialV,
       horizontalCombos: initialH,
-      initialPatternCounts, // ✅ 特優先只看首消
+      initialPatternCounts,
     };
+  }
 
   let currentBoard = clone2D(tempBoard);
-  let totalCombos = initialCombos,
-    totalV = initialV,
-    totalH = initialH,
-    totalCleared = initialCleared;
+  let totalCombos = initialCombos;
+  let totalV = initialV;
+  let totalH = initialH;
+  let totalCleared = initialCleared;
   let loopResult = result;
+  let firstCascade = true;
 
   while (loopResult.combos > 0) {
     currentBoard = applyGravity(currentBoard, loopResult.toClearMap);
+
+    // 首批之後，n2 解鎖；n1 保留
+    if (firstCascade) {
+      currentBoard = unlockN2Board(currentBoard);
+      firstCascade = false;
+    }
+
     loopResult = findMatches(currentBoard, "skyfall");
+
     if (loopResult.combos > 0) {
       totalCombos += loopResult.combos;
       totalV += loopResult.vC;
@@ -1613,14 +1777,13 @@ const evaluateBoard = (tempBoard, skyfall) => {
     initialCombos,
     skyfallCombos: totalCombos - initialCombos,
     clearedCount: totalCleared,
-    initialClearedCount: initialCleared, // ✅ 首消顆粒數
+    initialClearedCount: initialCleared,
     verticalCombos: totalV,
     horizontalCombos: totalH,
-    initialPatternCounts, // ✅ 只記首消 pattern
+    initialPatternCounts,
   };
 };
 
-// ✅ 更快更省記憶體的棋盤 key（保持函式名不變）
 const getBoardKey = (b) => {
   // 兩個 32-bit hash 合成 BigInt 字串 key（低碰撞、Map key 短）
   let h1 = 2166136261 >>> 0; // FNV-ish
@@ -1871,9 +2034,13 @@ const calcScore = (ev, pot, pathLen, cfg, target, mode, priority, specialPriorit
     const locked0 = heldMark === 2;
 
     const evalBoard = boardWithHeldFilled(boardCopy, hole, held);
-    const ev = evaluateBoard(evalBoard, skyfall);
-    const pot = potentialScore(evalBoard, mode);
-    const score = calcScore(ev, pot, 0, cfg, target, mode, priority, specialPriority);
+
+const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
+if (violatesN2) return;
+
+const ev = evaluateBoard(evalBoard, skyfall, initial);
+const pot = combinedPotentialScore(evalBoard, mode);
+const score = calcScore(ev, pot, 0, cfg, target, mode, priority, specialPriority);
 
     const key = `${getBoardKey(boardCopy)}|${held}|${r},${c}|${locked0 ? 1 : 0}`;
     if (!betterThanVisited(key, ev, score, 0, mode)) return;
@@ -2011,9 +2178,16 @@ const calcScore = (ev, pot, pathLen, cfg, target, mode, priority, specialPriorit
           const nextHole = { r: nr, c: nc };
 
           const evalBoard = boardWithHeldFilled(nextBoard, nextHole, state.held);
-          const ev = evaluateBoard(evalBoard, skyfall);
-          const pot = potentialScore(evalBoard, mode);
-          const score = calcScore(ev, pot, newSteps, cfg, target, mode, priority, specialPriority);
+
+const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
+if (violatesN2) {
+  nodesExpanded++;
+  continue;
+}
+
+const ev = evaluateBoard(evalBoard, skyfall, initial);
+const pot = combinedPotentialScore(evalBoard, mode);
+const score = calcScore(ev, pot, newSteps, cfg, target, mode, priority, specialPriority);
 
           const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
           if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
@@ -2052,12 +2226,17 @@ const calcScore = (ev, pot, pathLen, cfg, target, mode, priority, specialPriorit
 			evalBoard[state.hole.r][state.hole.c] = destVal;
 		  }
 
-		  const ev = evaluateBoard(evalBoard, skyfall);
-		  const pot = potentialScore(evalBoard, mode);
-		  const score = calcScore(ev, pot, newSteps, cfg, target, mode, priority, specialPriority);
+		  const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
+if (violatesN2) {
+  continue;
+}
 
-		  considerBest(ev, score, newNode);
-		  continue;
+const ev = evaluateBoard(evalBoard, skyfall, initial);
+const pot = combinedPotentialScore(evalBoard, mode);
+const score = calcScore(ev, pot, newSteps, cfg, target, mode, priority, specialPriority);
+
+considerBest(ev, score, newNode);
+continue;
 		}
 
         if (nr < PLAY_ROWS_START || !state.hole) continue;
@@ -2071,9 +2250,16 @@ const calcScore = (ev, pot, pathLen, cfg, target, mode, priority, specialPriorit
         const nextHole = holeStepInPlace(nextBoard, state.hole, { r: nr, c: nc });
 
         const evalBoard = boardWithHeldFilled(nextBoard, nextHole, state.held);
-        const ev = evaluateBoard(evalBoard, skyfall);
-        const pot = potentialScore(evalBoard, mode);
-        const score = calcScore(ev, pot, newSteps, cfg, target, mode, priority, specialPriority);
+
+const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
+if (violatesN2) {
+  nodesExpanded++;
+  continue;
+}
+
+const ev = evaluateBoard(evalBoard, skyfall, initial);
+const pot = combinedPotentialScore(evalBoard, mode);
+const score = calcScore(ev, pot, newSteps, cfg, target, mode, priority, specialPriority);
 
         const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
         if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
