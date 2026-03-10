@@ -14,6 +14,8 @@ import dImg from './assets/d.png';
 import hImg from './assets/h.png';
 import x1Img from './assets/x1.png';
 import x2Img from './assets/x2.png';
+import n1Img from './assets/n1.png';
+import n2Img from './assets/n2.png';
 import logoImg from './assets/logo.png';
 
 const ORB_TYPES = {
@@ -3746,7 +3748,7 @@ const updateSpecialPriority = (patch) => {
   />
 </div>
 
-    <div className="mx-auto max-w-5xl w-full px-2 sm:px-4 pt-24 pb-4 flex-col items-center">
+    <div className="mx-auto max-w-5xl w-full px-0 sm:px-4 pt-24 pb-4 flex-col items-center">
       {!isManual ? (
         <div className="grid grid-cols-6 gap-1.5 mb-8 text-[14px]">
           <div className="col-span-2 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
@@ -3828,16 +3830,14 @@ const updateSpecialPriority = (patch) => {
 
       <div className="max-w-5xl w-full">
         <div className="flex flex-row gap-2 mb-4 w-full items-stretch">
-  {!isManual && (
-    <div className="flex-1 min-w-0 bg-neutral-900/50 p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
-      <span className="text-xs text-neutral-500 font-bold uppercase truncate w-full text-center leading-none">
-        上限
-      </span>
-      <span className="text-xl font-black text-white/40 w-full text-center leading-none">
-        {stats.theoreticalMax}
-      </span>
-    </div>
-  )}
+			<div className="flex-1 min-w-0 bg-neutral-900/50 p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
+			  <span className="text-xs text-neutral-500 font-bold uppercase truncate w-full text-center leading-none">
+				上限
+			  </span>
+			  <span className="text-xl font-black text-white/40 w-full text-center leading-none">
+				{stats.theoreticalMax}
+			  </span>
+			</div>
 
   <div className="flex-[1.2] min-w-0 bg-blue-900/20 p-2.5 rounded-xl border border-blue-500/30 ring-1 ring-blue-500/20 flex flex-col items-center justify-center space-y-1">
     <span className="text-xs text-blue-400 font-bold uppercase truncate w-full text-center leading-none">
@@ -3849,7 +3849,8 @@ const updateSpecialPriority = (patch) => {
     </span>
   </div>
 
-  <div className="flex-[1.5] min-w-0 bg-indigo-900/20 p-2.5 rounded-xl border border-indigo-500/30 ring-1 ring-blue-500/20 flex flex-col items-center justify-center">
+  {/* ✅ 和總粒交換寬度：flex-[1.5] -> flex-1 */}
+  <div className="flex-[1] min-w-0 bg-indigo-900/20 p-2.5 rounded-xl border border-indigo-500/30 ring-1 ring-blue-500/20 flex flex-col items-center justify-center">
     {isManual ? (
       <div className="flex w-full items-center justify-center">
         <div className="flex-1 flex flex-col items-center min-w-0 space-y-1">
@@ -3886,29 +3887,32 @@ const updateSpecialPriority = (patch) => {
     )}
   </div>
 
-  {(specialPriority.type === "cross" ||
-  specialPriority.type === "l" ||
-  specialPriority.type === "t") && (
-  <div className="flex-1 min-w-0 bg-pink-900/20 p-2.5 rounded-xl border border-pink-500/30 ring-1 ring-pink-500/20 flex flex-col items-center justify-center space-y-1">
-    <span className="text-xs text-pink-300 font-bold truncate w-full text-center leading-none">
-      {specialPriority.type === "cross"
-        ? "十字"
-        : specialPriority.type === "l"
-        ? "L字"
-        : "T字"}
-    </span>
+  {/* ✅ 手轉模式隱藏 十字/L字/T字 */}
+  {!isManual &&
+    (specialPriority.type === "cross" ||
+      specialPriority.type === "l" ||
+      specialPriority.type === "t") && (
+      <div className="flex-1 min-w-0 bg-pink-900/20 p-2.5 rounded-xl border border-pink-500/30 ring-1 ring-pink-500/20 flex flex-col items-center justify-center space-y-1">
+        <span className="text-xs text-pink-300 font-bold truncate w-full text-center leading-none">
+          {specialPriority.type === "cross"
+            ? "十字"
+            : specialPriority.type === "l"
+            ? "L字"
+            : "T字"}
+        </span>
 
-    <span className="text-xl font-black text-pink-400 w-full text-center leading-none">
-      {specialPriority.type === "cross"
-        ? stats.crossCount || 0
-        : specialPriority.type === "l"
-        ? stats.lCount || 0
-        : stats.tCount || 0}
-    </span>
-  </div>
-)}
+        <span className="text-xl font-black text-pink-400 w-full text-center leading-none">
+          {specialPriority.type === "cross"
+            ? stats.crossCount || 0
+            : specialPriority.type === "l"
+            ? stats.lCount || 0
+            : stats.tCount || 0}
+        </span>
+      </div>
+    )}
 
-  <div className="flex-1 min-w-0 bg-neutral-900/50 p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
+  {/* ✅ 和直向/橫向交換寬度：flex-1 -> flex-[1.5] */}
+  <div className="flex-[1.5] min-w-0 bg-neutral-900/50 p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
     <span className="text-xs text-neutral-500 font-bold uppercase truncate w-full text-center leading-none">
       總粒
     </span>
@@ -4242,7 +4246,7 @@ const updateSpecialPriority = (patch) => {
 
         <div
           ref={boardWrapRef}
-          className="relative bg-neutral-900 p-1 rounded-3xl shadow-2xl border-2 border-neutral-800 mb-6 mx-auto w-full max-w-[500px] overflow-visible"
+          className="relative bg-neutral-900 p-0.5 sm:p-1 rounded-3xl shadow-2xl border-2 border-neutral-800 mb-6 mx-auto w-full max-w-none sm:max-w-[500px] overflow-visible"
           style={{
             contain: "layout paint",
             touchAction: "none",
@@ -4305,40 +4309,40 @@ const updateSpecialPriority = (patch) => {
 
   return (
     <div
-      key={`${r}-${c}`}
-      data-cell={`${r}-${c}`}
-      onMouseDown={(e) => {
-        if (isManual && !manualLocked) {
-          handleManualStart(r, c, e);
-        }
-      }}
-      onTouchStart={(e) => {
-        if (isManual && !manualLocked) {
-          handleManualStart(r, c, e);
-        }
-      }}
-      onMouseUp={() => {
-        if (isManual) {
-          lastPosRef.current = { r: -1, c: -1 };
-          handleManualEnd();
-        }
-      }}
-      onTouchEnd={() => {
-        if (isManual) {
-          lastPosRef.current = { r: -1, c: -1 };
-          handleManualEnd();
-        }
-      }}
-      className={`relative w-16 h-16 md:w-20 md:h-20 flex items-center justify-center transition-all duration-75
-        ${
-          r === 0
-            ? "ring-2 ring-yellow-400 z-10 rounded-2xl"
-            : "rounded-2xl"
-        }
-        ${isMoving ? "opacity-20 z-40" : "opacity-100"}
-      `}
-      style={{ backgroundColor: "#171717" }}
-    >
+	  key={`${r}-${c}`}
+	  data-cell={`${r}-${c}`}
+	  onMouseDown={(e) => {
+		if (isManual && !manualLocked) {
+		  handleManualStart(r, c, e);
+		}
+	  }}
+	  onTouchStart={(e) => {
+		if (isManual && !manualLocked) {
+		  handleManualStart(r, c, e);
+		}
+	  }}
+	  onMouseUp={() => {
+		if (isManual) {
+		  lastPosRef.current = { r: -1, c: -1 };
+		  handleManualEnd();
+		}
+	  }}
+	  onTouchEnd={() => {
+		if (isManual) {
+		  lastPosRef.current = { r: -1, c: -1 };
+		  handleManualEnd();
+		}
+	  }}
+	  className={`relative w-full aspect-square flex items-center justify-center transition-all duration-75
+  ${
+    r === 0
+      ? "ring-2 ring-yellow-400 z-10 rounded-2xl"
+      : "rounded-2xl"
+  }
+  ${isMoving ? "opacity-20 z-40" : "opacity-100"}
+`}
+	  style={{ backgroundColor: "#171717" }}
+	>
       {orb === -1 || isManualHidden ? (
         <div className="w-[96%] h-[96%] rounded-2xl bg-black/40 border border-white/10" />
       ) : (
@@ -4989,8 +4993,8 @@ const updateSpecialPriority = (patch) => {
                 }}
               >
                 <div className="flex flex-col items-center">
-                  <div className="relative bg-neutral-900 p-3 rounded-3xl shadow-2xl border-2 border-neutral-800 mb-6 mx-auto w-fit overflow-visible mt-6">
-                    <div className="grid grid-cols-6">
+                  <div className="relative bg-neutral-900 p-3 rounded-3xl shadow-2xl border-2 border-neutral-800 mb-6 mx-auto w-full max-w-[540px] overflow-visible mt-6">
+                    <div className="grid grid-cols-6 gap-0">
                       {editingBoard.map((row, r) => (
                         <React.Fragment key={r}>
                           {r === 1 && (
@@ -5063,7 +5067,7 @@ const updateSpecialPriority = (patch) => {
                                   return;
                                 }
                               }}
-                              className="relative w-16 h-16 md:w-20 md:h-20 flex items-center justify-center transition-all duration-75 rounded-2xl"
+                              className="relative w-full aspect-square flex items-center justify-center transition-all duration-75 rounded-2xl"
                             >
                               <div
                                 className={`absolute inset-0 m-auto w-[95%] h-[95%] rounded-2xl pointer-events-none transition-all duration-75
