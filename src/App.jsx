@@ -26,13 +26,51 @@ const ORB_TYPES = {
   DARK: { id: 4, img: dImg },
   HEART: { id: 5, img: hImg },
 };
-const orbOf = (v) => (v < 0 ? -1 : (v % 10));                // 0~5
-const xMarkOf = (v) => (v < 0 ? 0 : Math.floor(v / 10) % 10); // 0/1/2 (X)
-const qMarkOf = (v) => (v < 0 ? 0 : Math.floor(v / 100));     // 0/1/2 (Q)
+const orbOf = (v) => (v < 0 ? -1 : v % 10);                    // 0~5
+const xMarkOf = (v) => (v < 0 ? 0 : Math.floor(v / 10) % 10); // 0/1/2
+const qMarkOf = (v) => (v < 0 ? 0 : Math.floor(v / 100) % 10); // 0/1/2
+const nMarkOf = (v) => (v < 0 ? 0 : Math.floor(v / 1000) % 10); // 0/1/2
 
-const withMarks = (orbId, xMark, qMark) => orbId + xMark * 10 + qMark * 100;
-const setXMark = (cellVal, xMark) => withMarks(orbOf(cellVal), xMark, qMarkOf(cellVal));
-const setQMark = (cellVal, qMark) => withMarks(orbOf(cellVal), xMarkOf(cellVal), qMark);
+const withMarks = (orbId, xMark = 0, qMark = 0, nMark = 0) =>
+  orbId + xMark * 10 + qMark * 100 + nMark * 1000;
+
+const setXMark = (cellVal, xMark) =>
+  withMarks(orbOf(cellVal), xMark, qMarkOf(cellVal), nMarkOf(cellVal));
+
+const setQMark = (cellVal, qMark) =>
+  withMarks(orbOf(cellVal), xMarkOf(cellVal), qMark, nMarkOf(cellVal));
+
+const setNMark = (cellVal, nMark) =>
+  withMarks(orbOf(cellVal), xMarkOf(cellVal), qMarkOf(cellVal), nMark);
+  
+const NO_CLEAR_MARK = {
+  NONE: 0,
+  N1: 1, // 首批 + 疊珠 都不能消
+  N2: 2, // 首批不能消，疊珠可消
+};
+
+const getOrbForMatchPhase = (cellVal, phase) => {
+  if (cellVal < 0) return -1;
+
+  const n = nMarkOf(cellVal);
+
+  // 首批：n1 / n2 都完全不可參與消除
+  if (phase === "initial") {
+    if (n === 1 || n === 2) return -1;
+  }
+
+  // 疊珠：只有 n1 不可消，n2 可以消
+  if (phase === "skyfall") {
+    if (n === 1) return -1;
+  }
+
+  return orbOf(cellVal);
+};
+
+const stripN2FromBoard = (b) =>
+  b.map((row) =>
+    row.map((cell) => (nMarkOf(cell) === 2 ? setNMark(cell, 0) : cell))
+  );
 
 const TOTAL_ROWS = 6;
 const COLS = 6;
@@ -42,6 +80,16 @@ const PLAY_ROWS = TOTAL_ROWS - PLAY_ROWS_START; // 5
 // 定義移動方向
 const DIRS_4 = [[0, 1], [0, -1], [1, 0], [-1, 0]];
 const DIRS_8 = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+
+const STATE_DESC = {
+  0: "刷符石（不附加狀態）",
+  1: "X1：路徑不可碰",
+  2: "X2：路徑不可碰，但最後一格可",
+  3: "START：指定起點",
+  4: "END：指定終點",
+  5: "N1：首批與疊珠都不可消",
+  6: "N2：首批不可消，但疊珠可消",
+};
 
 const DEFAULT_CONFIG = {
   beamWidth: 440,    
@@ -382,7 +430,7 @@ const [manualActive, setManualActive] = useState(false); // 轉珠是否已開�
 		for (let r = 0; r < TOTAL_ROWS; r++) {
 		  let row = [];
 		  for (let c = 0; c < COLS; c++) {
-			row.push(withMarks(Math.floor(Math.random() * 6), 0, 0)); // ✅ 永遠 mark=0
+			row.push(withMarks(Math.floor(Math.random() * 6), 0, 0, 0)); // ✅ 永遠 mark=0
 		  }
 		  newBoard.push(row);
 		}
@@ -395,7 +443,7 @@ const [manualActive, setManualActive] = useState(false); // 轉珠是否已開�
 		  [2,1,2,5,1,2],
 		  [5,4,1,0,3,1],
 		  [1,1,4,3,5,0],
-		].map(row => row.map(v => withMarks(v, 0, 0)));
+		].map(row => row.map(v => withMarks(v, 0, 0, 0)));
 	  }
 
 	  baseBoardRef.current = newBoard.map(r => [...r]);
@@ -761,8 +809,13 @@ const clearMarksForManual = (board) => {
     row.map((cell) => {
       const orb = orbOf(cell);
       const xm = xMarkOf(cell);
-      const nextX = xm === 1 ? 0 : xm;
-      return withMarks(orb, nextX, 0);
+      const nm = nMarkOf(cell);
+
+      const nextX = xm === 1 ? 0 : xm;   // X1 清掉，X2 保留
+      const nextQ = 0;                   // Start / End 清掉
+      const nextN = nm === 2 ? 0 : nm;   // ✅ 清 N2，保留 N1
+
+      return withMarks(orb, nextX, nextQ, nextN);
     })
   );
 };
@@ -1139,6 +1192,7 @@ const chaseToTargetCell = useCallback(
 	  setOriginalBoard(finalBoard.map((row) => [...row]));
 		boardRef.current = finalBoard.map((row) => [...row]);
 
+	  refreshTarget(finalBoard);
 	  setShowEditor(false);
 	};
 
@@ -1360,7 +1414,7 @@ const getSpecialScore = (ev, special) => {
   return sat * 40000000 - lack * 3000000;
 };
 
-const findMatches = (tempBoard) => {
+const findMatches = (tempBoard, phase = "initial") => {
   let combos = 0,
     clearedCount = 0,
     vC = 0,
@@ -1375,21 +1429,21 @@ const findMatches = (tempBoard) => {
   // ===== 水平三連 =====
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
     for (let c = 0; c < COLS - 2; ) {
-      const v0 = orbOf(tempBoard[r][c]);
-      if (v0 === -1) {
-        c++;
-        continue;
-      }
+      const v0 = getOrbForMatchPhase(tempBoard[r][c], phase);
+if (v0 === -1) {
+  c++;
+  continue;
+}
 
-      const v1 = orbOf(tempBoard[r][c + 1]);
-      const v2 = orbOf(tempBoard[r][c + 2]);
-      if (v0 !== v1 || v0 !== v2) {
-        c++;
-        continue;
-      }
+const v1 = getOrbForMatchPhase(tempBoard[r][c + 1], phase);
+const v2 = getOrbForMatchPhase(tempBoard[r][c + 2], phase);
+if (v0 !== v1 || v0 !== v2) {
+  c++;
+  continue;
+}
 
-      let k = c + 3;
-      while (k < COLS && orbOf(tempBoard[r][k]) === v0) k++;
+let k = c + 3;
+while (k < COLS && getOrbForMatchPhase(tempBoard[r][k], phase) === v0) k++;
 
       for (let x = c; x < k; x++) {
         toClear1D[r * COLS + x] = 1;
@@ -1402,21 +1456,21 @@ const findMatches = (tempBoard) => {
   // ===== 垂直三連 =====
   for (let c = 0; c < COLS; c++) {
     for (let r = PLAY_ROWS_START; r < TOTAL_ROWS - 2; ) {
-      const v0 = orbOf(tempBoard[r][c]);
-      if (v0 === -1) {
-        r++;
-        continue;
-      }
+      const v0 = getOrbForMatchPhase(tempBoard[r][c], phase);
+if (v0 === -1) {
+  r++;
+  continue;
+}
 
-      const v1 = orbOf(tempBoard[r + 1][c]);
-      const v2 = orbOf(tempBoard[r + 2][c]);
-      if (v0 !== v1 || v0 !== v2) {
-        r++;
-        continue;
-      }
+const v1 = getOrbForMatchPhase(tempBoard[r + 1][c], phase);
+const v2 = getOrbForMatchPhase(tempBoard[r + 2][c], phase);
+if (v0 !== v1 || v0 !== v2) {
+  r++;
+  continue;
+}
 
-      let k = r + 3;
-      while (k < TOTAL_ROWS && orbOf(tempBoard[k][c]) === v0) k++;
+let k = r + 3;
+while (k < TOTAL_ROWS && getOrbForMatchPhase(tempBoard[k][c], phase) === v0) k++;
 
       for (let y = r; y < k; y++) {
         toClear1D[y * COLS + c] = 1;
@@ -1440,7 +1494,7 @@ const findMatches = (tempBoard) => {
       if (!toClear1D[idx0] || visited[idx0]) continue;
 
       combos++;
-      const type = orbOf(tempBoard[r][c]);
+      const type = getOrbForMatchPhase(tempBoard[r][c], phase);
       let hasHM = false,
         hasVM = false;
 
@@ -1472,7 +1526,11 @@ const findMatches = (tempBoard) => {
           const nc = cc + dcs[i];
           if (nr >= PLAY_ROWS_START && nr < TOTAL_ROWS && nc >= 0 && nc < COLS) {
             const nidx = nr * COLS + nc;
-            if (toClear1D[nidx] && !visited[nidx] && orbOf(tempBoard[nr][nc]) === type) {
+            if (
+  toClear1D[nidx] &&
+  !visited[nidx] &&
+  getOrbForMatchPhase(tempBoard[nr][nc], phase) === type
+) {
               visited[nidx] = 1;
               qR[tail] = nr;
               qC[tail] = nc;
@@ -1513,7 +1571,7 @@ const findMatches = (tempBoard) => {
 };
 
 const evaluateBoard = (tempBoard, skyfall) => {
-  let result = findMatches(tempBoard);
+  let result = findMatches(tempBoard, "initial");
   let initialCombos = result.combos;
   let initialH = result.hC;
   let initialV = result.vC;
@@ -1541,7 +1599,7 @@ const evaluateBoard = (tempBoard, skyfall) => {
 
   while (loopResult.combos > 0) {
     currentBoard = applyGravity(currentBoard, loopResult.toClearMap);
-    loopResult = findMatches(currentBoard);
+    loopResult = findMatches(currentBoard, "skyfall");
     if (loopResult.combos > 0) {
       totalCombos += loopResult.combos;
       totalV += loopResult.vC;
@@ -4389,6 +4447,23 @@ const updateSpecialPriority = (patch) => {
               End
             </div>
           )}
+		  {nMarkOf(orb) === 1 && (
+  <img
+    src={n1Img}
+    className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+    draggable={false}
+    alt=""
+  />
+)}
+
+{nMarkOf(orb) === 2 && (
+  <img
+    src={n2Img}
+    className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+    draggable={false}
+    alt=""
+  />
+)}
         </>
       )}
     </div>
@@ -4978,7 +5053,7 @@ const updateSpecialPriority = (patch) => {
         </div>
 
         {showEditor && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="fixed inset-0 z-[4000] flex items-start justify-center bg-black/80 md:pt-6">
             <div
               className="pt-5 bg-neutral-900 w-full max-w-2xl rounded-3xl border border-neutral-800 shadow-2xl overflow-hidden max-h-[calc(100vh-2rem)] flex flex-col"
               onClick={(e) => e.stopPropagation()}
@@ -5005,68 +5080,93 @@ const updateSpecialPriority = (patch) => {
                             <div
                               key={`${r}-${c}`}
                               onClick={() => {
-                                const next = editingBoard.map((row) => [...row]);
-                                const cur = next[r][c];
+  const next = editingBoard.map((row) => [...row]);
+  const cur = next[r][c];
 
-                                const o = orbOf(cur);
-                                const xm = xMarkOf(cur);
-                                const qm = qMarkOf(cur);
+  const o = orbOf(cur);
+  const xm = xMarkOf(cur);
+  const qm = qMarkOf(cur);
+  const nm = nMarkOf(cur);
 
-                                if (selectedMark === 0) {
-                                  next[r][c] = withMarks(selectedBrush, xm, qm);
-                                  setEditingBoard(next);
-                                  return;
-                                }
+  if (selectedMark === 0) {
+    next[r][c] = withMarks(selectedBrush, xm, qm, nm);
+    setEditingBoard(next);
+    return;
+  }
 
-                                if (selectedMark === 1 || selectedMark === 2) {
-                                  const want = selectedMark;
-                                  const nx = xm === want ? 0 : want;
-                                  const nq = nx !== 0 ? 0 : qm;
-                                  next[r][c] = withMarks(o, nx, nq);
-                                  setEditingBoard(next);
-                                  return;
-                                }
+  if (selectedMark === 1 || selectedMark === 2) {
+    const want = selectedMark;
+    const nx = xm === want ? 0 : want;
+    const nq = nx !== 0 ? 0 : qm; // 有 X 時不保留 Q
+    next[r][c] = withMarks(o, nx, nq, nm);
+    setEditingBoard(next);
+    return;
+  }
 
-                                if (selectedMark === 3 || selectedMark === 4) {
-                                  const wantQ = selectedMark === 3 ? 1 : 2;
+  if (selectedMark === 5 || selectedMark === 6) {
+    const wantN = selectedMark === 5 ? 1 : 2;
+    const targetOrb = orbOf(cur);
+    if (targetOrb < 0) return;
 
-                                  if (wantQ === 1 && xm !== 0) return;
-                                  if (wantQ === 2 && xm === 1) return;
+    const shouldClear = nm === wantN;
 
-                                  if (qm === wantQ) {
-                                    next[r][c] = withMarks(o, xm, 0);
-                                    setEditingBoard(next);
-                                    return;
-                                  }
+    for (let rr = 0; rr < TOTAL_ROWS; rr++) {
+      for (let cc = 0; cc < COLS; cc++) {
+        const v = next[rr][cc];
+        if (orbOf(v) !== targetOrb) continue;
 
-                                  if (r === 0) {
-                                    for (let cc = 0; cc < COLS; cc++) {
-                                      const v = next[0][cc];
-                                      if (wantQ === 1 && qMarkOf(v) === 2)
-                                        return;
-                                      if (wantQ === 2 && qMarkOf(v) === 1)
-                                        return;
-                                    }
-                                  }
+        next[rr][cc] = withMarks(
+          orbOf(v),
+          xMarkOf(v),
+          qMarkOf(v),
+          shouldClear ? 0 : wantN
+        );
+      }
+    }
 
-                                  for (let rr = 0; rr < TOTAL_ROWS; rr++) {
-                                    for (let cc = 0; cc < COLS; cc++) {
-                                      const v = next[rr][cc];
-                                      if (qMarkOf(v) === wantQ) {
-                                        next[rr][cc] = withMarks(
-                                          orbOf(v),
-                                          xMarkOf(v),
-                                          0
-                                        );
-                                      }
-                                    }
-                                  }
+    setEditingBoard(next);
+    return;
+  }
 
-                                  next[r][c] = withMarks(o, xm, wantQ);
-                                  setEditingBoard(next);
-                                  return;
-                                }
-                              }}
+  if (selectedMark === 3 || selectedMark === 4) {
+    const wantQ = selectedMark === 3 ? 1 : 2;
+
+    if (wantQ === 1 && xm !== 0) return;
+    if (wantQ === 2 && xm === 1) return;
+
+    if (qm === wantQ) {
+      next[r][c] = withMarks(o, xm, 0, nm);
+      setEditingBoard(next);
+      return;
+    }
+
+    if (r === 0) {
+      for (let cc = 0; cc < COLS; cc++) {
+        const v = next[0][cc];
+        if (wantQ === 1 && qMarkOf(v) === 2) return;
+        if (wantQ === 2 && qMarkOf(v) === 1) return;
+      }
+    }
+
+    for (let rr = 0; rr < TOTAL_ROWS; rr++) {
+      for (let cc = 0; cc < COLS; cc++) {
+        const v = next[rr][cc];
+        if (qMarkOf(v) === wantQ) {
+          next[rr][cc] = withMarks(
+            orbOf(v),
+            xMarkOf(v),
+            0,
+            nMarkOf(v)
+          );
+        }
+      }
+    }
+
+    next[r][c] = withMarks(o, xm, wantQ, nm);
+    setEditingBoard(next);
+    return;
+  }
+}}
                               className="relative w-full aspect-square flex items-center justify-center transition-all duration-75 rounded-2xl"
                             >
                               <div
@@ -5119,6 +5219,24 @@ const updateSpecialPriority = (patch) => {
                                   END
                                 </div>
                               )}
+							  
+							  {nMarkOf(orb) === 1 && (
+  <img
+    src={n1Img}
+    className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+    draggable={false}
+    alt=""
+  />
+)}
+
+{!isManual && nMarkOf(orb) === 2 && (
+  <img
+    src={n2Img}
+    className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+    draggable={false}
+    alt=""
+  />
+)}
                             </div>
                           ))}
                         </React.Fragment>
@@ -5153,11 +5271,17 @@ const updateSpecialPriority = (patch) => {
                       ))}
                     </div>
 
-                    <p className="text-xs font-black text-neutral-500 uppercase tracking-widest text-center mt-6 mb-4">
-                      STATE PALETTE
-                    </p>
+                    <div className="mt-6 mb-4 text-center">
+  <p className="text-xs font-black text-neutral-500 uppercase tracking-widest">
+    STATE PALETTE:
+  </p>
 
-                    <div className="flex justify-center gap-3">
+  <p className="mt-2 text-sm md:text-base font-black underline underline-offset-4 text-neutral-200">
+    {STATE_DESC[selectedMark] ?? "選擇狀態"}
+  </p>
+</div>
+
+                    <div className="flex flex-wrap justify-center gap-3 max-w-[450px] mx-auto">
                       <button
                         onClick={() => setSelectedMark(0)}
                         className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
@@ -5242,6 +5366,45 @@ const updateSpecialPriority = (patch) => {
                           </button>
                         </>
                       )}
+					  
+					  <button
+  onClick={() => setSelectedMark(5)}
+  className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
+    ${
+      selectedMark === 5
+        ? "ring-4 ring-emerald-400 scale-110 shadow-lg shadow-emerald-500/20"
+        : "opacity-70 hover:opacity-100"
+    }`}
+  title="附加 N1（首批與疊珠都不能消）"
+>
+  <img
+    src={n1Img}
+    className="w-[85%] h-[85%] object-contain"
+    draggable={false}
+    alt=""
+  />
+</button>
+
+{!isManual && (
+  <button
+    onClick={() => setSelectedMark(6)}
+    className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
+      ${
+        selectedMark === 6
+          ? "ring-4 ring-lime-400 scale-110 shadow-lg shadow-lime-500/20"
+          : "opacity-70 hover:opacity-100"
+      }`}
+    title="附加 N2（首批不可參與消除；但疊珠可消）"
+  >
+    <img
+      src={n2Img}
+      className="w-[85%] h-[85%] object-contain"
+      draggable={false}
+      alt=""
+    />
+  </button>
+)}
+					  
                     </div>
                   </div>
                 </div>
