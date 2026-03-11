@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { toCanvas } from "html-to-image";
 import ImportCropModal from "./ImportCropModal";
+import { convertTemplateBoardTo2D } from "./activeSkillTemplateData";
+import ActiveSkillTemplateModal from "./ActiveSkillTemplateModal";
 import GIF from "gif.js.optimized";
 import gifWorkerUrl from "gif.js.optimized/dist/gif.worker.js?url";
 import gifsicle from "gifsicle-wasm-browser";
@@ -26,6 +28,7 @@ const ORB_TYPES = {
   DARK: { id: 4, img: dImg },
   HEART: { id: 5, img: hImg },
 };
+
 const orbOf = (v) => (v < 0 ? -1 : v % 10);                    // 0~5
 const xMarkOf = (v) => (v < 0 ? 0 : Math.floor(v / 10) % 10); // 0/1/2
 const qMarkOf = (v) => (v < 0 ? 0 : Math.floor(v / 100) % 10); // 0/1/2
@@ -142,6 +145,7 @@ function topKByScore(items, K, getScore) {
 }
 
 const App = () => {
+const [showTemplateBrowser, setShowTemplateBrowser] = useState(false);
 
 const [showTopBar, setShowTopBar] = useState(true);
 const lastScrollYRef = useRef(0);
@@ -1815,17 +1819,30 @@ const getBoardKey = (b) => {
 };
 
 // ✅ 更更提升達標率：未達標評分更「以 miss 為王」，pot 只在接近時才放大
-const calcScore = (ev, pot, pathLen, cfg, target, mode, priority, specialPriority) => {
+  const calcScore = (
+  ev,
+  pot,
+  pathLen,
+  cfg,
+  target,
+  mode,
+  priority,
+  specialPriority,
+  violatesN2 = false
+) => {
   const major = mode === "vertical" ? ev.verticalCombos : ev.horizontalCombos;
 
   const over = Math.max(0, ev.combos - target);
   const overPenalty = over * over * 600000;
 
-  const effectiveStepPenalty = priority === "steps" ? cfg.stepPenalty * 4 : cfg.stepPenalty;
+  const effectiveStepPenalty =
+    priority === "steps" ? cfg.stepPenalty * 4 : cfg.stepPenalty;
   const clearedW = priority === "combo" ? 1000 : 200;
 
-  // ✅ 特優先：比一般 combo/步數都更高權重
   const specialScore = getSpecialScore(ev, specialPriority);
+
+  // ✅ 不合法最終盤面的 soft penalty：可活著擴展，但不容易被當成最佳
+  const illegalPenalty = violatesN2 ? 2200000 : 0;
 
   if (ev.combos >= target) {
     const stepCost = pathLen * effectiveStepPenalty;
@@ -1834,7 +1851,8 @@ const calcScore = (ev, pot, pathLen, cfg, target, mode, priority, specialPriorit
       5200000 -
       stepCost -
       overPenalty +
-      ev.clearedCount * clearedW
+      ev.clearedCount * clearedW -
+      illegalPenalty
     );
   }
 
@@ -1858,10 +1876,11 @@ const calcScore = (ev, pot, pathLen, cfg, target, mode, priority, specialPriorit
     majorBonus +
     pot * potWeight +
     clearedBonus -
-    stepSoft
+    stepSoft -
+    illegalPenalty
   );
 };
-
+  
   const beamSolve = (originalBoard, cfg, target, mode, priority, skyfall, diagonal, specialPriority) => {
   const makeNode = (parent, r, c) => ({ parent, r, c, len: parent ? parent.len + 1 : 1 });
 
@@ -1918,7 +1937,9 @@ const calcScore = (ev, pot, pathLen, cfg, target, mode, priority, specialPriorit
   // ✅ 一旦找到達標解，記住目前最小步數；外層 step 到了就可以直接停（保證最小步）
   let bestReachedSteps = Infinity;
 
-  const considerBest = (ev, score, node) => {
+  const considerBest = (ev, score, node, violatesN2) => {
+  // ✅ 非法最終盤面不能當答案，但可以繼續擴展
+  if (violatesN2) return;
   if (!shouldAcceptEnd(node)) return;
 
   const curSteps = stepsOf(node);
@@ -1929,11 +1950,9 @@ const calcScore = (ev, pot, pathLen, cfg, target, mode, priority, specialPriorit
 
   let isBetterGlobal = false;
 
-  // ✅ 先比特優先
   if (curSpecial > bestSpecial) {
     isBetterGlobal = true;
   } else if (curSpecial === bestSpecial) {
-    // 再走你原本的判定
     if (ev.combos >= target) {
       if (bestGlobal.combos < target) {
         isBetterGlobal = true;
@@ -1941,8 +1960,12 @@ const calcScore = (ev, pot, pathLen, cfg, target, mode, priority, specialPriorit
         if (curSteps < bestSteps) isBetterGlobal = true;
         else if (curSteps === bestSteps) {
           if (score > bestGlobal.score) isBetterGlobal = true;
-          else if (score === bestGlobal.score && ev.clearedCount > bestGlobal.clearedCount)
+          else if (
+            score === bestGlobal.score &&
+            ev.clearedCount > bestGlobal.clearedCount
+          ) {
             isBetterGlobal = true;
+          }
         }
       }
     } else {
@@ -1952,21 +1975,27 @@ const calcScore = (ev, pot, pathLen, cfg, target, mode, priority, specialPriorit
           if (curSteps < bestSteps) isBetterGlobal = true;
           else if (curSteps === bestSteps) {
             if (score > bestGlobal.score) isBetterGlobal = true;
-            else if (score === bestGlobal.score && ev.clearedCount > bestGlobal.clearedCount)
+            else if (
+              score === bestGlobal.score &&
+              ev.clearedCount > bestGlobal.clearedCount
+            ) {
               isBetterGlobal = true;
+            }
           }
         }
       }
     }
   }
 
-  if (isBetterGlobal) bestGlobal = { ...ev, node, score, specialScore: curSpecial };
+  if (isBetterGlobal) {
+    bestGlobal = { ...ev, node, score, specialScore: curSpecial };
+  }
 
   if (ev.combos >= target && shouldAcceptEnd(node)) {
     if (curSteps < bestReachedSteps) bestReachedSteps = curSteps;
   }
 };
-
+  
   const dirsPlay = diagonal ? DIRS_8 : DIRS_4;
   let beam = [];
 
@@ -2036,22 +2065,43 @@ const calcScore = (ev, pot, pathLen, cfg, target, mode, priority, specialPriorit
     const evalBoard = boardWithHeldFilled(boardCopy, hole, held);
 
 const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
-if (violatesN2) return;
 
 const ev = evaluateBoard(evalBoard, skyfall, initial);
 const pot = combinedPotentialScore(evalBoard, mode);
-const score = calcScore(ev, pot, 0, cfg, target, mode, priority, specialPriority);
+const score = calcScore(
+  ev,
+  pot,
+  0,
+  cfg,
+  target,
+  mode,
+  priority,
+  specialPriority,
+  violatesN2
+);
 
     const key = `${getBoardKey(boardCopy)}|${held}|${r},${c}|${locked0 ? 1 : 0}`;
     if (!betterThanVisited(key, ev, score, 0, mode)) return;
 
     const node = makeNode(null, r, c);
-    considerBest(ev, score, node);
+    considerBest(ev, score, node, violatesN2);
 
-    if (ev.combos >= target && shouldAcceptEnd(node)) return;
+    if (ev.combos >= target && shouldAcceptEnd(node) && !violatesN2) return;
 
-    beam.push({ board: boardCopy, held, hole, r, c, node, score, ev, pot, locked: locked0 });
-  };
+    beam.push({
+  board: boardCopy,
+  held,
+  hole,
+  r,
+  c,
+  node,
+  score,
+  ev,
+  pot,
+  locked: locked0,
+  violatesN2,
+});
+	};
 
   for (let c = 0; c < COLS; c++) pushInitState(0, c, true);
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
@@ -2063,12 +2113,16 @@ const score = calcScore(ev, pot, 0, cfg, target, mode, priority, specialPriority
   // ✅ combo 模式挑 beam：固定配額 + 單次掃描（不會洗牌，不會「像無限迴圈」）
   const pickBeamCombo = (candidates) => {
     candidates.sort((a, b) => {
-      const aReach = a.ev.combos >= target;
-      const bReach = b.ev.combos >= target;
-      if (aReach !== bReach) return aReach ? -1 : 1;
-      if (a.score !== b.score) return b.score - a.score;
-      return (b.ev.clearedCount || 0) - (a.ev.clearedCount || 0);
-    });
+  const aReach = a.ev.combos >= target && !a.violatesN2;
+  const bReach = b.ev.combos >= target && !b.violatesN2;
+  if (aReach !== bReach) return aReach ? -1 : 1;
+
+  // ✅ 合法盤面優先，但不封殺非法中途盤
+  if (a.violatesN2 !== b.violatesN2) return a.violatesN2 ? 1 : -1;
+
+  if (a.score !== b.score) return b.score - a.score;
+  return (b.ev.clearedCount || 0) - (a.ev.clearedCount || 0);
+});
 
     const BW = cfg.beamWidth;
     const out = [];
@@ -2180,38 +2234,45 @@ const score = calcScore(ev, pot, 0, cfg, target, mode, priority, specialPriority
           const evalBoard = boardWithHeldFilled(nextBoard, nextHole, state.held);
 
 const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
-if (violatesN2) {
+
+const ev = evaluateBoard(evalBoard, skyfall, initial);
+const pot = combinedPotentialScore(evalBoard, mode);
+const score = calcScore(
+  ev,
+  pot,
+  newSteps,
+  cfg,
+  target,
+  mode,
+  priority,
+  specialPriority,
+  violatesN2
+);
+
+const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
+if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
+
+considerBest(ev, score, newNode, violatesN2);
+
+if (ev.combos >= target && shouldAcceptEnd(newNode) && !violatesN2) {
   nodesExpanded++;
   continue;
 }
 
-const ev = evaluateBoard(evalBoard, skyfall, initial);
-const pot = combinedPotentialScore(evalBoard, mode);
-const score = calcScore(ev, pot, newSteps, cfg, target, mode, priority, specialPriority);
-
-          const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
-          if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
-
-          considerBest(ev, score, newNode);
-
-          if (ev.combos >= target && shouldAcceptEnd(newNode)) {
-            nodesExpanded++;
-            continue;
-          }
-
-          candidates.push({
-            board: nextBoard,
-            held: state.held,
-            hole: nextHole,
-            r: nr,
-            c: nc,
-            node: newNode,
-            locked: nextLocked,
-            score,
-            ev,
-            pot,
-          });
-          nodesExpanded++;
+candidates.push({
+  board: nextBoard,
+  held: state.held,
+  hole: nextHole,
+  r: nr,
+  c: nc,
+  node: newNode,
+  locked: nextLocked,
+  score,
+  ev,
+  pot,
+  violatesN2,
+});
+nodesExpanded++;
           continue;
         }
 
@@ -2227,15 +2288,22 @@ const score = calcScore(ev, pot, newSteps, cfg, target, mode, priority, specialP
 		  }
 
 		  const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
-if (violatesN2) {
-  continue;
-}
 
 const ev = evaluateBoard(evalBoard, skyfall, initial);
 const pot = combinedPotentialScore(evalBoard, mode);
-const score = calcScore(ev, pot, newSteps, cfg, target, mode, priority, specialPriority);
+const score = calcScore(
+  ev,
+  pot,
+  newSteps,
+  cfg,
+  target,
+  mode,
+  priority,
+  specialPriority,
+  violatesN2
+);
 
-considerBest(ev, score, newNode);
+considerBest(ev, score, newNode, violatesN2);
 continue;
 		}
 
@@ -2252,37 +2320,43 @@ continue;
         const evalBoard = boardWithHeldFilled(nextBoard, nextHole, state.held);
 
 const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
-if (violatesN2) {
+
+const ev = evaluateBoard(evalBoard, skyfall, initial);
+const pot = combinedPotentialScore(evalBoard, mode);
+const score = calcScore(
+  ev,
+  pot,
+  newSteps,
+  cfg,
+  target,
+  mode,
+  priority,
+  specialPriority,
+  violatesN2
+);
+        const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
+        if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
+
+        considerBest(ev, score, newNode, violatesN2);
+
+        if (ev.combos >= target && shouldAcceptEnd(newNode) && !violatesN2) {
   nodesExpanded++;
   continue;
 }
 
-const ev = evaluateBoard(evalBoard, skyfall, initial);
-const pot = combinedPotentialScore(evalBoard, mode);
-const score = calcScore(ev, pot, newSteps, cfg, target, mode, priority, specialPriority);
-
-        const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
-        if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
-
-        considerBest(ev, score, newNode);
-
-        if (ev.combos >= target && shouldAcceptEnd(newNode)) {
-          nodesExpanded++;
-          continue;
-        }
-
         candidates.push({
-          board: nextBoard,
-          held: state.held,
-          hole: nextHole,
-          r: nr,
-          c: nc,
-          node: newNode,
-          locked: nextLocked,
-          score,
-          ev,
-          pot,
-        });
+  board: nextBoard,
+  held: state.held,
+  hole: nextHole,
+  r: nr,
+  c: nc,
+  node: newNode,
+  locked: nextLocked,
+  score,
+  ev,
+  pot,
+  violatesN2,
+});
         nodesExpanded++;
       }
     }
@@ -2295,10 +2369,12 @@ const score = calcScore(ev, pot, newSteps, cfg, target, mode, priority, specialP
       // steps priority：維持你原本的分桶策略
       const buckets = new Map();
       for (const st of candidates) {
-        const k =
-          (mode === "vertical" ? st.ev.verticalCombos : st.ev.horizontalCombos) * 1000000 +
-          st.ev.combos * 1000 +
-          st.ev.clearedCount;
+        const legalBonus = st.violatesN2 ? 0 : 1000000000;
+const k =
+  legalBonus +
+  (mode === "vertical" ? st.ev.verticalCombos : st.ev.horizontalCombos) * 1000000 +
+  st.ev.combos * 1000 +
+  st.ev.clearedCount;
         if (!buckets.has(k)) buckets.set(k, []);
         buckets.get(k).push(st);
       }
@@ -5241,7 +5317,7 @@ const updateSpecialPriority = (patch) => {
         {showEditor && (
           <div className="fixed inset-0 z-[4000] flex items-start justify-center bg-black/80 md:pt-6">
             <div
-              className="pt-5 bg-neutral-900 w-full max-w-2xl rounded-3xl border border-neutral-800 shadow-2xl overflow-hidden max-h-[calc(100vh-2rem)] flex flex-col"
+              className="pt-5 bg-neutral-900 w-full max-w-2xl rounded-3xl border border-neutral-800 shadow-2xl overflow-hidden max-h-[calc(100vh-2rem)] flex flex-col h-[100dvh] md:h-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div
@@ -5394,17 +5470,7 @@ const updateSpecialPriority = (patch) => {
                                 />
                               )}
 
-                              {!isManual && qMarkOf(orb) === 1 && (
-                                <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
-                                  START
-                                </div>
-                              )}
-
-                              {!isManual && qMarkOf(orb) === 2 && (
-                                <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
-                                  END
-                                </div>
-                              )}
+                              
 							  
 							  {nMarkOf(orb) === 1 && (
   <img
@@ -5423,6 +5489,17 @@ const updateSpecialPriority = (patch) => {
     alt=""
   />
 )}
+{!isManual && qMarkOf(orb) === 1 && (
+                                <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
+                                  START
+                                </div>
+                              )}
+
+                              {!isManual && qMarkOf(orb) === 2 && (
+                                <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
+                                  END
+                                </div>
+                              )}
                             </div>
                           ))}
                         </React.Fragment>
@@ -5597,7 +5674,7 @@ const updateSpecialPriority = (patch) => {
               </div>
 
               <div className="sticky bottom-0 bg-neutral-900 border-t border-neutral-800 p-4">
-                <div className="grid grid-cols-3 gap-2 w-full">
+                <div className="grid grid-cols-4 gap-2 w-full">
                   <button
                     onClick={() => setShowEditor(false)}
                     className="w-full py-5 rounded-2xl font-bold bg-neutral-800 hover:bg-neutral-700 transition-colors text-base"
@@ -5619,6 +5696,13 @@ const updateSpecialPriority = (patch) => {
                   >
                     匯入版面
                   </button>
+				  
+				  <button
+					  onClick={() => setShowTemplateBrowser(true)}
+					  className="w-full py-5 rounded-2xl font-black bg-purple-600 hover:bg-purple-500 shadow-xl shadow-purple-900/20 transition-all flex items-center justify-center gap-2 text-base"
+					>
+					  固版查詢
+					</button>
 
                   <button
                     onClick={handleApplyCustomBoard}
@@ -5725,6 +5809,33 @@ const updateSpecialPriority = (patch) => {
         }
       }}
     />
+	
+	<ActiveSkillTemplateModal
+  open={showTemplateBrowser}
+  onClose={() => setShowTemplateBrowser(false)}
+  onSelectTemplate={(template) => {
+    try {
+      const board2D = convertTemplateBoardTo2D(template.board);
+
+      setEditingBoard((prev) => {
+        const next = prev.map((r) => [...r]);
+
+        for (let r = 0; r < 5; r++) {
+          for (let c = 0; c < 6; c++) {
+            next[r + 1][c] = board2D[r][c];
+          }
+        }
+
+        return next;
+      });
+
+      console.log("已套用固版:", template.characterName, board2D);
+    } catch (err) {
+      console.error("套用固版失敗:", err);
+      alert(`套用固版失敗: ${err.message}`);
+    }
+  }}
+/>
   </div>
 );
 };
