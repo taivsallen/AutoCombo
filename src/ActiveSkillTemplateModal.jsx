@@ -22,6 +22,16 @@ const TEMPLATE_ORB_IMG = {
   h: hImg,
 };
 
+const RACE_IMG = {
+  human: "./race/human.png",
+  god: "./race/god.png",
+  demon: "./race/demon.png",
+  beast: "./race/beast.png",
+  dragon: "./race/dragon.png",
+  machina: "./race/machina.png",
+  elf: "./race/elf.png",
+};
+
 function TemplateBoardPreview({ board }) {
   return (
     <div className="rounded-2xl bg-neutral-900/80 border border-white/5 p-1.5">
@@ -247,9 +257,7 @@ const getRaceLabel = (value) =>
   group w-full text-left rounded-3xl
   bg-gradient-to-b from-neutral-800 to-neutral-900
   border p-3 transition-all duration-200
-  shadow-[0_10px_30px_rgba(0,0,0,0.28)]
-  hover:-translate-y-0.5
-  active:scale-[0.985]
+  shadow-[0_10px_20px_rgba(0,0,0,0.22)]
   `,
   selectedTemplateId === item.id
     ? "border-white ring-2 ring-white/90 shadow-[0_0_0_1px_rgba(255,255,255,0.25),0_14px_36px_rgba(255,255,255,0.08)]"
@@ -260,19 +268,30 @@ const getRaceLabel = (value) =>
     <div className="flex gap-3 items-start mb-3">
       {/* 角色縮圖 */}
       <div
-        className="
-          w-20 h-20 shrink-0 rounded-sm
-          bg-neutral-950/90 border border-white/10
-          overflow-hidden flex items-center justify-center
-          shadow-inner
-        "
-      >
+  className="
+    relative
+    w-20 h-20 shrink-0 rounded-sm
+    bg-neutral-950/90 border border-white/10
+    overflow-hidden flex items-center justify-center
+    shadow-inner
+  "
+>
         <img
           src={item.characterImg}
           alt={item.characterName}
           draggable={false}
           className="w-full h-full object-contain"
         />
+		<img
+  src={RACE_IMG[item.race]}
+  alt={item.race}
+  className="
+    absolute bottom-0 right-0
+    w-7 h-7
+    object-contain
+    pointer-events-none
+  "
+/>
       </div>
 
       {/* 名稱 / note */}

@@ -869,6 +869,230 @@ export const ACTIVE_SKILL_TEMPLATE_DATA = [
 				'f', 'f', 'f', 'f', 'f', 'f'
 			],
   },
+  {
+  id: "10920",
+    characterName: "無底之瓶 ‧ 克萊因",
+	note: "",
+    characterImg: "./characters/10920.png",
+    attribute: ATTRIBUTES.WATER,
+    race: RACES.DRAGON,
+	board:
+			[
+				'w', 'w', 'w', 'f', 'f', 'f', 
+				'w', 'p', 'p', 'p', 'h', 'f', 
+				'w', 'p', 'd', 'l', 'h', 'f', 
+				'h', 'p', 'd', 'l', 'h', 'h', 
+				'd', 'd', 'd', 'l', 'l', 'l'
+			],
+  },
+  {
+  id: "10916",
+    characterName: "空條承太郎與白金之星 ‧ 世界",
+	note: "開技時及回合結束時",
+    characterImg: "./characters/10916.png",
+    attribute: ATTRIBUTES.DARK,
+    race: RACES.HUMAN,
+	board:
+			[
+				'd', 'h', 'h', 'h', 'h', 'd', 
+				'd', 'l', 'w', 'f', 'p', 'd', 
+				'd', 'l', 'w', 'f', 'p', 'd', 
+				'd', 'l', 'w', 'f', 'p', 'd', 
+				'd', 'h', 'h', 'h', 'h', 'd'
+			],
+  },
+  {
+  id: "10913",
+    characterName: "天氣預報",
+	note: "",
+    characterImg: "./characters/10913.png",
+    attribute: ATTRIBUTES.WATER,
+    race: RACES.HUMAN,
+	board:
+			[
+				'f', 'f', 'f', 'f', 'f', 'f', 
+				'l', 'l', 'l', 'l', 'l', 'l', 
+				'p', 'p', 'p', 'p', 'p', 'p', 
+				'w', 'w', 'w', 'w', 'w', 'w', 
+				'd', 'd', 'd', 'd', 'd', 'd'
+			],
+  },
+  {
+  id: "10912",
+    characterName: "迪亞波羅與緋紅之王",
+	note: "觸碰>=3數量及回合結束時",
+    characterImg: "./characters/10912.png",
+    attribute: ATTRIBUTES.FIRE,
+    race: RACES.HUMAN,
+	board:
+			[
+				'f', 'h', 'f', 'f', 'h', 'f', 
+				'h', 'h', 'f', 'f', 'h', 'h', 
+				'f', 'p', 'h', 'h', 'p', 'f', 
+				'h', 'h', 'f', 'f', 'h', 'h', 
+				'f', 'h', 'f', 'f', 'h', 'f'
+			],
+  },
+  {
+  id: "10906",
+    characterName: "吉良吉影與殺手皇后",
+	note: "回合結束時",
+    characterImg: "./characters/10906.png",
+    attribute: ATTRIBUTES.FIRE,
+    race: RACES.HUMAN,
+	board:
+			[
+				'f', 'f', 'f', 'f', 'f', 'f', 
+				'f', 'f', 'f', 'f', 'f', 'f', 
+				'f', 'f', 'f', 'f', 'f', 'f', 
+				'f', 'f', 'f', 'f', 'f', 'f', 
+				'f', 'f', 'f', 'f', 'f', 'f'
+			],
+  },
+  {
+  id: "10905",
+    characterName: "岸邊露伴與天堂之門",
+	note: "開技時及回合結束時",
+    characterImg: "./characters/10905.png",
+    attribute: ATTRIBUTES.PLANT,
+    race: RACES.HUMAN,
+	board:
+			[
+				'p', 'p', 'p', 'l', 'l', 'l', 
+				'p', 'h', 'h', 'h', 'h', 'l', 
+				'p', 'h', 'h', 'h', 'h', 'l', 
+				'p', 'h', 'h', 'h', 'h', 'l', 
+				'p', 'p', 'p', 'l', 'l', 'l'
+			],
+  },
+  {
+  id: "10898",
+    characterName: "喬魯諾 ‧ 喬巴拿與黃金體驗",
+	note: "",
+    characterImg: "./characters/10898.png",
+    attribute: ATTRIBUTES.LIGHT,
+    race: RACES.HUMAN,
+	board:
+			[
+				'l', 'l', 'l', 'l', 'l', 'l', 
+				'l', 'l', 'l', 'l', 'l', 'l', 
+				'l', 'l', 'l', 'l', 'l', 'l', 
+				'l', 'l', 'l', 'l', 'l', 'l', 
+				'l', 'l', 'l', 'l', 'l', 'l'
+			],
+  },
+  {
+  id: "10897_a",
+    characterName: "廣瀨康一與迴音三號",
+	note: "開技時",
+    characterImg: "./characters/10897.png",
+    attribute: ATTRIBUTES.PLANT,
+    race: RACES.HUMAN,
+	board:
+			[
+				'h', 'h', 'p', 'p', 'h', 'h', 
+				'h', 'p', 'h', 'p', 'h', 'h', 
+				'h', 'h', 'h', 'p', 'h', 'h', 
+				'h', 'h', 'h', 'p', 'h', 'h', 
+				'h', 'p', 'p', 'p', 'p', 'h'
+			],
+  },
+  {
+  id: "10897_b",
+    characterName: "廣瀨康一與迴音三號",
+	note: "回合結束時",
+    characterImg: "./characters/10897.png",
+    attribute: ATTRIBUTES.PLANT,
+    race: RACES.HUMAN,
+	board:
+			[
+				'h', 'h', 'p', 'p', 'h', 'h', 
+				'h', 'p', 'h', 'h', 'p', 'h', 
+				'h', 'h', 'h', 'p', 'h', 'h', 
+				'h', 'h', 'p', 'h', 'h', 'h', 
+				'h', 'p', 'p', 'p', 'p', 'h'
+			],
+  },
+  {
+  id: "10897_c",
+    characterName: "廣瀨康一與迴音三號",
+	note: "【替身】模式、開技時及回合結束時",
+    characterImg: "./characters/10897.png",
+    attribute: ATTRIBUTES.PLANT,
+    race: RACES.HUMAN,
+	board:
+			[
+				'h', 'p', 'p', 'p', 'p', 'h', 
+				'h', 'h', 'h', 'h', 'p', 'h', 
+				'h', 'h', 'p', 'p', 'h', 'h', 
+				'h', 'h', 'h', 'h', 'p', 'h', 
+				'h', 'p', 'p', 'p', 'p', 'h'
+			],
+  },
+  {
+  id: "10895",
+    characterName: "空條徐倫與石之海",
+	note: "【替身】模式、開技時及回合結束時",
+    characterImg: "./characters/10895.png",
+    attribute: ATTRIBUTES.WATER,
+    race: RACES.HUMAN,
+	board:
+			[
+				'w', 'w', 'w', 'w', 'w', 'w', 
+				'p', 'p', 'w', 'w', 'p', 'p', 
+				'p', 'p', 'p', 'p', 'p', 'p', 
+				'p', 'p', 'w', 'w', 'p', 'p', 
+				'w', 'w', 'w', 'w', 'w', 'w'
+			],
+  },
+  {
+  id: "10892",
+    characterName: "皓耀珀火 ‧ 刻琿",
+	note: "技能關閉時",
+    characterImg: "./characters/10892.png",
+    attribute: ATTRIBUTES.FIRE,
+    race: RACES.DRAGON,
+	board:
+			[
+				'f', 'f', 'f', 'l', 'd', 'w', 
+				'p', 'p', 'p', 'l', 'd', 'w', 
+				'l', 'd', 'w', 'l', 'd', 'w', 
+				'l', 'd', 'w', 'p', 'p', 'p', 
+				'l', 'd', 'w', 'f', 'f', 'f'
+			],
+  },
+  {
+  id: "10887",
+    characterName: "正道鐵律 ‧ 蓋倫",
+	note: "",
+    characterImg: "./characters/10887.png",
+    attribute: ATTRIBUTES.DARK,
+    race: RACES.HUMAN,
+	board:
+			[
+				'd', 'd', 'l', 'l', 'd', 'd', 
+				'd', 'd', 'l', 'l', 'd', 'd', 
+				'h', 'h', 'h', 'h', 'h', 'h', 
+				'd', 'd', 'l', 'l', 'd', 'd', 
+				'd', 'd', 'l', 'l', 'd', 'd'
+			],
+  },
+  {
+  id: "10874",
+    characterName: "命運歡樂頌 ‧ 貝多芬",
+	note: "1技能",
+    characterImg: "./characters/10874.png",
+    attribute: ATTRIBUTES.WATER,
+    race: RACES.GOD,
+	board:
+			[
+				'w', 'w', 'w', 'w', 'w', 'w', 
+				'f', 'f', 'f', 'f', 'f', 'f', 
+				'p', 'p', 'p', 'p', 'p', 'p', 
+				'l', 'l', 'l', 'l', 'l', 'l', 
+				'd', 'd', 'd', 'd', 'd', 'd'
+			],
+  },
 ];
 
 export const TEMPLATE_CHAR_TO_ORB_ID = {
