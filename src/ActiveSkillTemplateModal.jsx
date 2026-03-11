@@ -235,106 +235,118 @@ const getRaceLabel = (value) =>
         {/* list */}
         <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredTemplates.length === 0 ? (
-            <div className="col-span-full py-16 text-center text-neutral-500 font-bold">
-              找不到符合條件的固版
-            </div>
-          ) : (
-            filteredTemplates.map((item) => (
-  <button
-    key={item.id}
-    type="button"
-    onClick={() => {
-  if (selectedTemplateId === item.id) {
-    onSelectTemplate(item);
-    onClose();
-    return;
-  }
+  <div className="col-span-full py-16 text-center text-neutral-500 font-bold">
+    找不到符合條件的固版
+  </div>
+) : (
+  filteredTemplates.map((item) => (
+    <button
+      key={item.id}
+      type="button"
+      onClick={() => {
+        if (selectedTemplateId === item.id) {
+          setSelectedTemplateId(null);
+          onSelectTemplate(item);
+          onClose();
+          return;
+        }
 
-  setSelectedTemplateId(item.id);
-}}
-    className={[
-  `
-  group w-full text-left rounded-3xl
-  bg-gradient-to-b from-neutral-800 to-neutral-900
-  border p-3 transition-all duration-200
-  shadow-[0_10px_20px_rgba(0,0,0,0.22)]
-  `,
-  selectedTemplateId === item.id
-    ? "border-white ring-2 ring-white/90 shadow-[0_0_0_1px_rgba(255,255,255,0.25),0_14px_36px_rgba(255,255,255,0.08)]"
-    : "border-white/10 hover:border-fuchsia-400/30 hover:shadow-[0_14px_36px_rgba(168,85,247,0.16)]",
-].join(" ")}
-  >
-    {/* 上半部 */}
-    <div className="flex gap-3 items-start mb-3">
-      {/* 角色縮圖 */}
-      <div
-  className="
-    relative
-    w-20 h-20 shrink-0 rounded-sm
-    bg-neutral-950/90 border border-white/10
-    overflow-hidden flex items-center justify-center
-    shadow-inner
-  "
->
-        <img
-          src={item.characterImg}
-          alt={item.characterName}
-          draggable={false}
-          className="w-full h-full object-contain"
-        />
-		<img
-  src={RACE_IMG[item.race]}
-  alt={item.race}
-  className="
-    absolute bottom-0 right-0
-    w-7 h-7
-    object-contain
-    pointer-events-none
-  "
-/>
-      </div>
+        setSelectedTemplateId(item.id);
+      }}
+      className={[
+        `
+        relative
+        group w-full text-left rounded-3xl
+        bg-neutral-800
+        border p-3 transition-all duration-200
+        shadow-lg
+        `,
+        selectedTemplateId === item.id
+          ? "border-white ring-2 ring-white/90 bg-white/[0.04] shadow-[0_0_0_1px_rgba(255,255,255,0.25),0_0_24px_rgba(255,255,255,0.10)]"
+          : "border-white/10 hover:border-fuchsia-400/30",
+      ].join(" ")}
+    >
+      {selectedTemplateId === item.id && (
+        <div className="absolute top-2 left-2 z-20 px-2 py-1 rounded-lg bg-white text-black text-[11px] font-black shadow">
+          已選取
+        </div>
+      )}
 
-      {/* 名稱 / note */}
-      <div className="min-w-0 flex-1 flex flex-col gap-2">
+      <div className="flex gap-3 items-start mb-3">
+        {/* 角色縮圖 */}
         <div
           className="
-            rounded-2xl px-3 py-2
-            bg-fuchsia-500/10 border border-fuchsia-400/20
+            relative
+            w-20 h-20 shrink-0 rounded-sm
+            bg-neutral-950/90 border border-white/10
+            overflow-hidden flex items-center justify-center
+            shadow-inner
           "
         >
-          <div className="text-sm md:text-[15px] font-black text-white leading-tight break-words line-clamp-2">
-            {item.characterName}
+          <img
+            src={item.characterImg}
+            alt={item.characterName}
+            draggable={false}
+            loading="lazy"
+            decoding="async"
+            className="w-full h-full object-contain"
+          />
+
+          <img
+            src={RACE_IMG[item.race]}
+            alt={item.race}
+            className="
+              absolute bottom-0 right-0
+              w-5 h-5 object-contain
+              drop-shadow-md
+              pointer-events-none
+            "
+          />
+        </div>
+
+        {/* 名稱 / note */}
+        <div className="min-w-0 flex-1 flex flex-col gap-2">
+          <div
+            className="
+              rounded-2xl px-3 py-2
+              bg-fuchsia-500/10 border border-fuchsia-400/20
+            "
+          >
+            <div className="text-sm md:text-[15px] font-black text-white leading-tight break-words line-clamp-2">
+              {item.characterName}
+            </div>
+          </div>
+
+          <div
+            className="
+              min-h-[44px] rounded-2xl px-3 py-2
+              bg-neutral-950/70 border border-white/8
+              flex items-center
+            "
+          >
+            <span className="text-xs md:text-sm font-bold text-neutral-400 leading-tight break-words line-clamp-2">
+              {item.note?.trim() ? item.note : "-"}
+            </span>
           </div>
         </div>
-
-        <div
-          className="
-            min-h-[44px] rounded-2xl px-3 py-2
-            bg-neutral-950/70 border border-white/8
-            flex items-center
-          "
-        >
-          <span className="text-xs md:text-sm font-bold text-neutral-400 leading-tight break-words line-clamp-2">
-            {item.note?.trim() ? item.note : "-"}
-          </span>
-        </div>
       </div>
-    </div>
 
-    {/* 固版區 */}
-    <div
-      className="
-        rounded-2xl p-2.5
-        bg-neutral-950/75 border border-white/10
-        group-hover:border-fuchsia-400/20
-        transition-all
-      "
-    >
-      <TemplateBoardPreview board={item.board} />
-    </div>
-  </button>
-))
-			)}
+      {/* 固版區 */}
+      <div
+        className={[
+          `
+          rounded-2xl p-2.5 border transition-all duration-200
+          `,
+          selectedTemplateId === item.id
+            ? "bg-white/10 border-white/40"
+            : "bg-neutral-950/75 border-white/10 group-hover:border-fuchsia-400/20",
+        ].join(" ")}
+      >
+        <TemplateBoardPreview board={item.board} />
+      </div>
+    </button>
+  ))
+)}
         </div>
       </div>
     </div>

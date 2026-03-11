@@ -504,6 +504,7 @@ const refreshTarget = useCallback((newBoard) => {
 
 ///////////
 
+
 const getAxisFromNeighbor = (baseR, baseC, r, c) => {
   const dr = r - baseR;
   const dc = c - baseC;
@@ -584,11 +585,13 @@ const tryMoveToCell = useCallback(
     const isOrthogonal = dr + dc === 1;
     const isDiagonal = dr === 1 && dc === 1;
 
-    if (diagonalEnabled) {
-      if (!isOrthogonal && !isDiagonal) return false;
-    } else {
-      if (!isOrthogonal) return false;
-    }
+    const allowDiagonal = isManual || diagonalEnabled;
+
+if (allowDiagonal) {
+  if (!isOrthogonal && !isDiagonal) return false;
+} else {
+  if (!isOrthogonal) return false;
+}
 
     const currentBoard = boardRef.current;
     if (currentBoard?.[r]?.[c] === undefined) return false;
@@ -670,7 +673,7 @@ const tryMoveToCell = useCallback(
 
     return true;
   },
-  [manualLocked, scheduleManualVisualFlush, diagonalEnabled]
+  [manualLocked, scheduleManualVisualFlush, diagonalEnabled, isManual]
 );
 
 const tryResolveDiagonalAssist = useCallback((hitR, hitC) => {
@@ -994,17 +997,17 @@ const handleManualMove = (r, c, e) => {
   // 先用真實指標位置
   if (hitCell && isDraggingRef.current) {
   const last = pathRef.current[pathRef.current.length - 1];
+  const allowDiagonal = isManual || diagonalEnabled;
 
   if (last) {
     const dr = Math.abs(hitCell.r - last.r);
     const dc = Math.abs(hitCell.c - last.c);
 
-    // 正交鄰格先走斜轉輔助判定
-    if (dr + dc === 1) {
+    // 只有「不允許直接斜轉」時，才啟用斜轉輔助
+    if (!allowDiagonal && dr + dc === 1) {
       const consumed = tryResolveDiagonalAssist(hitCell.r, hitCell.c);
       if (consumed) return;
     } else {
-      // 不是正交時，清掉候選
       diagAssistRef.current = null;
     }
   }
@@ -1134,16 +1137,18 @@ const chaseToTargetCell = useCallback(
       let stepR = last.r;
       let stepC = last.c;
 
-      if (diagonalEnabled) {
-        stepR += dr === 0 ? 0 : dr > 0 ? 1 : -1;
-        stepC += dc === 0 ? 0 : dc > 0 ? 1 : -1;
-      } else {
-        if (Math.abs(dr) >= Math.abs(dc)) {
-          stepR += dr > 0 ? 1 : -1;
-        } else {
-          stepC += dc > 0 ? 1 : -1;
-        }
-      }
+      const allowDiagonal = isManual || diagonalEnabled;
+
+if (allowDiagonal) {
+  stepR += dr === 0 ? 0 : dr > 0 ? 1 : -1;
+  stepC += dc === 0 ? 0 : dc > 0 ? 1 : -1;
+} else {
+  if (Math.abs(dr) >= Math.abs(dc)) {
+    stepR += dr > 0 ? 1 : -1;
+  } else {
+    stepC += dc > 0 ? 1 : -1;
+  }
+}
 
       const ok = tryMoveToCell(stepR, stepC);
       if (!ok) break;
@@ -1154,7 +1159,7 @@ const chaseToTargetCell = useCallback(
 
     return moved;
   },
-  [manualLocked, diagonalEnabled, tryMoveToCell]
+  [manualLocked, diagonalEnabled, isManual, tryMoveToCell]
 );
 
 ////////////
@@ -1937,8 +1942,29 @@ const getBoardKey = (b) => {
   // ✅ 一旦找到達標解，記住目前最小步數；外層 step 到了就可以直接停（保證最小步）
   let bestReachedSteps = Infinity;
 
+const hasSpecial =
+  specialPriority &&
+  specialPriority.type &&
+  specialPriority.type !== "none";
+
+const isSpecialSatisfied = (ev) => {
+  if (!hasSpecial) return true;
+
+  if (specialPriority.type === "clearCount") {
+    return (ev.initialClearedCount || 0) === (specialPriority.clearCount || 3);
+  }
+
+  const got = getSpecialMatchedValue(ev, specialPriority);
+  return got >= (specialPriority.count || 1);
+};
+
+const isSolvedGoal = (ev) => {
+  return ev.combos >= target && isSpecialSatisfied(ev);
+};
+
+////////////////223
+
   const considerBest = (ev, score, node, violatesN2) => {
-  // ✅ 非法最終盤面不能當答案，但可以繼續擴展
   if (violatesN2) return;
   if (!shouldAcceptEnd(node)) return;
 
@@ -1948,13 +1974,18 @@ const getBoardKey = (b) => {
   const curSpecial = getSpecialScore(ev, specialPriority);
   const bestSpecial = bestGlobal.specialScore ?? -Infinity;
 
+  const solved = hasSpecial ? isSolvedGoal(ev) : (ev.combos >= target);
+  const bestSolved = hasSpecial
+    ? isSolvedGoal(bestGlobal)
+    : (bestGlobal.combos >= target);
+
   let isBetterGlobal = false;
 
   if (curSpecial > bestSpecial) {
     isBetterGlobal = true;
   } else if (curSpecial === bestSpecial) {
-    if (ev.combos >= target) {
-      if (bestGlobal.combos < target) {
+    if (solved) {
+      if (!bestSolved) {
         isBetterGlobal = true;
       } else {
         if (curSteps < bestSteps) isBetterGlobal = true;
@@ -1969,14 +2000,15 @@ const getBoardKey = (b) => {
         }
       }
     } else {
-      if (bestGlobal.combos < target) {
-        if (ev.combos > bestGlobal.combos) isBetterGlobal = true;
-        else if (ev.combos === bestGlobal.combos) {
-          if (curSteps < bestSteps) isBetterGlobal = true;
-          else if (curSteps === bestSteps) {
-            if (score > bestGlobal.score) isBetterGlobal = true;
+      if (!bestSolved) {
+        // ✅ 未完成時，仍以 score 為主，不要只看 combo
+        if (score > bestGlobal.score) isBetterGlobal = true;
+        else if (score === bestGlobal.score) {
+          if (ev.combos > bestGlobal.combos) isBetterGlobal = true;
+          else if (ev.combos === bestGlobal.combos) {
+            if (curSteps < bestSteps) isBetterGlobal = true;
             else if (
-              score === bestGlobal.score &&
+              curSteps === bestSteps &&
               ev.clearedCount > bestGlobal.clearedCount
             ) {
               isBetterGlobal = true;
@@ -1991,11 +2023,12 @@ const getBoardKey = (b) => {
     bestGlobal = { ...ev, node, score, specialScore: curSpecial };
   }
 
-  if (ev.combos >= target && shouldAcceptEnd(node)) {
+  // ✅ 有特優先時，只有 combo+special 都達成才 early-stop
+  if (solved && curSteps > 0) {
     if (curSteps < bestReachedSteps) bestReachedSteps = curSteps;
   }
 };
-  
+
   const dirsPlay = diagonal ? DIRS_8 : DIRS_4;
   let beam = [];
 
@@ -2068,7 +2101,7 @@ const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
 
 const ev = evaluateBoard(evalBoard, skyfall, initial);
 const pot = combinedPotentialScore(evalBoard, mode);
-const score = calcScore(
+const rawScore = calcScore(
   ev,
   pot,
   0,
@@ -2080,13 +2113,22 @@ const score = calcScore(
   violatesN2
 );
 
+// ✅ 只在特優先時輕量壓低初始滿版 baseline
+const score = hasSpecial ? (rawScore - 6000000) : rawScore;
+
     const key = `${getBoardKey(boardCopy)}|${held}|${r},${c}|${locked0 ? 1 : 0}`;
     if (!betterThanVisited(key, ev, score, 0, mode)) return;
 
     const node = makeNode(null, r, c);
     considerBest(ev, score, node, violatesN2);
 
-    if (ev.combos >= target && shouldAcceptEnd(node) && !violatesN2) return;
+    if (
+  (!hasSpecial ? (ev.combos >= target) : isSolvedGoal(ev)) &&
+  shouldAcceptEnd(node) &&
+  !violatesN2
+) {
+  return;
+}
 
     beam.push({
   board: boardCopy,
@@ -2113,12 +2155,17 @@ const score = calcScore(
   // ✅ combo 模式挑 beam：固定配額 + 單次掃描（不會洗牌，不會「像無限迴圈」）
   const pickBeamCombo = (candidates) => {
     candidates.sort((a, b) => {
-  const aReach = a.ev.combos >= target && !a.violatesN2;
-  const bReach = b.ev.combos >= target && !b.violatesN2;
+  const aReach = (!hasSpecial ? (a.ev.combos >= target) : isSolvedGoal(a.ev)) && !a.violatesN2;
+  const bReach = (!hasSpecial ? (b.ev.combos >= target) : isSolvedGoal(b.ev)) && !b.violatesN2;
   if (aReach !== bReach) return aReach ? -1 : 1;
 
-  // ✅ 合法盤面優先，但不封殺非法中途盤
   if (a.violatesN2 !== b.violatesN2) return a.violatesN2 ? 1 : -1;
+
+  if (hasSpecial) {
+    const aSpecial = getSpecialScore(a.ev, specialPriority);
+    const bSpecial = getSpecialScore(b.ev, specialPriority);
+    if (aSpecial !== bSpecial) return bSpecial - aSpecial;
+  }
 
   if (a.score !== b.score) return b.score - a.score;
   return (b.ev.clearedCount || 0) - (a.ev.clearedCount || 0);
@@ -2165,7 +2212,9 @@ const score = calcScore(
     // 第一輪：尊重 quota + 位置多樣性（但不回推，不會卡）
     for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
       const st = candidates[i];
-      const miss = Math.max(0, target - st.ev.combos);
+      const miss = (!hasSpecial
+  ? Math.max(0, target - st.ev.combos)
+  : (isSolvedGoal(st.ev) ? 0 : Math.max(1, target - st.ev.combos)));
       if (miss > maxTier) continue;
       if (took[miss] >= quota[miss]) continue;
 
@@ -2181,7 +2230,9 @@ const score = calcScore(
     if (out.length < BW) {
       for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
         const st = candidates[i];
-        const miss = Math.max(0, target - st.ev.combos);
+        const miss = (!hasSpecial
+  ? Math.max(0, target - st.ev.combos)
+  : (isSolvedGoal(st.ev) ? 0 : Math.max(1, target - st.ev.combos)));
         if (miss > maxTier) continue;
         if (took[miss] >= quota[miss]) continue;
 
@@ -2254,7 +2305,11 @@ if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
 
 considerBest(ev, score, newNode, violatesN2);
 
-if (ev.combos >= target && shouldAcceptEnd(newNode) && !violatesN2) {
+if (
+  (!hasSpecial ? (ev.combos >= target) : isSolvedGoal(ev)) &&
+  shouldAcceptEnd(newNode) &&
+  !violatesN2
+) {
   nodesExpanded++;
   continue;
 }
@@ -2339,7 +2394,11 @@ const score = calcScore(
 
         considerBest(ev, score, newNode, violatesN2);
 
-        if (ev.combos >= target && shouldAcceptEnd(newNode) && !violatesN2) {
+        if (
+  (!hasSpecial ? (ev.combos >= target) : isSolvedGoal(ev)) &&
+  shouldAcceptEnd(newNode) &&
+  !violatesN2
+) {
   nodesExpanded++;
   continue;
 }
@@ -4070,7 +4129,7 @@ const updateSpecialPriority = (patch) => {
 
     <div className="mx-auto max-w-5xl w-full px-0 sm:px-4 pt-24 pb-4 flex-col items-center">
       {!isManual ? (
-        <div className="grid grid-cols-6 gap-1.5 mb-8 text-[14px]">
+        <div className="grid grid-cols-6 gap-1.5 mb-8 mt-2 sm:mt-0 text-[14px]">
           <div className="col-span-2 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
             <button
               onClick={() => setSolverMode("horizontal")}
@@ -4149,7 +4208,7 @@ const updateSpecialPriority = (patch) => {
       )}
 
       <div className="max-w-5xl w-full">
-        <div className="flex flex-row gap-2 mb-4 w-full items-stretch">
+        <div className={`flex flex-row gap-2 mb-4 w-full items-stretch ${isManual ? "mt-3" : ""}`}>
 			<div className="flex-1 min-w-0 bg-neutral-900/50 p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
 			  <span className="text-xs text-neutral-500 font-bold uppercase truncate w-full text-center leading-none">
 				上限
@@ -4175,7 +4234,7 @@ const updateSpecialPriority = (patch) => {
       <div className="flex w-full items-center justify-center">
         <div className="flex-1 flex flex-col items-center min-w-0 space-y-1">
           <span className="text-xs text-indigo-400/80 font-bold truncate w-full text-center leading-none">
-            橫向
+            橫
           </span>
           <span className="text-xl font-black text-indigo-400 w-full text-center leading-none">
             {stats.horizontalCombos}
@@ -4186,7 +4245,7 @@ const updateSpecialPriority = (patch) => {
 
         <div className="flex-1 flex flex-col items-center min-w-0 space-y-1">
           <span className="text-xs text-indigo-400/80 font-bold truncate w-full text-center leading-none">
-            直向
+            直
           </span>
           <span className="text-xl font-black text-indigo-400 w-full text-center leading-none">
             {stats.verticalCombos}
@@ -4568,12 +4627,12 @@ const updateSpecialPriority = (patch) => {
           ref={boardWrapRef}
           className="relative bg-neutral-900 p-0.5 sm:p-1 rounded-3xl shadow-2xl border-2 border-neutral-800 mb-6 mx-auto w-full max-w-none sm:max-w-[500px] overflow-visible"
           style={{
-            contain: "layout paint",
-            touchAction: "none",
-            userSelect: "none",
-            WebkitUserSelect: "none",
-            msUserSelect: "none",
-          }}
+  contain: "layout paint",
+  touchAction: isManual ? "none" : "auto",
+  userSelect: isManual ? "none" : "auto",
+  WebkitUserSelect: isManual ? "none" : "auto",
+  msUserSelect: isManual ? "none" : "auto",
+}}
           onMouseMove={(e) => {
             if (!isManual || manualLocked || !isDraggingRef.current) return;
             const cell = getCellFromClientPoint(e.clientX, e.clientY);
@@ -5705,11 +5764,29 @@ const updateSpecialPriority = (patch) => {
 					</button>
 
                   <button
-                    onClick={handleApplyCustomBoard}
-                    className="w-full py-5 rounded-2xl font-black bg-indigo-600 hover:bg-indigo-500 shadow-xl shadow-indigo-900/20 transition-all flex items-center justify-center gap-2 text-base"
-                  >
-                    <Check size={22} /> 完成
-                  </button>
+  onClick={() => {
+    stopToBase(true);   // 清掉播放/暫停/浮動珠/目前步數，回到底盤
+    setPath([]);        // 清掉舊路徑
+    setStats((prev) => ({
+      ...prev,
+      combos: 0,
+      skyfallCombos: 0,
+      steps: 0,
+      clearedOrbs: 0,
+      initialClearedOrbs: 0,
+      skyfallClearedOrbs: 0,
+      verticalCombos: 0,
+      horizontalCombos: 0,
+      crossCount: 0,
+      lCount: 0,
+      tCount: 0,
+    }));
+    handleApplyCustomBoard();
+  }}
+  className="w-full py-5 rounded-2xl font-black bg-indigo-600 hover:bg-indigo-500 shadow-xl shadow-indigo-900/20 transition-all flex items-center justify-center gap-2 text-base"
+>
+  <Check size={22} /> 完成
+</button>
                 </div>
               </div>
             </div>
