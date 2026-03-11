@@ -389,6 +389,54 @@ export const ACTIVE_SKILL_TEMPLATE_DATA = [
 				'l', 'l', 'l', 'l', 'l', 'l'
 			],
   },
+  {
+  id: "10988",
+    characterName: "夏陸陸 ‧ 吉 ‧ 不列顛尼亞與瑪莉安娜 ‧ 維 ‧ 不列顛尼亞",
+	note: "",
+    characterImg: "./characters/10988.png",
+    attribute: ATTRIBUTES.DARK,
+    race: RACES.GOD,
+	board:
+			[
+				'd', 'w', 'f', 'p', 'l', 'd', 
+				'd', 'w', 'f', 'p', 'l', 'd', 
+				'h', 'h', 'h', 'h', 'h', 'h', 
+				'd', 'w', 'f', 'p', 'l', 'd', 
+				'd', 'w', 'f', 'p', 'l', 'd'
+			],
+  },
+  {
+  id: "10983",
+    characterName: "黎星刻與神虎",
+	note: "",
+    characterImg: "./characters/10983.png",
+    attribute: ATTRIBUTES.WATER,
+    race: RACES.MACHINA,
+	board:
+			[
+				'l', 'w', 'w', 'w', 'w', 'l', 
+				'w', 'l', 'w', 'w', 'l', 'w', 
+				'w', 'w', 'l', 'l', 'w', 'w', 
+				'w', 'l', 'w', 'w', 'l', 'w', 
+				'l', 'w', 'w', 'w', 'w', 'l'
+			],
+  },
+  {
+  id: "10981",
+    characterName: "紅月卡蓮與紅蓮聖天八極式",
+	note: "",
+    characterImg: "./characters/10981.png",
+    attribute: ATTRIBUTES.FIRE,
+    race: RACES.MACHINA,
+	board:
+			[
+				'f', 'l', 'f', 'l', 'f', 'l', 
+				'f', 'l', 'f', 'l', 'f', 'l', 
+				'f', 'l', 'f', 'l', 'f', 'l', 
+				'f', 'l', 'f', 'l', 'f', 'l', 
+				'f', 'l', 'f', 'l', 'f', 'l'
+			],
+  },
 ];
 
 export const TEMPLATE_CHAR_TO_ORB_ID = {

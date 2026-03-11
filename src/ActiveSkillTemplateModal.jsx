@@ -58,6 +58,7 @@ export default function ActiveSkillTemplateModal({
   
   const [showSearchBox, setShowSearchBox] = useState(false);
 const [showFilterPanel, setShowFilterPanel] = useState(false);
+const [selectedTemplateId, setSelectedTemplateId] = useState(null);
 
   const filteredTemplates = useMemo(() => {
     return ACTIVE_SKILL_TEMPLATE_DATA.filter((item) => {
@@ -233,19 +234,27 @@ const getRaceLabel = (value) =>
     key={item.id}
     type="button"
     onClick={() => {
-      onSelectTemplate(item);
-      onClose();
-    }}
-    className="
-      group w-full text-left rounded-3xl
-      bg-gradient-to-b from-neutral-800 to-neutral-900
-      border border-white/10
-      p-3 transition-all duration-200
-      shadow-[0_10px_30px_rgba(0,0,0,0.28)]
-      hover:-translate-y-0.5 hover:border-fuchsia-400/30
-      hover:shadow-[0_14px_36px_rgba(168,85,247,0.16)]
-      active:scale-[0.985]
-    "
+  if (selectedTemplateId === item.id) {
+    onSelectTemplate(item);
+    onClose();
+    return;
+  }
+
+  setSelectedTemplateId(item.id);
+}}
+    className={[
+  `
+  group w-full text-left rounded-3xl
+  bg-gradient-to-b from-neutral-800 to-neutral-900
+  border p-3 transition-all duration-200
+  shadow-[0_10px_30px_rgba(0,0,0,0.28)]
+  hover:-translate-y-0.5
+  active:scale-[0.985]
+  `,
+  selectedTemplateId === item.id
+    ? "border-white ring-2 ring-white/90 shadow-[0_0_0_1px_rgba(255,255,255,0.25),0_14px_36px_rgba(255,255,255,0.08)]"
+    : "border-white/10 hover:border-fuchsia-400/30 hover:shadow-[0_14px_36px_rgba(168,85,247,0.16)]",
+].join(" ")}
   >
     {/* 上半部 */}
     <div className="flex gap-3 items-start mb-3">
