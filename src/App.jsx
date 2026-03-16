@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { toCanvas } from "html-to-image";
 import ImportCropModal from "./ImportCropModal";
 import { convertTemplateBoardTo2D } from "./activeSkillTemplateData";
@@ -295,6 +295,7 @@ const [manualActive, setManualActive] = useState(false); // 轉珠是否已開�
 		window.removeEventListener('scroll', measureCells, { capture: true });
 	  };
 	}, [measureCells]);
+	
   const [vp, setVp] = useState({ w: window.innerWidth, h: window.innerHeight });
 
   useEffect(() => {
@@ -340,6 +341,16 @@ const [manualActive, setManualActive] = useState(false); // 轉珠是否已開�
   const [selectedBrush, setSelectedBrush] = useState(0);
   
   const [autoRow0Expanded, setAutoRow0Expanded] = useState(true);
+
+useLayoutEffect(() => {
+  measureCells();
+
+  const id = requestAnimationFrame(() => {
+    measureCells();
+  });
+
+  return () => cancelAnimationFrame(id);
+}, [autoRow0Expanded, measureCells]);
 
 const extremeTargetRef = useRef(1);
 const [extremeTargetCombo, setExtremeTargetComboState] = useState(1);
@@ -4291,11 +4302,7 @@ const displayBoard =
 
   return (
   <div className="min-h-screen bg-neutral-950 text-white font-sans">
-    <div
-  className={`fixed top-0 left-0 right-0 z-[3000] bg-neutral-900/95 backdrop-blur border-b border-white/10 transition-transform duration-300 ${
-    showTopBar ? "translate-y-0" : "-translate-y-full"
-  }`}
->
+    <div className="w-full bg-neutral-900/95 backdrop-blur border-b border-white/10">
   <div className="mx-auto max-w-5xl w-full px-4 py-3 flex items-center justify-between gap-1">
     <div className="flex items-center gap-3">
       <img src={logoImg} className="w-8 h-8" alt="" />
@@ -4349,9 +4356,9 @@ const displayBoard =
   />
 </div>
 
-    <div className="mx-auto max-w-5xl w-full px-0 sm:px-4 pt-24 pb-4 flex-col items-center">
+    <div className="mx-auto max-w-5xl w-full px-0 sm:px-4 pt-3 sm:pt-6 pb-4 flex-col items-center">
       {!isManual ? (
-        <div className="grid grid-cols-6 gap-1.5 mb-8 mt-2 sm:mt-0 text-[14px]">
+        <div className="grid grid-cols-6 gap-1.5 mb-8 mt-0 text-[14px]">
           <div className="col-span-2 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
             <button
               onClick={() => setSolverMode("horizontal")}
@@ -4431,7 +4438,7 @@ const displayBoard =
 
       <div className="max-w-5xl w-full">
         <div className={`flex flex-row gap-2 mb-4 w-full items-stretch ${isManual ? "mt-3" : ""}`}>
-			<div className="flex-1 min-w-0 bg-neutral-900/50 p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
+			<div className="flex-1 min-w-0 bg-neutral-900/50 p-1.5 sm:p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
 			  <span className="text-xs text-neutral-500 font-bold uppercase truncate w-full text-center leading-none">
 				上限
 			  </span>
@@ -4440,7 +4447,7 @@ const displayBoard =
 			  </span>
 			</div>
 
-  <div className="flex-[1.2] min-w-0 bg-blue-900/20 p-2.5 rounded-xl border border-blue-500/30 ring-1 ring-blue-500/20 flex flex-col items-center justify-center space-y-1">
+  <div className="flex-[1.2] min-w-0 bg-blue-900/20 p-1.5 sm:p-2.5 rounded-xl border border-blue-500/30 ring-1 ring-blue-500/20 flex flex-col items-center justify-center space-y-1">
     <span className="text-xs text-blue-400 font-bold uppercase truncate w-full text-center leading-none">
       總組
     </span>
@@ -4451,7 +4458,7 @@ const displayBoard =
   </div>
 
   {/* ✅ 和總粒交換寬度：flex-[1.5] -> flex-1 */}
-  <div className="flex-[1] min-w-0 bg-indigo-900/20 p-2.5 rounded-xl border border-indigo-500/30 ring-1 ring-blue-500/20 flex flex-col items-center justify-center">
+  <div className="flex-[1] min-w-0 bg-indigo-900/20 p-1.5 sm:p-2.5 rounded-xl border border-indigo-500/30 ring-1 ring-blue-500/20 flex flex-col items-center justify-center">
     {isManual ? (
       <div className="flex w-full items-center justify-center">
         <div className="flex-1 flex flex-col items-center min-w-0 space-y-1">
@@ -4493,7 +4500,7 @@ const displayBoard =
     (specialPriority.type === "cross" ||
       specialPriority.type === "l" ||
       specialPriority.type === "t") && (
-      <div className="flex-1 min-w-0 bg-pink-900/20 p-2.5 rounded-xl border border-pink-500/30 ring-1 ring-pink-500/20 flex flex-col items-center justify-center space-y-1">
+      <div className="flex-1 min-w-0 bg-pink-900/20 p-1.5 sm:p-2.5 rounded-xl border border-pink-500/30 ring-1 ring-pink-500/20 flex flex-col items-center justify-center space-y-1">
         <span className="text-xs text-pink-300 font-bold truncate w-full text-center leading-none">
           {specialPriority.type === "cross"
             ? "十字"
@@ -4513,7 +4520,7 @@ const displayBoard =
     )}
 
   {/* ✅ 和直向/橫向交換寬度：flex-1 -> flex-[1.5] */}
-  <div className="flex-[1.5] min-w-0 bg-neutral-900/50 p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
+  <div className="flex-[1.5] min-w-0 bg-neutral-900/50 p-1.5 sm:p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
     <span className="text-xs text-neutral-500 font-bold uppercase truncate w-full text-center leading-none">
       總粒
     </span>
@@ -4523,7 +4530,7 @@ const displayBoard =
     </span>
   </div>
 
-  <div className="flex-1 min-w-0 bg-neutral-900/50 p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
+  <div className="flex-1 min-w-0 bg-neutral-900/50 p-1.5 sm:p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
     <span className="text-xs text-neutral-500 font-bold uppercase truncate w-full text-center leading-none">
       步數
     </span>
