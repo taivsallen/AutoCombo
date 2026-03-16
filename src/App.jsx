@@ -338,8 +338,26 @@ const [manualActive, setManualActive] = useState(false); // 轉珠是否已開�
   const [showEditor, setShowEditor] = useState(false);
   const [editingBoard, setEditingBoard] = useState([]);
   const [selectedBrush, setSelectedBrush] = useState(0);
+  
+  const [autoRow0Expanded, setAutoRow0Expanded] = useState(true);
 
-  const [targetCombos, setTargetCombos] = useState(1);
+const extremeTargetRef = useRef(1);
+const [extremeTargetCombo, setExtremeTargetComboState] = useState(1);
+
+const setExtremeTargetCombo = useCallback((val) => {
+  extremeTargetRef.current = val;
+  setExtremeTargetComboState(val);
+}, []);
+
+const [initTargetCombo, setInitTargetCombo] = useState(1);
+
+useEffect(() => {
+  const maxCombo = stats.theoreticalMax || 1;
+  setInitTargetCombo(maxCombo);
+}, [stats.theoreticalMax]);
+
+const targetCombos = extremeTargetCombo;
+
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [gifCaptureMode, setGifCaptureMode] = useState(false);
   
@@ -400,9 +418,10 @@ const orbForTheoreticalMax = (cellVal) => {
   return orbOf(cellVal);
 };
 
-const refreshTarget = useCallback((newBoard) => {
+const refreshTarget = useCallback((newBoard, row0Expanded = autoRow0Expanded) => {
   const counts = Array(6).fill(0);
 
+  // 先只算主盤 row1~5
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       const o = orbForTheoreticalMax(newBoard[r][c]);
@@ -414,21 +433,26 @@ const refreshTarget = useCallback((newBoard) => {
 
   let best = base;
 
-  for (let c = 0; c < COLS; c++) {
-    const t = orbForTheoreticalMax(newBoard[0][c]); // row0 也套同規則
-    let s = 0;
+  // ✅ 只有 row0 展開時，才考慮 row0 可補 1 顆的理論上限
+  if (!isManual && row0Expanded) {
+    for (let c = 0; c < COLS; c++) {
+      const t = orbForTheoreticalMax(newBoard[0][c]);
+      if (t === -1) continue;
 
-    for (let i = 0; i < 6; i++) {
-      s += Math.floor((counts[i] + (i === t ? 1 : 0)) / 3);
+      let s = 0;
+      for (let i = 0; i < 6; i++) {
+        s += Math.floor((counts[i] + (i === t ? 1 : 0)) / 3);
+      }
+
+      if (s > best) best = s;
     }
-
-    if (s > best) best = s;
   }
 
   setStats((prev) => ({ ...prev, theoreticalMax: best }));
-  setTargetCombos(best);
-}, []);
-  
+  setExtremeTargetCombo(best);
+  setInitTargetCombo((prev) => Math.min(prev, Math.max(1, best)));
+}, [autoRow0Expanded, isManual, setExtremeTargetCombo]);
+
   const initBoard = useCallback((random = true, providedBoard = null) => {
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
 	  replayAnimRef.current.raf = 0;
@@ -488,10 +512,10 @@ const refreshTarget = useCallback((newBoard) => {
 	}, [showEditor]);
 
   useEffect(() => {
-	  if (originalBoard.length === 0) return;
-	  if (showEditor) return;
-	  setNeedsSolve(true);
-	}, [targetCombos, solverConfig, originalBoard, solverMode, priorityMode, skyfallEnabled, diagonalEnabled, showEditor]);
+  if (originalBoard.length === 0) return;
+  if (showEditor) return;
+  setNeedsSolve(true);
+}, [initTargetCombo, solverConfig, originalBoard, solverMode, priorityMode, skyfallEnabled, diagonalEnabled, showEditor]);
   
   useEffect(() => {
 	  return () => {
@@ -1256,6 +1280,73 @@ const holeStepInPlace = (b, hole, toRC) => {
   return toRC; // new hole
 };
 
+const compactnessScore = (b, phase = "initial") => {
+  let minR = 99, maxR = -1;
+  let minC = 99, maxC = -1;
+  let cnt = 0;
+
+  for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const v = getOrbForMatchPhase(b[r][c], phase);
+      if (v === -1) continue;
+
+      cnt++;
+
+      if (r < minR) minR = r;
+      if (r > maxR) maxR = r;
+      if (c < minC) minC = c;
+      if (c > maxC) maxC = c;
+    }
+  }
+
+  if (cnt <= 1) return 0;
+
+  const area = (maxR - minR + 1) * (maxC - minC + 1);
+
+  return -area * 30;
+};
+
+const edgePotentialScore = (b, phase = "initial") => {
+  let p = 0;
+
+  for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+
+      const v = getOrbForMatchPhase(b[r][c], phase);
+      if (v === -1) continue;
+
+      const isEdge =
+        r === PLAY_ROWS_START ||
+        r === TOTAL_ROWS - 1 ||
+        c === 0 ||
+        c === COLS - 1;
+
+      if (!isEdge) continue;
+
+      if (c + 1 < COLS && getOrbForMatchPhase(b[r][c + 1], phase) === v) p += 2;
+
+      if (r + 1 < TOTAL_ROWS && getOrbForMatchPhase(b[r + 1][c], phase) === v) p += 2;
+    }
+  }
+
+  return p;
+};
+
+const regionOf = (r, c) => {
+
+  const vr =
+    r <= PLAY_ROWS_START + 1 ? 0 :
+    r <= PLAY_ROWS_START + 3 ? 1 :
+    2;
+
+  const vc =
+    c <= 1 ? 0 :
+    c <= 3 ? 1 :
+    2;
+
+  return vr * 3 + vc;
+};
+
 // 🚀 搭配 1D toClearMap 的提速版 Gravity
 const applyGravity = (b, toClear1D) => {
   const next = clone2D(b);
@@ -1475,8 +1566,8 @@ const getInitialMatchCheck = (board) => {
 
   return {
     initial,
-    // ✅ 只要 n2 出現在「普通首消排列」裡，就直接違規
-    violatesN2: hasN2InVanillaInitialPattern(board),
+    // ✅ 直接吃 initial.toClearMap，少一次重掃盤面
+    violatesN2: hasInitialN2Clear(board, initial.toClearMap),
   };
 };
 
@@ -1723,13 +1814,23 @@ const unlockN2Board = (b) => {
 };
 
 const combinedPotentialScore = (b, mode) => {
+
   const potInitial = potentialScore(b, mode, "initial");
 
-  // 疊珠思考時，至少先把 n2 解鎖
   const unlocked = unlockN2Board(b);
+
   const potSkyfall = potentialScore(unlocked, mode, "skyfall");
 
-  return potInitial * 0.75 + potSkyfall * 0.25;
+  const edgePot = edgePotentialScore(b, "initial");
+
+  const compact = compactnessScore(b, "initial");
+
+  return (
+    potInitial * 0.6 +
+    potSkyfall * 0.2 +
+    edgePot * 0.15 +
+    compact * 0.05
+  );
 };
 
 const evaluateBoard = (tempBoard, skyfall, initialResult = null) => {
@@ -1886,7 +1987,20 @@ const getBoardKey = (b) => {
   );
 };
   
-  const beamSolve = (originalBoard, cfg, target, mode, priority, skyfall, diagonal, specialPriority) => {
+  const beamSolve = (
+  originalBoard,
+  cfg,
+  target,
+  mode,
+  priority,
+  skyfall,
+  diagonal,
+  specialPriority,
+  initTargetCombo,
+  autoRow0Expanded
+) => {
+  const useRow0 = !!autoRow0Expanded;
+
   const makeNode = (parent, r, c) => ({ parent, r, c, len: parent ? parent.len + 1 : 1 });
 
   const buildPath = (node) => {
@@ -1905,8 +2019,6 @@ const getBoardKey = (b) => {
     return { ok: true, locked: false };
   };
 
-  // ✅ 避免 combo 模式把 maxNodes 拉爆造成「像無限迴圈」
-  //   仍保留你 maxNodes / maxSteps / beamWidth 的彈性，但把倍率 20 -> 12 (更穩、準度不掉)
   const maxNodesEffective =
     priority === "combo"
       ? Math.max(cfg.maxNodes, cfg.maxSteps * cfg.beamWidth * 12)
@@ -1914,7 +2026,10 @@ const getBoardKey = (b) => {
 
   let q1Pos = null;
   let q2Pos = null;
+
   for (let rr = 0; rr < TOTAL_ROWS; rr++) {
+    if (!useRow0 && rr === 0) continue;
+
     for (let cc = 0; cc < COLS; cc++) {
       const q = qMarkOf(originalBoard[rr][cc]);
       if (q === 1) q1Pos = { r: rr, c: cc };
@@ -1929,87 +2044,78 @@ const getBoardKey = (b) => {
   };
 
   let bestGlobal = {
-  combos: -1,
-  skyfallCombos: 0,
-  clearedCount: -1,
-  node: null,
-  score: -Infinity,
-  specialScore: -Infinity,
-  verticalCombos: 0,
-  horizontalCombos: 0,
-};
+    combos: -1,
+    skyfallCombos: 0,
+    clearedCount: -1,
+    node: null,
+    score: -Infinity,
+    specialScore: -Infinity,
+    verticalCombos: 0,
+    horizontalCombos: 0,
+  };
 
-  // ✅ 一旦找到達標解，記住目前最小步數；外層 step 到了就可以直接停（保證最小步）
   let bestReachedSteps = Infinity;
 
-const hasSpecial =
-  specialPriority &&
-  specialPriority.type &&
-  specialPriority.type !== "none";
+  const hasSpecial =
+    specialPriority &&
+    specialPriority.type &&
+    specialPriority.type !== "none";
 
-const isSpecialSatisfied = (ev) => {
-  if (!hasSpecial) return true;
+  const isSpecialSatisfied = (ev) => {
+    if (!hasSpecial) return true;
 
-  if (specialPriority.type === "clearCount") {
-    return (ev.initialClearedCount || 0) === (specialPriority.clearCount || 3);
-  }
+    if (specialPriority.type === "clearCount") {
+      return (ev.initialClearedCount || 0) === (specialPriority.clearCount || 3);
+    }
 
-  const got = getSpecialMatchedValue(ev, specialPriority);
-  return got >= (specialPriority.count || 1);
-};
+    const got = getSpecialMatchedValue(ev, specialPriority);
+    return got >= (specialPriority.count || 1);
+  };
 
-const isSolvedGoal = (ev) => {
-  return ev.combos >= target && isSpecialSatisfied(ev);
-};
+  const isSolvedGoal = (ev) => {
+    return ev.combos >= target && isSpecialSatisfied(ev);
+  };
 
-////////////////223
+  const exceedsInitialComboCap = (ev) => {
+    return (ev.initialCombos || 0) > initTargetCombo;
+  };
+
+  const hitsInitTargetComboExactly = (ev) => {
+    return (ev.initialCombos || 0) === initTargetCombo;
+  };
 
   const considerBest = (ev, score, node, violatesN2) => {
-  if (violatesN2) return;
-  if (!shouldAcceptEnd(node)) return;
+    if (violatesN2) return;
+    if (!shouldAcceptEnd(node)) return;
 
-  const curSteps = stepsOf(node);
-  const bestSteps = bestGlobal.node ? stepsOf(bestGlobal.node) : Infinity;
+    const curSteps = stepsOf(node);
+    const bestSteps = bestGlobal.node ? stepsOf(bestGlobal.node) : Infinity;
 
-  const curSpecial = getSpecialScore(ev, specialPriority);
-  const bestSpecial = bestGlobal.specialScore ?? -Infinity;
+    const curSpecial = getSpecialScore(ev, specialPriority);
+    const bestSpecial = bestGlobal.specialScore ?? -Infinity;
 
-  const solved = hasSpecial ? isSolvedGoal(ev) : (ev.combos >= target);
-  const bestSolved = hasSpecial
-    ? isSolvedGoal(bestGlobal)
-    : (bestGlobal.combos >= target);
+    const curInitExact = hitsInitTargetComboExactly(ev);
+    const bestInitExact = hitsInitTargetComboExactly(bestGlobal);
 
-  let isBetterGlobal = false;
+    let isBetterGlobal = false;
 
-  if (curSpecial > bestSpecial) {
-    isBetterGlobal = true;
-  } else if (curSpecial === bestSpecial) {
-    if (solved) {
-      if (!bestSolved) {
-        isBetterGlobal = true;
+    if (curSpecial > bestSpecial) {
+      isBetterGlobal = true;
+    } else if (curSpecial === bestSpecial) {
+      if (curInitExact !== bestInitExact) {
+        isBetterGlobal = curInitExact;
       } else {
-        if (curSteps < bestSteps) isBetterGlobal = true;
-        else if (curSteps === bestSteps) {
-          if (score > bestGlobal.score) isBetterGlobal = true;
-          else if (
-            score === bestGlobal.score &&
-            ev.clearedCount > bestGlobal.clearedCount
-          ) {
+        if ((ev.combos || 0) > (bestGlobal.combos || 0)) {
+          isBetterGlobal = true;
+        } else if ((ev.combos || 0) === (bestGlobal.combos || 0)) {
+          if (curSteps < bestSteps) {
             isBetterGlobal = true;
-          }
-        }
-      }
-    } else {
-      if (!bestSolved) {
-        // ✅ 未完成時，仍以 score 為主，不要只看 combo
-        if (score > bestGlobal.score) isBetterGlobal = true;
-        else if (score === bestGlobal.score) {
-          if (ev.combos > bestGlobal.combos) isBetterGlobal = true;
-          else if (ev.combos === bestGlobal.combos) {
-            if (curSteps < bestSteps) isBetterGlobal = true;
-            else if (
-              curSteps === bestSteps &&
-              ev.clearedCount > bestGlobal.clearedCount
+          } else if (curSteps === bestSteps) {
+            if (score > bestGlobal.score) {
+              isBetterGlobal = true;
+            } else if (
+              score === bestGlobal.score &&
+              (ev.clearedCount || 0) > (bestGlobal.clearedCount || 0)
             ) {
               isBetterGlobal = true;
             }
@@ -2017,23 +2123,20 @@ const isSolvedGoal = (ev) => {
         }
       }
     }
-  }
 
-  if (isBetterGlobal) {
-    bestGlobal = { ...ev, node, score, specialScore: curSpecial };
-  }
+    if (isBetterGlobal) {
+      bestGlobal = { ...ev, node, score, specialScore: curSpecial };
+    }
 
-  // ✅ 有特優先時，只有 combo+special 都達成才 early-stop
-  if (solved && curSteps > 0) {
-    if (curSteps < bestReachedSteps) bestReachedSteps = curSteps;
-  }
-};
+    const solved = hasSpecial ? isSolvedGoal(ev) : (ev.combos >= target);
+    if (solved && curSteps > 0) {
+      if (curSteps < bestReachedSteps) bestReachedSteps = curSteps;
+    }
+  };
 
   const dirsPlay = diagonal ? DIRS_8 : DIRS_4;
   let beam = [];
 
-  // ✅ visited: dominance / best-record
-  // value: [bestCombos, bestMajor, bestCleared, bestNegSteps, bestScore]
   const visitedBest = new Map();
   const betterThanVisited = (key, ev, score, steps, mode) => {
     const prev = visitedBest.get(key);
@@ -2045,7 +2148,6 @@ const isSolvedGoal = (ev) => {
       return true;
     }
 
-    // dominance: prev >= rec 全維度 => rec 一定不值得留
     if (
       prev[0] >= rec[0] &&
       prev[1] >= rec[1] &&
@@ -2056,7 +2158,6 @@ const isSolvedGoal = (ev) => {
       return false;
     }
 
-    // 允許覆蓋：只要 rec 在關鍵序更好（先 combos 再 major/cleared/steps/score）
     let shouldUpdate = false;
     if (rec[0] > prev[0]) shouldUpdate = true;
     else if (rec[0] === prev[0]) {
@@ -2075,6 +2176,7 @@ const isSolvedGoal = (ev) => {
   };
 
   const pushInitState = (r, c, heldFromRow0) => {
+    if (!useRow0 && heldFromRow0) return;
     if (q1Pos && (r !== q1Pos.r || c !== q1Pos.c)) return;
 
     const boardCopy = clone2D(originalBoard);
@@ -2097,24 +2199,25 @@ const isSolvedGoal = (ev) => {
 
     const evalBoard = boardWithHeldFilled(boardCopy, hole, held);
 
-const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
+    const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
+    const ev = evaluateBoard(evalBoard, skyfall, initial);
 
-const ev = evaluateBoard(evalBoard, skyfall, initial);
-const pot = combinedPotentialScore(evalBoard, mode);
-const rawScore = calcScore(
-  ev,
-  pot,
-  0,
-  cfg,
-  target,
-  mode,
-  priority,
-  specialPriority,
-  violatesN2
-);
+    if (exceedsInitialComboCap(ev)) return;
 
-// ✅ 只在特優先時輕量壓低初始滿版 baseline
-const score = hasSpecial ? (rawScore - 6000000) : rawScore;
+    const pot = combinedPotentialScore(evalBoard, mode);
+    const rawScore = calcScore(
+      ev,
+      pot,
+      0,
+      cfg,
+      target,
+      mode,
+      priority,
+      specialPriority,
+      violatesN2
+    );
+
+    const score = hasSpecial ? (rawScore - 6000000) : rawScore;
 
     const key = `${getBoardKey(boardCopy)}|${held}|${r},${c}|${locked0 ? 1 : 0}`;
     if (!betterThanVisited(key, ev, score, 0, mode)) return;
@@ -2123,98 +2226,190 @@ const score = hasSpecial ? (rawScore - 6000000) : rawScore;
     considerBest(ev, score, node, violatesN2);
 
     if (
-  (!hasSpecial ? (ev.combos >= target) : isSolvedGoal(ev)) &&
-  shouldAcceptEnd(node) &&
-  !violatesN2
-) {
-  return;
-}
+      (!hasSpecial ? (ev.combos >= target) : isSolvedGoal(ev)) &&
+      shouldAcceptEnd(node) &&
+      !violatesN2
+    ) {
+      return;
+    }
 
     beam.push({
-  board: boardCopy,
-  held,
-  hole,
-  r,
-  c,
-  node,
-  score,
-  ev,
-  pot,
-  locked: locked0,
-  violatesN2,
-});
-	};
+      board: boardCopy,
+      held,
+      hole,
+      r,
+      c,
+      node,
+      score,
+      ev,
+      pot,
+      locked: locked0,
+      violatesN2,
+    });
+  };
 
-  for (let c = 0; c < COLS; c++) pushInitState(0, c, true);
+  if (useRow0) {
+    for (let c = 0; c < COLS; c++) pushInitState(0, c, true);
+  }
+
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
     for (let c = 0; c < COLS; c++) pushInitState(r, c, false);
   }
 
   let nodesExpanded = 0;
 
-  // ✅ combo 模式挑 beam：固定配額 + 單次掃描（不會洗牌，不會「像無限迴圈」）
-  const pickBeamCombo = (candidates) => {
+  const sortComboCandidates = (candidates) => {
     candidates.sort((a, b) => {
-  const aReach = (!hasSpecial ? (a.ev.combos >= target) : isSolvedGoal(a.ev)) && !a.violatesN2;
-  const bReach = (!hasSpecial ? (b.ev.combos >= target) : isSolvedGoal(b.ev)) && !b.violatesN2;
-  if (aReach !== bReach) return aReach ? -1 : 1;
+      const aReach =
+        (!hasSpecial ? (a.ev.combos >= target) : isSolvedGoal(a.ev)) &&
+        !a.violatesN2;
+      const bReach =
+        (!hasSpecial ? (b.ev.combos >= target) : isSolvedGoal(b.ev)) &&
+        !b.violatesN2;
 
-  if (a.violatesN2 !== b.violatesN2) return a.violatesN2 ? 1 : -1;
+      if (aReach !== bReach) return aReach ? -1 : 1;
+      if (a.violatesN2 !== b.violatesN2) return a.violatesN2 ? 1 : -1;
 
-  if (hasSpecial) {
-    const aSpecial = getSpecialScore(a.ev, specialPriority);
-    const bSpecial = getSpecialScore(b.ev, specialPriority);
-    if (aSpecial !== bSpecial) return bSpecial - aSpecial;
-  }
+      if (hasSpecial) {
+        const aSpecial = getSpecialScore(a.ev, specialPriority);
+        const bSpecial = getSpecialScore(b.ev, specialPriority);
+        if (aSpecial !== bSpecial) return bSpecial - aSpecial;
+      }
 
-  if (a.score !== b.score) return b.score - a.score;
-  return (b.ev.clearedCount || 0) - (a.ev.clearedCount || 0);
-});
+      if (a.score !== b.score) return b.score - a.score;
+      return (b.ev.clearedCount || 0) - (a.ev.clearedCount || 0);
+    });
+  };
+
+  const getMissTier = (st) => {
+    return !hasSpecial
+      ? Math.max(0, target - st.ev.combos)
+      : (isSolvedGoal(st.ev) ? 0 : Math.max(1, target - st.ev.combos));
+  };
+
+  const buildQuota = (counts, remain, quotaW) => {
+    let sumW = 0;
+    for (let i = 0; i < counts.length; i++) {
+      if (counts[i] > 0) sumW += quotaW[i];
+    }
+
+    const quota = new Array(counts.length).fill(0);
+    if (sumW <= 0) return quota;
+
+    for (let i = 0; i < counts.length; i++) {
+      if (counts[i] === 0) continue;
+      quota[i] = Math.max(1, Math.floor((remain * quotaW[i]) / sumW));
+    }
+    return quota;
+  };
+
+  const pickBeamComboExplore = (candidates) => {
+    sortComboCandidates(candidates);
 
     const BW = cfg.beamWidth;
     const out = [];
 
-    // 1) elite 先拿（穩定 exploit）
     const eliteN = Math.min(candidates.length, Math.max(6, (BW / 3) | 0));
     for (let i = 0; i < eliteN && out.length < BW; i++) out.push(candidates[i]);
     if (out.length >= BW) return out;
 
-    // 2) miss 分層配額（保證接近 target 的不被洗掉）
-    const maxTier = 8; // ✅ 這裡直接比你之前的 6 再更準，但仍然 O(n) 很便宜
+    const maxTier = 8;
     const tierCount = maxTier + 1;
     const quotaW = [3.0, 2.2, 1.6, 1.1, 0.8, 0.55, 0.4, 0.3, 0.2];
 
-    // 統計每 tier 有多少
     const counts = new Array(tierCount).fill(0);
     for (let i = eliteN; i < candidates.length; i++) {
-      const miss = Math.max(0, target - candidates[i].ev.combos);
+      const miss = getMissTier(candidates[i]);
       if (miss <= maxTier) counts[miss]++;
     }
 
-    let remain = BW - out.length;
-    let sumW = 0;
-    for (let m = 0; m <= maxTier; m++) if (counts[m] > 0) sumW += quotaW[m];
+    const remain = BW - out.length;
+    const quota = buildQuota(counts, remain, quotaW);
 
-    const quota = new Array(tierCount).fill(0);
-    if (sumW > 0) {
-      for (let m = 0; m <= maxTier; m++) {
-        if (counts[m] === 0) continue;
-        quota[m] = Math.max(1, Math.floor((remain * quotaW[m]) / sumW));
+    const usedPos = new Set();
+    const usedRegion = new Set();
+    for (const st of out) {
+      usedPos.add((st.r << 8) | st.c);
+      usedRegion.add(regionOf(st.r, st.c));
+    }
+
+    const took = new Array(tierCount).fill(0);
+    const regionSkipProb = cfg.beamWidth >= 300 ? 0.8 : 0.7;
+
+    for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+      const st = candidates[i];
+      const miss = getMissTier(st);
+      if (miss > maxTier) continue;
+      if (took[miss] >= quota[miss]) continue;
+
+      const pc = (st.r << 8) | st.c;
+      const rg = regionOf(st.r, st.c);
+
+      if (usedPos.has(pc)) continue;
+      if (usedRegion.has(rg) && Math.random() < regionSkipProb) continue;
+
+      out.push(st);
+      usedPos.add(pc);
+      usedRegion.add(rg);
+      took[miss]++;
+    }
+
+    if (out.length < BW) {
+      for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+        const st = candidates[i];
+        const miss = getMissTier(st);
+        if (miss > maxTier) continue;
+        if (took[miss] >= quota[miss]) continue;
+
+        const pc = (st.r << 8) | st.c;
+        if (usedPos.has(pc)) continue;
+
+        out.push(st);
+        usedPos.add(pc);
+        took[miss]++;
       }
     }
 
-    // 3) 單次掃描把 quota 填滿（含位置多樣性，但「只 skip，不回推」避免洗牌）
+    if (out.length < BW) {
+      for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+        out.push(candidates[i]);
+      }
+    }
+
+    return out.slice(0, BW);
+  };
+
+  const pickBeamComboFocus = (candidates) => {
+    sortComboCandidates(candidates);
+
+    const BW = cfg.beamWidth;
+    const out = [];
+
+    const eliteN = Math.min(candidates.length, Math.max(6, (BW / 3) | 0));
+    for (let i = 0; i < eliteN && out.length < BW; i++) out.push(candidates[i]);
+    if (out.length >= BW) return out;
+
+    const maxTier = 8;
+    const tierCount = maxTier + 1;
+    const quotaW = [3.0, 2.2, 1.6, 1.1, 0.8, 0.55, 0.4, 0.3, 0.2];
+
+    const counts = new Array(tierCount).fill(0);
+    for (let i = eliteN; i < candidates.length; i++) {
+      const miss = getMissTier(candidates[i]);
+      if (miss <= maxTier) counts[miss]++;
+    }
+
+    const remain = BW - out.length;
+    const quota = buildQuota(counts, remain, quotaW);
+
     const usedPos = new Set();
     for (const st of out) usedPos.add((st.r << 8) | st.c);
 
     const took = new Array(tierCount).fill(0);
 
-    // 第一輪：尊重 quota + 位置多樣性（但不回推，不會卡）
     for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
       const st = candidates[i];
-      const miss = (!hasSpecial
-  ? Math.max(0, target - st.ev.combos)
-  : (isSolvedGoal(st.ev) ? 0 : Math.max(1, target - st.ev.combos)));
+      const miss = getMissTier(st);
       if (miss > maxTier) continue;
       if (took[miss] >= quota[miss]) continue;
 
@@ -2226,13 +2421,10 @@ const score = hasSpecial ? (rawScore - 6000000) : rawScore;
       took[miss]++;
     }
 
-    // 第二輪：quota 沒填滿就放寬位置限制（補足數量）
     if (out.length < BW) {
       for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
         const st = candidates[i];
-        const miss = (!hasSpecial
-  ? Math.max(0, target - st.ev.combos)
-  : (isSolvedGoal(st.ev) ? 0 : Math.max(1, target - st.ev.combos)));
+        const miss = getMissTier(st);
         if (miss > maxTier) continue;
         if (took[miss] >= quota[miss]) continue;
 
@@ -2241,16 +2433,23 @@ const score = hasSpecial ? (rawScore - 6000000) : rawScore;
       }
     }
 
-    // 第三輪：仍不足，直接補滿（保證 beam 不變小）
     if (out.length < BW) {
-      for (let i = eliteN; i < candidates.length && out.length < BW; i++) out.push(candidates[i]);
+      for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+        out.push(candidates[i]);
+      }
     }
 
     return out.slice(0, BW);
   };
 
+  const pickBeamComboAdaptive = (candidates) => {
+    const useExploreBeam = diagonal && skyfall;
+    return useExploreBeam
+      ? pickBeamComboExplore(candidates)
+      : pickBeamComboFocus(candidates);
+  };
+
   for (let step = 0; step < cfg.maxSteps; step++) {
-    // ✅ 早停：已找到達標解的最小步數，後面不可能更小
     if (bestReachedSteps !== Infinity && step >= bestReachedSteps) break;
 
     let candidates = [];
@@ -2264,13 +2463,16 @@ const score = hasSpecial ? (rawScore - 6000000) : rawScore;
         const nc = state.c + dc;
         if (nr < 0 || nr >= TOTAL_ROWS || nc < 0 || nc >= COLS) continue;
 
-        if (state.node && state.node.parent && nr === state.node.parent.r && nc === state.node.parent.c)
+        if (!useRow0 && nr === 0) continue;
+
+        if (state.node && state.node.parent && nr === state.node.parent.r && nc === state.node.parent.c) {
           continue;
+        }
 
         const newNode = makeNode(state.node, nr, nc);
         const newSteps = stepsOf(newNode);
 
-        if (state.r === 0) {
+        if (useRow0 && state.r === 0) {
           if (nr !== 1) continue;
 
           const destVal = state.board[nr][nc];
@@ -2284,83 +2486,86 @@ const score = hasSpecial ? (rawScore - 6000000) : rawScore;
 
           const evalBoard = boardWithHeldFilled(nextBoard, nextHole, state.held);
 
-const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
+          const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
 
-const ev = evaluateBoard(evalBoard, skyfall, initial);
-const pot = combinedPotentialScore(evalBoard, mode);
-const score = calcScore(
-  ev,
-  pot,
-  newSteps,
-  cfg,
-  target,
-  mode,
-  priority,
-  specialPriority,
-  violatesN2
-);
+          const ev = evaluateBoard(evalBoard, skyfall, initial);
+          if (exceedsInitialComboCap(ev)) continue;
 
-const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
-if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
+          const pot = combinedPotentialScore(evalBoard, mode);
+          const score = calcScore(
+            ev,
+            pot,
+            newSteps,
+            cfg,
+            target,
+            mode,
+            priority,
+            specialPriority,
+            violatesN2
+          );
 
-considerBest(ev, score, newNode, violatesN2);
+          const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
+          if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
 
-if (
-  (!hasSpecial ? (ev.combos >= target) : isSolvedGoal(ev)) &&
-  shouldAcceptEnd(newNode) &&
-  !violatesN2
-) {
-  nodesExpanded++;
-  continue;
-}
+          considerBest(ev, score, newNode, violatesN2);
 
-candidates.push({
-  board: nextBoard,
-  held: state.held,
-  hole: nextHole,
-  r: nr,
-  c: nc,
-  node: newNode,
-  locked: nextLocked,
-  score,
-  ev,
-  pot,
-  violatesN2,
-});
-nodesExpanded++;
+          if (
+            (!hasSpecial ? (ev.combos >= target) : isSolvedGoal(ev)) &&
+            shouldAcceptEnd(newNode) &&
+            !violatesN2
+          ) {
+            nodesExpanded++;
+            continue;
+          }
+
+          candidates.push({
+            board: nextBoard,
+            held: state.held,
+            hole: nextHole,
+            r: nr,
+            c: nc,
+            node: newNode,
+            locked: nextLocked,
+            score,
+            ev,
+            pot,
+            violatesN2,
+          });
+          nodesExpanded++;
           continue;
         }
 
-        if (state.r >= PLAY_ROWS_START && nr === 0) {
-		  const destVal = state.board[0][nc];
-		  const chk = stepConstraint(destVal);
-		  if (!chk.ok) continue;
+        if (useRow0 && state.r >= PLAY_ROWS_START && nr === 0) {
+          const destVal = state.board[0][nc];
+          const chk = stepConstraint(destVal);
+          if (!chk.ok) continue;
 
-		  const evalBoard = clone2D(state.board);
-		  if (state.hole) {
-			// ✅ 結束到 row0：洞補 row0 該欄珠
-			evalBoard[state.hole.r][state.hole.c] = destVal;
-		  }
+          const evalBoard = clone2D(state.board);
+          if (state.hole) {
+            evalBoard[state.hole.r][state.hole.c] = destVal;
+          }
 
-		  const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
+          const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
 
-const ev = evaluateBoard(evalBoard, skyfall, initial);
-const pot = combinedPotentialScore(evalBoard, mode);
-const score = calcScore(
-  ev,
-  pot,
-  newSteps,
-  cfg,
-  target,
-  mode,
-  priority,
-  specialPriority,
-  violatesN2
-);
+          const ev = evaluateBoard(evalBoard, skyfall, initial);
+          if (exceedsInitialComboCap(ev)) continue;
 
-considerBest(ev, score, newNode, violatesN2);
-continue;
-		}
+          const pot = combinedPotentialScore(evalBoard, mode);
+          const score = calcScore(
+            ev,
+            pot,
+            newSteps,
+            cfg,
+            target,
+            mode,
+            priority,
+            specialPriority,
+            violatesN2
+          );
+
+          considerBest(ev, score, newNode, violatesN2);
+          continue;
+        }
 
         if (nr < PLAY_ROWS_START || !state.hole) continue;
 
@@ -2374,48 +2579,51 @@ continue;
 
         const evalBoard = boardWithHeldFilled(nextBoard, nextHole, state.held);
 
-const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
+        const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
+        const ev = evaluateBoard(evalBoard, skyfall, initial);
 
-const ev = evaluateBoard(evalBoard, skyfall, initial);
-const pot = combinedPotentialScore(evalBoard, mode);
-const score = calcScore(
-  ev,
-  pot,
-  newSteps,
-  cfg,
-  target,
-  mode,
-  priority,
-  specialPriority,
-  violatesN2
-);
+        if (exceedsInitialComboCap(ev)) continue;
+
+        const pot = combinedPotentialScore(evalBoard, mode);
+        const score = calcScore(
+          ev,
+          pot,
+          newSteps,
+          cfg,
+          target,
+          mode,
+          priority,
+          specialPriority,
+          violatesN2
+        );
+
         const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
         if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
 
         considerBest(ev, score, newNode, violatesN2);
 
         if (
-  (!hasSpecial ? (ev.combos >= target) : isSolvedGoal(ev)) &&
-  shouldAcceptEnd(newNode) &&
-  !violatesN2
-) {
-  nodesExpanded++;
-  continue;
-}
+          (!hasSpecial ? (ev.combos >= target) : isSolvedGoal(ev)) &&
+          shouldAcceptEnd(newNode) &&
+          !violatesN2
+        ) {
+          nodesExpanded++;
+          continue;
+        }
 
         candidates.push({
-  board: nextBoard,
-  held: state.held,
-  hole: nextHole,
-  r: nr,
-  c: nc,
-  node: newNode,
-  locked: nextLocked,
-  score,
-  ev,
-  pot,
-  violatesN2,
-});
+          board: nextBoard,
+          held: state.held,
+          hole: nextHole,
+          r: nr,
+          c: nc,
+          node: newNode,
+          locked: nextLocked,
+          score,
+          ev,
+          pot,
+          violatesN2,
+        });
         nodesExpanded++;
       }
     }
@@ -2423,20 +2631,20 @@ const score = calcScore(
     if (candidates.length === 0 || nodesExpanded > maxNodesEffective) break;
 
     if (priority === "combo") {
-      beam = pickBeamCombo(candidates);
+      beam = pickBeamComboAdaptive(candidates);
     } else {
-      // steps priority：維持你原本的分桶策略
       const buckets = new Map();
       for (const st of candidates) {
         const legalBonus = st.violatesN2 ? 0 : 1000000000;
-const k =
-  legalBonus +
-  (mode === "vertical" ? st.ev.verticalCombos : st.ev.horizontalCombos) * 1000000 +
-  st.ev.combos * 1000 +
-  st.ev.clearedCount;
+        const k =
+          legalBonus +
+          (mode === "vertical" ? st.ev.verticalCombos : st.ev.horizontalCombos) * 1000000 +
+          st.ev.combos * 1000 +
+          st.ev.clearedCount;
         if (!buckets.has(k)) buckets.set(k, []);
         buckets.get(k).push(st);
       }
+
       for (const arr of buckets.values()) arr.sort((a, b) => b.score - a.score);
       const bucketKeys = Array.from(buckets.keys()).sort((a, b) => b - a);
 
@@ -2659,67 +2867,76 @@ const k =
 	}, []);
 
   const solve = () => {
-	//✅ 思考期間不顯示起手高亮
-	stopToBase(true);
-	setNeedsSolve(false);
-    const configHash = JSON.stringify({
-  ...solverConfig,
-  target: targetCombos,
-  mode: solverMode,
-  priority: priorityMode,
-  skyfall: skyfallEnabled,
-  diagonal: diagonalEnabled,
-  specialPriority,
-});
-    const base = baseBoardRef.current;
-	const boardKey = getBoardKey(base) + `|cfg:${configHash}`;
-    if (solverCache.current.has(boardKey)) {
-      const cached = solverCache.current.get(boardKey);
-      setPath(cached.path);
-      const steps = cached.path ? cached.path.length - 1 : 0;
-      setStats(prev => ({ ...prev, ...cached.stats }));
-      return;
-    }
-    setSolving(true);
-    setTimeout(() => {
-      const result = beamSolve(
-		  base,
-		  solverConfig,
-		  targetCombos,
-		  solverMode,
-		  priorityMode,
-		  skyfallEnabled,
-		  diagonalEnabled,
-		  specialPriority
-		);
-      const steps = result.path ? result.path.length - 1 : 0;
-      const finalStats = {
-  combos: result.initialCombos,
-  skyfallCombos: result.skyfallCombos,
-  steps,
-  clearedOrbs: result.clearedCount,
-  initialClearedOrbs: result.initialClearedCount || 0,
-  skyfallClearedOrbs: Math.max(
-    0,
-    (result.clearedCount || 0) - (result.initialClearedCount || 0)
-  ),
-  verticalCombos: result.verticalCombos,
-  horizontalCombos: result.horizontalCombos,
+  // ✅ 思考期間不顯示起手高亮
+  stopToBase(true);
+  setNeedsSolve(false);
 
-  // ✅ 首消特殊圖形統計
-  crossCount: result.initialPatternCounts?.cross?.total || 0,
-  lCount: result.initialPatternCounts?.l?.total || 0,
-  tCount: result.initialPatternCounts?.t?.total || 0,
+  const configHash = JSON.stringify({
+    ...solverConfig,
+    target: targetCombos,
+    initTargetCombo,
+    mode: solverMode,
+    priority: priorityMode,
+    skyfall: skyfallEnabled,
+    diagonal: diagonalEnabled,
+    specialPriority,
+    autoRow0Expanded,
+  });
+
+  const base = baseBoardRef.current;
+  const boardKey = getBoardKey(base) + `|cfg:${configHash}`;
+
+  if (solverCache.current.has(boardKey)) {
+    const cached = solverCache.current.get(boardKey);
+    setPath(cached.path);
+    const steps = cached.path ? cached.path.length - 1 : 0;
+    setStats((prev) => ({ ...prev, ...cached.stats, steps }));
+    return;
+  }
+
+  setSolving(true);
+
+  setTimeout(() => {
+    const result = beamSolve(
+      base,
+      solverConfig,
+      targetCombos,
+      solverMode,
+      priorityMode,
+      skyfallEnabled,
+      diagonalEnabled,
+      specialPriority,
+      initTargetCombo,
+      autoRow0Expanded
+    );
+
+    const steps = result.path ? result.path.length - 1 : 0;
+
+    const finalStats = {
+      combos: result.initialCombos,
+      skyfallCombos: result.skyfallCombos,
+      steps,
+      clearedOrbs: result.clearedCount,
+      initialClearedOrbs: result.initialClearedCount || 0,
+      skyfallClearedOrbs: Math.max(
+        0,
+        (result.clearedCount || 0) - (result.initialClearedCount || 0)
+      ),
+      verticalCombos: result.verticalCombos,
+      horizontalCombos: result.horizontalCombos,
+      crossCount: result.initialPatternCounts?.cross?.total || 0,
+      lCount: result.initialPatternCounts?.l?.total || 0,
+      tCount: result.initialPatternCounts?.t?.total || 0,
+    };
+
+    solverCache.current.set(boardKey, { path: result.path, stats: finalStats });
+    setPath(result.path);
+    setStats((prev) => ({ ...prev, ...finalStats }));
+    setSolving(false);
+    setNeedsSolve(false);
+  }, 50);
 };
-	  
-	  solverCache.current.set(boardKey, { path: result.path, stats: finalStats });
-      setPath(result.path);
-      setStats(prev => ({ ...prev, ...finalStats }));
-      setSolving(false);
-	  setNeedsSolve(false);
-    }, 50);
-  };
-
+  
   const getCellCenterPx = useCallback((r, c) => {
 	  const rc = cellRectsRef.current?.[r]?.[c];
 	  const svgRect = svgRectRef.current || overlayRef.current?.getBoundingClientRect();
@@ -4067,6 +4284,11 @@ const updateSpecialPriority = (patch) => {
   setNeedsSolve(true);
 };
 
+const displayBoard =
+  !isManual && !autoRow0Expanded
+    ? renderBoard.slice(1)
+    : renderBoard;
+
   return (
   <div className="min-h-screen bg-neutral-950 text-white font-sans">
     <div
@@ -4345,15 +4567,15 @@ const updateSpecialPriority = (patch) => {
     {!isManual && (
       <>
         <ParamSlider
-  label="🎯 期望目標 Combo"
-  value={targetCombos}
+  label="🎯 期望首批 Combo"
+  value={initTargetCombo}
   min={1}
   max={stats.theoreticalMax || 1}
   step={1}
   inputMode="numeric"
   formatInput={(v) => String(v)}
-  onChange={(n) => setTargetCombos(parseInt(n, 10))}
-/>
+  onChange={(n) => setInitTargetCombo(parseInt(n, 10))}
+ />
 
 <ParamSlider
   label="📏 步數上限 (Steps)"
@@ -4666,492 +4888,516 @@ const updateSpecialPriority = (patch) => {
           }}
         >
           <div ref={boardInnerRef} className="relative overflow-visible">
-            <div className="grid grid-cols-6 gap-0">
-              {renderBoard.map((row, r) => (
-                <React.Fragment key={r}>
-                  {!solving && r === 1 && (
-                    <div className="overflow-visible col-span-6 h-2 bg-white z-50 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
-                  )}
-				  
-				  {row.map((orb, c) => {
-  const isMoving =
-    !solving &&
-    isReplaying &&
-    currentStep >= 0 &&
-    path[currentStep]?.r === r &&
-    path[currentStep]?.c === c;
+  {!isManual && (
+    <div className="mb-2 flex items-center justify-between rounded-2xl border border-white/10 bg-neutral-900/70 px-3 py-2">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-black text-yellow-300">頭像珠</span>
+        <span className="text-xs text-white/50">
+          {autoRow0Expanded ? "已展開" : "已收起"}
+        </span>
+      </div>
 
-  const isManualHidden =
-    manualHiddenCell &&
-    manualHiddenCell.r === r &&
-    manualHiddenCell.c === c;
-
-  return (
-    <div
-	  key={`${r}-${c}`}
-	  data-cell={`${r}-${c}`}
-	  onMouseDown={(e) => {
-		if (isManual && !manualLocked) {
-		  handleManualStart(r, c, e);
-		}
-	  }}
-	  onTouchStart={(e) => {
-		if (isManual && !manualLocked) {
-		  handleManualStart(r, c, e);
-		}
-	  }}
-	  onMouseUp={() => {
-		if (isManual) {
-		  lastPosRef.current = { r: -1, c: -1 };
-		  handleManualEnd();
-		}
-	  }}
-	  onTouchEnd={() => {
-		if (isManual) {
-		  lastPosRef.current = { r: -1, c: -1 };
-		  handleManualEnd();
-		}
-	  }}
-	  className={`relative w-full aspect-square flex items-center justify-center transition-all duration-75
-  ${
-    r === 0
-      ? "ring-2 ring-yellow-400 z-10 rounded-2xl"
-      : "rounded-2xl"
-  }
-  ${isMoving ? "opacity-20 z-40" : "opacity-100"}
-`}
-	  style={{ backgroundColor: "#171717" }}
-	>
-      {orb === -1 || isManualHidden ? (
-        <div className="w-[96%] h-[96%] rounded-2xl bg-black/40 border border-white/10" />
-      ) : (
-        <>
-          <img
-            src={
-              Object.values(ORB_TYPES).find(
-                (t) => t.id === orbOf(orb)
-              )?.img
-            }
-            className="w-[100%] h-[100%] object-contain pointer-events-none select-none"
-            draggable={false}
-            alt=""
-          />
-
-          {xMarkOf(orb) === 1 && !isManual && (
-            <img
-              src={x1Img}
-              className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-              draggable={false}
-              alt=""
-            />
-          )}
-
-          {xMarkOf(orb) === 2 && (
-            <img
-              src={x2Img}
-              className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-              draggable={false}
-              alt=""
-            />
-          )}
-
-          {qMarkOf(orb) === 1 &&
-            !isManual &&
-            !(r === 0 && replayDone) && (
-              <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
-                Start
-              </div>
-            )}
-
-          {qMarkOf(orb) === 2 && !isManual && (
-            <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
-              End
-            </div>
-          )}
-		  {nMarkOf(orb) === 1 && (
-  <img
-    src={n1Img}
-    className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-    draggable={false}
-    alt=""
-  />
-)}
-
-{nMarkOf(orb) === 2 && (
-  <img
-    src={n2Img}
-    className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-    draggable={false}
-    alt=""
-  />
-)}
-        </>
-      )}
+      <button
+        type="button"
+        onClick={() => {
+          stopToBase(true);
+          setAutoRow0Expanded((v) => !v);
+          setNeedsSolve(true);
+          setPath([]);
+          setCurrentStep(-1);
+        }}
+        className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+          autoRow0Expanded
+            ? "bg-yellow-400 text-black hover:bg-yellow-300"
+            : "bg-neutral-800 text-white hover:bg-neutral-700"
+        }`}
+      >
+        {autoRow0Expanded ? "收起" : "展開"}
+      </button>
     </div>
-  );
-})}
+  )}
 
-				</React.Fragment>
-              ))}
-            </div>
+  <div className="grid grid-cols-6 gap-0">
+    {displayBoard.map((row, rr) => {
+      const r = !isManual && !autoRow0Expanded ? rr + 1 : rr;
 
-            <svg
-              ref={overlayRef}
-              className="absolute inset-0 pointer-events-none w-full h-full overflow-visible z-[60]"
-              style={{ overflow: "visible" }}
-            >
-              <defs>
-                <filter
-                  id="glowGreen"
-                  x="-50%"
-                  y="-50%"
-                  width="200%"
-                  height="200%"
-                >
-                  <feGaussianBlur stdDeviation="3" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
+      return (
+        <React.Fragment key={r}>
+          {!solving && autoRow0Expanded && r === 1 && (
+            <div className="overflow-visible col-span-6 h-2 bg-white z-50 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
+          )}
 
-                <filter
-                  id="glowRed"
-                  x="-50%"
-                  y="-50%"
-                  width="200%"
-                  height="200%"
-                >
-                  <feGaussianBlur stdDeviation="3" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
+          {row.map((orb, c) => {
+            const isMoving =
+              !solving &&
+              isReplaying &&
+              currentStep >= 0 &&
+              path[currentStep]?.r === r &&
+              path[currentStep]?.c === c;
 
-              {(() => {
-  const isManualDragging = isManual && isDragging;
+            const isManualHidden =
+              manualHiddenCell &&
+              manualHiddenCell.r === r &&
+              manualHiddenCell.c === c;
 
-  // ✅ 手動轉珠中：整條路徑 + 起點綠燈 + 終點紅燈 全隱藏
-  if (isManualDragging) return null;
-
-  if (!path || path.length < 2) return null;
-
-  const visiblePath = path.slice(0, currentStep + 1);
-  if (visiblePath.length < 2) return null;
-
-  const pts0 = buildPixelPath(visiblePath);
-
-  let d, start, tip;
-  let ptsDetour = pts0;
-
-  // ✅ 先宣告在外層，後面 return JSX 才能用
-  let triMarks = [];
-  let segLabels = [];
-
-  if (isManualDragging) {
-    const simple = buildPathStringAndMarkersRounded(pts0, 6);
-    d = simple.d;
-    start = simple.start;
-    tip = simple.tip;
-  } else {
-    const bumpPx = Math.max(10, Math.min(22, stableCellSize * 0.22));
-    const rampPx = Math.max(10, Math.min(22, stableCellSize * 0.22));
-
-    const ptsJump = collapseUpcomingOverlapRunsV3(pts0, {
-      prefixMinEdges: 1,
-      suffixMinEdges: 1,
-      fullMinEdges: 3,
-      bump: bumpPx,
-      bumpRamp: rampPx,
-    });
-
-    ptsDetour = deOverlapByRampedDetourV2(ptsJump, 8, 14);
-
-    const complex = buildPathStringAndMarkersRounded(ptsDetour, 10);
-    d = complex.d;
-    start = complex.start;
-    tip = complex.tip;
-
-    triMarks = replayDone
-      ? sampleAlongPolyline(ptsDetour, 22, 14) // spacing, startOffset
-      : [];
-
-    // ✅ 段號：只看原始 rcPath (visiblePath) 的轉折
-    // ✅ 位置：投影到 detour 後的折線
-    segLabels = replayDone
-      ? buildSegmentLabelsFromRcPath(visiblePath, getCellCenterPx, {
-          cellSize: stableCellSize,
-          labelR: 8,
-          pathStroke: 4,
-          gap: -2,
-          alongScale: 0.22,
-          minPxLen: 10,
-        })
-      : [];
-  }
-
-                return (
+            return (
+              <div
+                key={`${r}-${c}`}
+                data-cell={`${r}-${c}`}
+                onMouseDown={(e) => {
+                  if (isManual && !manualLocked) {
+                    handleManualStart(r, c, e);
+                  }
+                }}
+                onTouchStart={(e) => {
+                  if (isManual && !manualLocked) {
+                    handleManualStart(r, c, e);
+                  }
+                }}
+                onMouseUp={() => {
+                  if (isManual) {
+                    lastPosRef.current = { r: -1, c: -1 };
+                    handleManualEnd();
+                  }
+                }}
+                onTouchEnd={() => {
+                  if (isManual) {
+                    lastPosRef.current = { r: -1, c: -1 };
+                    handleManualEnd();
+                  }
+                }}
+                className={`relative w-full aspect-square flex items-center justify-center transition-all duration-75 ${
+                  r === 0 && autoRow0Expanded
+                    ? "ring-2 ring-yellow-400 z-10 rounded-2xl"
+                    : "rounded-2xl"
+                } ${isMoving ? "opacity-20 z-40" : "opacity-100"}`}
+                style={{ backgroundColor: "#171717" }}
+              >
+                {orb === -1 || isManualHidden ? (
+                  <div className="w-[96%] h-[96%] rounded-2xl bg-black/40 border border-white/10" />
+                ) : (
                   <>
-                    {start && (
-                      <circle
-                        cx={start.x}
-                        cy={start.y}
-                        r="14"
-                        fill="#22c55e"
-                        stroke="black"
-                        strokeWidth="2"
-                        filter="url(#glowGreen)"
+                    <img
+                      src={
+                        Object.values(ORB_TYPES).find(
+                          (t) => t.id === orbOf(orb)
+                        )?.img
+                      }
+                      className="w-[100%] h-[100%] object-contain pointer-events-none select-none"
+                      draggable={false}
+                      alt=""
+                    />
+
+                    {xMarkOf(orb) === 1 && !isManual && (
+                      <img
+                        src={x1Img}
+                        className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+                        draggable={false}
+                        alt=""
                       />
                     )}
 
-                    <>
-                      <path
-                        d={d}
-                        stroke="rgba(0,0,0,0.55)"
-                        strokeWidth="10"
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        style={{
-                          filter: "blur(3.5px)",
-                          mixBlendMode: "normal",
-                        }}
-                        opacity={0.9}
+                    {xMarkOf(orb) === 2 && (
+                      <img
+                        src={x2Img}
+                        className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+                        draggable={false}
+                        alt=""
                       />
-
-                      <path
-                        d={d}
-                        stroke="rgba(255,255,255,0.95)"
-                        strokeWidth="14"
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        style={{
-                          filter: "blur(6px)",
-                          mixBlendMode: "screen",
-                        }}
-                        opacity={0.45}
-                      />
-
-                      <path
-                        d={d}
-                        stroke="white"
-                        strokeWidth="4"
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        style={{
-                          mixBlendMode: "screen",
-                        }}
-                        opacity={0.95}
-                      />
-                    </>
-
-                    {replayDone && triMarks.length > 0 && (
-                      <g opacity={1}>
-                        {triMarks.map((m, idx) => {
-                          const leg = 4;
-                          const angleDeg = 30;
-                          const theta = (angleDeg * Math.PI) / 180;
-                          const dx = -leg * Math.cos(theta);
-                          const dy = leg * Math.sin(theta);
-                          const coreWidth = 6;
-                          const sw = coreWidth * 0.15;
-
-                          return (
-                            <g
-                              key={idx}
-                              transform={`translate(${m.x} ${m.y}) rotate(${m.ang})`}
-                            >
-                              <path
-                                d={`M ${dx} ${-dy} L 0 0 L ${dx} ${dy}`}
-                                fill="none"
-                                stroke="black"
-                                strokeWidth={sw}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </g>
-                          );
-                        })}
-                      </g>
                     )}
 
-                    {replayDone && segLabels.length > 0 && (
-                      <g>
-                        {segLabels.map((s) => (
-                          <g key={s.idx}>
-                            <circle
-                              cx={s.x}
-                              cy={s.y}
-                              r={7}
-                              fill="rgba(0,0,0,0.75)"
-                              stroke="rgba(255,255,255,0.35)"
-                              strokeWidth="1.2"
-                            />
-                            <text
-                              x={s.x}
-                              y={s.y + 3}
-                              textAnchor="middle"
-                              fontSize="9"
-                              fontWeight="900"
-                              fill="white"
-                              style={{
-                                pointerEvents: "none",
-                                userSelect: "none",
-                              }}
-                            >
-                              {s.idx}
-                            </text>
-                          </g>
-                        ))}
-                      </g>
+                    {qMarkOf(orb) === 1 &&
+                      !isManual &&
+                      !(r === 0 && replayDone) && (
+                        <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
+                          Start
+                        </div>
+                      )}
+
+                    {qMarkOf(orb) === 2 && !isManual && (
+                      <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
+                        End
+                      </div>
                     )}
 
-                    {currentStep >= 0 && tip && (
-                      <circle
-                        cx={tip.x}
-                        cy={tip.y}
-                        r="16"
-                        fill="#ef4444"
-                        stroke="black"
-                        strokeWidth="2"
-                        filter="url(#glowRed)"
-                      >
-                        <animate
-                          attributeName="r"
-                          values="15;21;15"
-                          dur="0.8s"
-                          repeatCount="indefinite"
-                        />
-                        <animate
-                          attributeName="opacity"
-                          values="1;0.5;1"
-                          dur="0.8s"
-                          repeatCount="indefinite"
-                        />
-                      </circle>
+                    {nMarkOf(orb) === 1 && (
+                      <img
+                        src={n1Img}
+                        className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+                        draggable={false}
+                        alt=""
+                      />
+                    )}
+
+                    {nMarkOf(orb) === 2 && (
+                      <img
+                        src={n2Img}
+                        className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+                        draggable={false}
+                        alt=""
+                      />
                     )}
                   </>
+                )}
+              </div>
+            );
+          })}
+        </React.Fragment>
+      );
+    })}
+  </div>
+
+  <svg
+    ref={overlayRef}
+    className="absolute inset-0 pointer-events-none w-full h-full overflow-visible z-[60]"
+    style={{ overflow: "visible" }}
+  >
+    <defs>
+      <filter
+        id="glowGreen"
+    x="-50%"
+        y="-50%"
+        width="200%"
+        height="200%"
+      >
+        <feGaussianBlur stdDeviation="3" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      <filter
+        id="glowRed"
+        x="-50%"
+        y="-50%"
+        width="200%"
+        height="200%"
+      >
+        <feGaussianBlur stdDeviation="3" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+    </defs>
+
+    {(() => {
+      const isManualDragging = isManual && isDragging;
+
+      if (isManualDragging) return null;
+      if (!path || path.length < 2) return null;
+
+      const visiblePath = path.slice(0, currentStep + 1);
+      if (visiblePath.length < 2) return null;
+
+      const pts0 = buildPixelPath(visiblePath);
+
+      let d, start, tip;
+      let ptsDetour = pts0;
+      let triMarks = [];
+      let segLabels = [];
+
+      if (isManualDragging) {
+        const simple = buildPathStringAndMarkersRounded(pts0, 6);
+        d = simple.d;
+        start = simple.start;
+        tip = simple.tip;
+      } else {
+        const bumpPx = Math.max(10, Math.min(22, stableCellSize * 0.22));
+        const rampPx = Math.max(10, Math.min(22, stableCellSize * 0.22));
+
+        const ptsJump = collapseUpcomingOverlapRunsV3(pts0, {
+          prefixMinEdges: 1,
+          suffixMinEdges: 1,
+          fullMinEdges: 3,
+          bump: bumpPx,
+          bumpRamp: rampPx,
+        });
+
+        ptsDetour = deOverlapByRampedDetourV2(ptsJump, 8, 14);
+
+        const complex = buildPathStringAndMarkersRounded(ptsDetour, 10);
+        d = complex.d;
+        start = complex.start;
+        tip = complex.tip;
+
+        triMarks = replayDone
+          ? sampleAlongPolyline(ptsDetour, 22, 14)
+          : [];
+
+        segLabels = replayDone
+          ? buildSegmentLabelsFromRcPath(visiblePath, getCellCenterPx, {
+              cellSize: stableCellSize,
+              labelR: 8,
+              pathStroke: 4,
+              gap: -2,
+              alongScale: 0.22,
+              minPxLen: 10,
+            })
+          : [];
+      }
+
+      return (
+        <>
+          {start && (
+            <circle
+              cx={start.x}
+              cy={start.y}
+              r="14"
+              fill="#22c55e"
+              stroke="black"
+              strokeWidth="2"
+              filter="url(#glowGreen)"
+            />
+          )}
+
+          <>
+            <path
+              d={d}
+              stroke="rgba(0,0,0,0.55)"
+              strokeWidth="10"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                filter: "blur(3.5px)",
+                mixBlendMode: "normal",
+              }}
+              opacity={0.9}
+            />
+
+            <path
+              d={d}
+              stroke="rgba(255,255,255,0.95)"
+              strokeWidth="14"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                filter: "blur(6px)",
+                mixBlendMode: "screen",
+              }}
+              opacity={0.45}
+            />
+
+            <path
+              d={d}
+              stroke="white"
+              strokeWidth="4"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                mixBlendMode: "screen",
+              }}
+              opacity={0.95}
+            />
+          </>
+
+          {replayDone && triMarks.length > 0 && (
+            <g opacity={1}>
+              {triMarks.map((m, idx) => {
+                const leg = 4;
+                const angleDeg = 30;
+                const theta = (angleDeg * Math.PI) / 180;
+                const dx = -leg * Math.cos(theta);
+                const dy = leg * Math.sin(theta);
+                const coreWidth = 6;
+                const sw = coreWidth * 0.15;
+
+                return (
+                  <g
+                    key={idx}
+                    transform={`translate(${m.x} ${m.y}) rotate(${m.ang})`}
+                  >
+                    <path
+                      d={`M ${dx} ${-dy} L 0 0 L ${dx} ${dy}`}
+                      fill="none"
+                      stroke="black"
+                      strokeWidth={sw}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </g>
                 );
-              })()}
-            </svg>
+              })}
+            </g>
+          )}
 
-            <div className="absolute inset-0 pointer-events-none z-[9999]">
-              {floating?.visible && (
-                <div
-                  className="absolute z-[9999] pointer-events-none flex items-center justify-center"
-                  style={{
-                    left: floating.x,
-                    top: floating.y,
-                    transform: "translate(-50%, -50%)",
-                    width: 120,
-                    height: 120,
-                  }}
-                >
-                  <div className="absolute z-0 flex items-center justify-center">
-                    <div
-                      className="absolute rounded-full blur-lg opacity-100"
-                      style={{
-                        width: 90,
-                        height: 90,
-                        background:
-                          "radial-gradient(circle, rgba(99,102,241,1) 0%, rgba(99,102,241,0.95) 40%, rgba(99,102,241,0.6) 65%, rgba(0,0,0,0) 80%)",
-                      }}
-                    />
-                    <div
-                      className="absolute rounded-full blur-sm opacity-100"
-                      style={{
-                        width: 75,
-                        height: 75,
-                        background:
-                          "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,255,255,0.95) 50%, rgba(255,255,255,0.5) 75%, rgba(0,0,0,0) 95%)",
-                      }}
-                    />
-                  </div>
-
-                  <img
-                    src={
-                      Object.values(ORB_TYPES).find(
-                        (t) => t.id === floating.orbId
-                      )?.img
-                    }
-                    className="relative w-16 h-16 md:w-20 md:h-20 block drop-shadow-[0_0_10px_rgba(255,255,255,0.35)]"
-                    draggable={false}
-                    alt=""
+          {replayDone && segLabels.length > 0 && (
+            <g>
+              {segLabels.map((s) => (
+                <g key={s.idx}>
+                  <circle
+                    cx={s.x}
+                    cy={s.y}
+                    r={7}
+                    fill="rgba(0,0,0,0.75)"
+                    stroke="rgba(255,255,255,0.35)"
+                    strokeWidth="1.2"
                   />
-                </div>
-              )}
-            </div>
+                  <text
+                    x={s.x}
+                    y={s.y + 3}
+                    textAnchor="middle"
+                    fontSize="9"
+                    fontWeight="900"
+                    fill="white"
+                    style={{
+                      pointerEvents: "none",
+                      userSelect: "none",
+                    }}
+                  >
+                    {s.idx}
+                  </text>
+                </g>
+              ))}
+            </g>
+          )}
 
-            {solving && (
-              <div className="absolute inset-0 bg-neutral-950/90 rounded-3xl flex flex-col items-center justify-center z-20 backdrop-blur-xl">
-                <div className="relative w-24 h-24 mb-6">
-                  <div className="absolute inset-0 border-4 border-indigo-500/10 rounded-full"></div>
-                  <div className="absolute inset-0 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-                  {priorityMode === "steps" ? (
-                    <Footprints
-                      className="absolute inset-0 m-auto text-amber-400 animate-pulse"
-                      size={32}
-                    />
-                  ) : (
-                    <Trophy
-                      className="absolute inset-0 m-auto text-emerald-400 animate-pulse"
-                      size={32}
-                    />
-                  )}
-                </div>
+          {currentStep >= 0 && tip && (
+            <circle
+              cx={tip.x}
+              cy={tip.y}
+              r="16"
+              fill="#ef4444"
+              stroke="black"
+              strokeWidth="2"
+              filter="url(#glowRed)"
+            >
+              <animate
+                attributeName="r"
+                values="15;21;15"
+                dur="0.8s"
+                repeatCount="indefinite"
+              />
+              <animate
+                attributeName="opacity"
+                values="1;0.5;1"
+                dur="0.8s"
+                repeatCount="indefinite"
+              />
+            </circle>
+          )}
+        </>
+      );
+    })()}
+  </svg>
 
-                <p className="font-black text-xl text-indigo-500 tracking-[0.2em] animate-pulse uppercase">
-                  {skyfallEnabled
-                    ? "Combo Analysis"
-                    : priorityMode === "steps"
-                    ? "Optimizing Time"
-                    : "Deep Searching"}
-                </p>
-              </div>
-            )}
+  <div className="absolute inset-0 pointer-events-none z-[9999]">
+    {floating?.visible && (
+      <div
+        className="absolute z-[9999] pointer-events-none flex items-center justify-center"
+        style={{
+          left: floating.x,
+          top: floating.y,
+          transform: "translate(-50%, -50%)",
+          width: 120,
+          height: 120,
+        }}
+      >
+        <div className="absolute z-0 flex items-center justify-center">
+          <div
+            className="absolute rounded-full blur-lg opacity-100"
+            style={{
+              width: 90,
+              height: 90,
+              background:
+                "radial-gradient(circle, rgba(99,102,241,1) 0%, rgba(99,102,241,0.95) 40%, rgba(99,102,241,0.6) 65%, rgba(0,0,0,0) 80%)",
+            }}
+          />
+          <div
+            className="absolute rounded-full blur-sm opacity-100"
+            style={{
+              width: 75,
+              height: 75,
+              background:
+                "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,255,255,0.95) 50%, rgba(255,255,255,0.5) 75%, rgba(0,0,0,0) 95%)",
+            }}
+          />
+        </div>
 
-            {showMoveEnded && (
-              <div className="absolute inset-0 bg-neutral-950/85 rounded-3xl flex flex-col items-center justify-center z-[9999] pointer-events-none">
-                <Clock className="text-orange-400 mb-4" size={40} />
+        <img
+          src={
+            Object.values(ORB_TYPES).find(
+              (t) => t.id === floating.orbId
+            )?.img
+          }
+          className="relative w-16 h-16 md:w-20 md:h-20 block drop-shadow-[0_0_10px_rgba(255,255,255,0.35)]"
+          draggable={false}
+          alt=""
+        />
+      </div>
+    )}
+  </div>
 
-                <p className="font-black text-xl text-orange-400 tracking-[0.2em] uppercase">
-                  Move Ended
-                </p>
+  {solving && (
+    <div className="absolute inset-0 bg-neutral-950/90 rounded-3xl flex flex-col items-center justify-center z-20 backdrop-blur-xl">
+      <div className="relative w-24 h-24 mb-6">
+        <div className="absolute inset-0 border-4 border-indigo-500/10 rounded-full"></div>
+        <div className="absolute inset-0 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        {priorityMode === "steps" ? (
+          <Footprints
+            className="absolute inset-0 m-auto text-amber-400 animate-pulse"
+            size={32}
+          />
+        ) : (
+          <Trophy
+            className="absolute inset-0 m-auto text-emerald-400 animate-pulse"
+            size={32}
+          />
+        )}
+      </div>
 
-                <p className="mt-2 text-sm font-black text-white/70 tracking-[0.3em] uppercase">
-                  Time Up
-                </p>
-              </div>
-            )}
+      <p className="font-black text-xl text-indigo-500 tracking-[0.2em] animate-pulse uppercase">
+        {skyfallEnabled
+          ? "Combo Analysis"
+          : priorityMode === "steps"
+          ? "Optimizing Time"
+          : "Deep Searching"}
+      </p>
+    </div>
+  )}
 
-            {gifCaptureMode && (
-              <div
-                className="w-full flex items-center justify-center text-[12px] font-black tracking-wide"
-                style={{
-                  height: GIF_FOOTER_H,
-                  marginTop: 0,
-                  background: "rgba(0,0,0,0.55)",
-                  borderTop: "1px solid rgba(255,255,255,0.12)",
-                }}
-              >
-                <span className="text-white/90">
-                  segment: {gifFooter.segment}/{gifFooter.segmentTotal}
-                </span>
-                <span className="mx-2 text-white/30">|</span>
-                <span className="text-fuchsia-200">
-                  combo: {gifFooter.comboText}
-                </span>
-                <span className="mx-2 text-white/30">|</span>
-                <span className="text-emerald-200">
-                  step: {gifFooter.step}/{gifFooter.stepTotal}
-                </span>
-              </div>
-            )}
-          </div>
+  {showMoveEnded && (
+    <div className="absolute inset-0 bg-neutral-950/85 rounded-3xl flex flex-col items-center justify-center z-[9999] pointer-events-none">
+      <Clock className="text-orange-400 mb-4" size={40} />
+
+      <p className="font-black text-xl text-orange-400 tracking-[0.2em] uppercase">
+        Move Ended
+      </p>
+
+      <p className="mt-2 text-sm font-black text-white/70 tracking-[0.3em] uppercase">
+        Time Up
+      </p>
+    </div>
+  )}
+
+  {gifCaptureMode && (
+    <div
+      className="w-full flex items-center justify-center text-[12px] font-black tracking-wide"
+      style={{
+        height: GIF_FOOTER_H,
+        marginTop: 0,
+        background: "rgba(0,0,0,0.55)",
+        borderTop: "1px solid rgba(255,255,255,0.12)",
+      }}
+    >
+      <span className="text-white/90">
+        segment: {gifFooter.segment}/{gifFooter.segmentTotal}
+      </span>
+      <span className="mx-2 text-white/30">|</span>
+      <span className="text-fuchsia-200">
+        combo: {gifFooter.comboText}
+      </span>
+      <span className="mx-2 text-white/30">|</span>
+      <span className="text-emerald-200">
+        step: {gifFooter.step}/{gifFooter.stepTotal}
+      </span>
+    </div>
+  )}
+</div>
         </div>
 
         {(() => {
