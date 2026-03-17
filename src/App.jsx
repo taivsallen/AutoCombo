@@ -6,7 +6,7 @@ import ActiveSkillTemplateModal from "./ActiveSkillTemplateModal";
 import GIF from "gif.js.optimized";
 import gifWorkerUrl from "gif.js.optimized/dist/gif.worker.js?url";
 import gifsicle from "gifsicle-wasm-browser";
-import { FileDown, Wrench, Play, Pause, Square, Zap, RefreshCw, Database, Activity, Target, BrainCircuit, Settings2, Sliders, Layers, Microscope, Binary, Timer, Unlink, AlignJustify, AlignCenterVertical, Columns, Rows, RotateCcw, Footprints, Trophy, Edit3, Check, X, Palette, Clock, Settings, Hourglass, Ruler, CloudLightning, MoveUpRight, Move, Lightbulb } from 'lucide-react';
+import { Route, Sparkles, FileDown, Wrench, Play, Pause, Square, Zap, RefreshCw, Database, Activity, Target, BrainCircuit, Settings2, Sliders, Layers, Microscope, Binary, Timer, Unlink, AlignJustify, AlignCenterVertical, Columns, Rows, RotateCcw, Footprints, Trophy, Edit3, Check, X, Palette, Clock, Settings, Hourglass, Ruler, CloudLightning, MoveUpRight, Move, Lightbulb } from 'lucide-react';
 
 import wImg from './assets/w.png';
 import fImg from './assets/f.png';
@@ -145,6 +145,9 @@ function topKByScore(items, K, getScore) {
 }
 
 const App = () => {
+const [pathsExpanded, setPathsExpanded] = useState(true);
+const [specialPriorityExpanded, setSpecialPriorityExpanded] = useState(false);
+	
 const [showTemplateBrowser, setShowTemplateBrowser] = useState(false);
 
 const [showTopBar, setShowTopBar] = useState(true);
@@ -234,6 +237,128 @@ const [manualActive, setManualActive] = useState(false); // 轉珠是否已開�
   const exportTokenRef = useRef({ id: 0, cancelled: false });
   const [gifStage, setGifStage] = useState("capture"); // "capture" | "render"
   const [selectedMark, setSelectedMark] = useState(0); // 0=刷符石, 1=X1, 2=X2, 3=Q1, 4=Q2
+  const [selectedBrush, setSelectedBrush] = useState(0);
+  
+  const editorDraggingRef = useRef(false);
+const editorLastPaintRef = useRef({ r: -1, c: -1 });
+
+const applyEditAtCell = useCallback((r, c) => {
+  setEditingBoard((prev) => {
+    const next = prev.map((row) => [...row]);
+    const cur = next[r][c];
+
+    const o = orbOf(cur);
+    const xm = xMarkOf(cur);
+    const qm = qMarkOf(cur);
+    const nm = nMarkOf(cur);
+
+    // 0 = 刷符石
+    if (selectedMark === 0) {
+      next[r][c] = withMarks(selectedBrush, xm, qm, nm);
+      return next;
+    }
+
+    // X1 / X2
+    if (selectedMark === 1 || selectedMark === 2) {
+      if (isManual && selectedMark === 1) return prev; // 手動模式不給 X1
+      const want = selectedMark;
+      const nx = xm === want ? 0 : want;
+      const nq = nx !== 0 ? 0 : qm; // 有 X 時清 Q
+      next[r][c] = withMarks(o, nx, nq, nm);
+      return next;
+    }
+
+    // N1 / N2
+    if (selectedMark === 5 || selectedMark === 6) {
+      if (isManual && selectedMark === 6) return prev; // 手動模式不給 N2
+      const wantN = selectedMark === 5 ? 1 : 2;
+      const targetOrb = orbOf(cur);
+      if (targetOrb < 0) return prev;
+
+      const shouldClear = nm === wantN;
+
+      for (let rr = 0; rr < TOTAL_ROWS; rr++) {
+        for (let cc = 0; cc < COLS; cc++) {
+          const v = next[rr][cc];
+          if (orbOf(v) !== targetOrb) continue;
+
+          next[rr][cc] = withMarks(
+            orbOf(v),
+            xMarkOf(v),
+            qMarkOf(v),
+            shouldClear ? 0 : wantN
+          );
+        }
+      }
+      return next;
+    }
+
+    // Q1 / Q2
+    if (selectedMark === 3 || selectedMark === 4) {
+      if (isManual) return prev; // 手動模式不給 Q
+      const wantQ = selectedMark === 3 ? 1 : 2;
+
+      if (wantQ === 1 && xm !== 0) return prev;
+      if (wantQ === 2 && xm === 1) return prev;
+
+      if (qm === wantQ) {
+        next[r][c] = withMarks(o, xm, 0, nm);
+        return next;
+      }
+
+      // row0 不允許同時有 START / END 衝突
+      if (r === 0) {
+        for (let cc = 0; cc < COLS; cc++) {
+          const v = next[0][cc];
+          if (wantQ === 1 && qMarkOf(v) === 2) return prev;
+          if (wantQ === 2 && qMarkOf(v) === 1) return prev;
+        }
+      }
+
+      // 全盤唯一
+      for (let rr = 0; rr < TOTAL_ROWS; rr++) {
+        for (let cc = 0; cc < COLS; cc++) {
+          const v = next[rr][cc];
+          if (qMarkOf(v) === wantQ) {
+            next[rr][cc] = withMarks(
+              orbOf(v),
+              xMarkOf(v),
+              0,
+              nMarkOf(v)
+            );
+          }
+        }
+      }
+
+      next[r][c] = withMarks(o, xm, wantQ, nm);
+      return next;
+    }
+
+    return next;
+  });
+}, [selectedMark, selectedBrush, isManual]);
+
+const startEditorPaint = useCallback((r, c) => {
+  editorDraggingRef.current = true;
+  editorLastPaintRef.current = { r, c };
+  applyEditAtCell(r, c);
+}, [applyEditAtCell]);
+
+const moveEditorPaint = useCallback((r, c) => {
+  if (!editorDraggingRef.current) return;
+
+  const last = editorLastPaintRef.current;
+  if (last.r === r && last.c === c) return;
+
+  editorLastPaintRef.current = { r, c };
+  applyEditAtCell(r, c);
+}, [applyEditAtCell]);
+
+const endEditorPaint = useCallback(() => {
+  editorDraggingRef.current = false;
+  editorLastPaintRef.current = { r: -1, c: -1 };
+}, []);
+  
   const baseBoardRef = useRef([]);
   const [holePos, setHolePos] = useState(null);
   const rafRef = useRef(0);
@@ -338,7 +463,6 @@ const [manualActive, setManualActive] = useState(false); // 轉珠是否已開�
   
   const [showEditor, setShowEditor] = useState(false);
   const [editingBoard, setEditingBoard] = useState([]);
-  const [selectedBrush, setSelectedBrush] = useState(0);
   
   const [autoRow0Expanded, setAutoRow0Expanded] = useState(true);
 
@@ -488,7 +612,7 @@ const refreshTarget = useCallback((newBoard, row0Expanded = autoRow0Expanded) =>
 	  } else {
 		// ✅ 固定盤：也統一成 mark=0
 		newBoard = [
-		  [0,2,3,4,5,1],
+		  [0,2,3,4,2,1],
 		  [2,0,0,2,4,1],
 		  [0,5,2,5,0,1],
 		  [2,1,2,5,1,2],
@@ -1269,6 +1393,8 @@ if (allowDiagonal) {
   return { nextBoard, nextHeld };
 };
 
+/////////////////
+
 const clone2D = (b) => {
   const len = b.length;
   const copy = new Array(len);
@@ -1575,10 +1701,11 @@ const hasInitialN2Clear = (board, toClear1D) => {
 const getInitialMatchCheck = (board) => {
   const initial = findMatches(board, "initial");
 
+  const vanillaToClear = getVanillaInitialClearMap(board);
+
   return {
     initial,
-    // ✅ 直接吃 initial.toClearMap，少一次重掃盤面
-    violatesN2: hasInitialN2Clear(board, initial.toClearMap),
+    violatesN2: hasInitialN2Clear(board, vanillaToClear),
   };
 };
 
@@ -2012,7 +2139,12 @@ const getBoardKey = (b) => {
 ) => {
   const useRow0 = !!autoRow0Expanded;
 
-  const makeNode = (parent, r, c) => ({ parent, r, c, len: parent ? parent.len + 1 : 1 });
+  const makeNode = (parent, r, c) => ({
+    parent,
+    r,
+    c,
+    len: parent ? parent.len + 1 : 1,
+  });
 
   const buildPath = (node) => {
     const arr = [];
@@ -2095,55 +2227,114 @@ const getBoardKey = (b) => {
     return (ev.initialCombos || 0) === initTargetCombo;
   };
 
+  let topStepCandidates = [];
+  let topComboCandidates = [];
+
+  const packCandidateFromEv = (ev, node, score) => {
+    const path = node ? buildPath(node) : [];
+    return {
+      ...ev,
+      path,
+      score,
+    };
+  };
+
+  const pushTopCandidate = (ev, node, score, violatesN2) => {
+  if (!node) return;
+
+  const steps = stepsOf(node);
+  if (steps <= 0) return;
+  if (!shouldAcceptEnd(node)) return;
+
+  const sol = {
+    ...packCandidateFromEv(ev, node, score),
+    violatesN2: !!violatesN2,
+  };
+
+  if (priority === "steps") {
+    topStepCandidates = mergeTopSolutions(
+      topStepCandidates,
+      [sol],
+      "steps",
+      specialPriority,
+      initTargetCombo,
+      10
+    );
+  } else {
+    topComboCandidates = mergeTopSolutions(
+      topComboCandidates,
+      [sol],
+      "combo",
+      specialPriority,
+      initTargetCombo,
+      10
+    );
+  }
+};
+
   const considerBest = (ev, score, node, violatesN2) => {
-    if (violatesN2) return;
-    if (!shouldAcceptEnd(node)) return;
+  if (!shouldAcceptEnd(node)) return;
 
-    const curSteps = stepsOf(node);
-    const bestSteps = bestGlobal.node ? stepsOf(bestGlobal.node) : Infinity;
+  const curSteps = stepsOf(node);
+  const bestSteps = bestGlobal.node ? stepsOf(bestGlobal.node) : Infinity;
 
-    const curSpecial = getSpecialScore(ev, specialPriority);
-    const bestSpecial = bestGlobal.specialScore ?? -Infinity;
+  const curSpecial = getSpecialScore(ev, specialPriority);
+  const bestSpecial = bestGlobal.specialScore ?? -Infinity;
 
-    const curInitExact = hitsInitTargetComboExactly(ev);
-    const bestInitExact = hitsInitTargetComboExactly(bestGlobal);
+  const curInitExact = hitsInitTargetComboExactly(ev);
+  const bestInitExact = hitsInitTargetComboExactly(bestGlobal);
 
-    let isBetterGlobal = false;
+  const curLegal = violatesN2 ? 0 : 1;
+  const bestLegal = bestGlobal.node
+    ? (bestGlobal.violatesN2 ? 0 : 1)
+    : -1;
 
-    if (curSpecial > bestSpecial) {
-      isBetterGlobal = true;
-    } else if (curSpecial === bestSpecial) {
-      if (curInitExact !== bestInitExact) {
-        isBetterGlobal = curInitExact;
-      } else {
-        if ((ev.combos || 0) > (bestGlobal.combos || 0)) {
+  let isBetterGlobal = false;
+
+  // 先比合法性
+  if (curLegal !== bestLegal) {
+    isBetterGlobal = curLegal > bestLegal;
+  } else if (curSpecial > bestSpecial) {
+    isBetterGlobal = true;
+  } else if (curSpecial === bestSpecial) {
+    if (curInitExact !== bestInitExact) {
+      isBetterGlobal = curInitExact;
+    } else {
+      if ((ev.combos || 0) > (bestGlobal.combos || 0)) {
+        isBetterGlobal = true;
+      } else if ((ev.combos || 0) === (bestGlobal.combos || 0)) {
+        if (curSteps < bestSteps) {
           isBetterGlobal = true;
-        } else if ((ev.combos || 0) === (bestGlobal.combos || 0)) {
-          if (curSteps < bestSteps) {
+        } else if (curSteps === bestSteps) {
+          if (score > bestGlobal.score) {
             isBetterGlobal = true;
-          } else if (curSteps === bestSteps) {
-            if (score > bestGlobal.score) {
-              isBetterGlobal = true;
-            } else if (
-              score === bestGlobal.score &&
-              (ev.clearedCount || 0) > (bestGlobal.clearedCount || 0)
-            ) {
-              isBetterGlobal = true;
-            }
+          } else if (
+            score === bestGlobal.score &&
+            (ev.clearedCount || 0) > (bestGlobal.clearedCount || 0)
+          ) {
+            isBetterGlobal = true;
           }
         }
       }
     }
+  }
 
-    if (isBetterGlobal) {
-      bestGlobal = { ...ev, node, score, specialScore: curSpecial };
-    }
+  if (isBetterGlobal) {
+    bestGlobal = {
+      ...ev,
+      node,
+      score,
+      specialScore: curSpecial,
+      violatesN2: !!violatesN2,
+    };
+  }
 
-    const solved = hasSpecial ? isSolvedGoal(ev) : (ev.combos >= target);
-    if (solved && curSteps > 0) {
-      if (curSteps < bestReachedSteps) bestReachedSteps = curSteps;
-    }
-  };
+  // ✅ bestReachedSteps 只讓「合法且達標」的解更新
+  const solved = hasSpecial ? isSolvedGoal(ev) : ev.combos >= target;
+  if (!violatesN2 && solved && curSteps > 0) {
+    if (curSteps < bestReachedSteps) bestReachedSteps = curSteps;
+  }
+};
 
   const dirsPlay = diagonal ? DIRS_8 : DIRS_4;
   let beam = [];
@@ -2228,16 +2419,17 @@ const getBoardKey = (b) => {
       violatesN2
     );
 
-    const score = hasSpecial ? (rawScore - 6000000) : rawScore;
+    const score = hasSpecial ? rawScore - 6000000 : rawScore;
 
     const key = `${getBoardKey(boardCopy)}|${held}|${r},${c}|${locked0 ? 1 : 0}`;
     if (!betterThanVisited(key, ev, score, 0, mode)) return;
 
     const node = makeNode(null, r, c);
+	pushTopCandidate(ev, node, score, violatesN2);
     considerBest(ev, score, node, violatesN2);
 
     if (
-      (!hasSpecial ? (ev.combos >= target) : isSolvedGoal(ev)) &&
+      (!hasSpecial ? ev.combos >= target : isSolvedGoal(ev)) &&
       shouldAcceptEnd(node) &&
       !violatesN2
     ) {
@@ -2272,10 +2464,10 @@ const getBoardKey = (b) => {
   const sortComboCandidates = (candidates) => {
     candidates.sort((a, b) => {
       const aReach =
-        (!hasSpecial ? (a.ev.combos >= target) : isSolvedGoal(a.ev)) &&
+        (!hasSpecial ? a.ev.combos >= target : isSolvedGoal(a.ev)) &&
         !a.violatesN2;
       const bReach =
-        (!hasSpecial ? (b.ev.combos >= target) : isSolvedGoal(b.ev)) &&
+        (!hasSpecial ? b.ev.combos >= target : isSolvedGoal(b.ev)) &&
         !b.violatesN2;
 
       if (aReach !== bReach) return aReach ? -1 : 1;
@@ -2295,7 +2487,9 @@ const getBoardKey = (b) => {
   const getMissTier = (st) => {
     return !hasSpecial
       ? Math.max(0, target - st.ev.combos)
-      : (isSolvedGoal(st.ev) ? 0 : Math.max(1, target - st.ev.combos));
+      : isSolvedGoal(st.ev)
+      ? 0
+      : Math.max(1, target - st.ev.combos);
   };
 
   const buildQuota = (counts, remain, quotaW) => {
@@ -2476,7 +2670,12 @@ const getBoardKey = (b) => {
 
         if (!useRow0 && nr === 0) continue;
 
-        if (state.node && state.node.parent && nr === state.node.parent.r && nc === state.node.parent.c) {
+        if (
+          state.node &&
+          state.node.parent &&
+          nr === state.node.parent.r &&
+          nc === state.node.parent.c
+        ) {
           continue;
         }
 
@@ -2498,7 +2697,6 @@ const getBoardKey = (b) => {
           const evalBoard = boardWithHeldFilled(nextBoard, nextHole, state.held);
 
           const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
-
           const ev = evaluateBoard(evalBoard, skyfall, initial);
           if (exceedsInitialComboCap(ev)) continue;
 
@@ -2518,10 +2716,11 @@ const getBoardKey = (b) => {
           const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
           if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
 
+		  pushTopCandidate(ev, newNode, score, violatesN2);
           considerBest(ev, score, newNode, violatesN2);
 
           if (
-            (!hasSpecial ? (ev.combos >= target) : isSolvedGoal(ev)) &&
+            (!hasSpecial ? ev.combos >= target : isSolvedGoal(ev)) &&
             shouldAcceptEnd(newNode) &&
             !violatesN2
           ) {
@@ -2557,7 +2756,6 @@ const getBoardKey = (b) => {
           }
 
           const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
-
           const ev = evaluateBoard(evalBoard, skyfall, initial);
           if (exceedsInitialComboCap(ev)) continue;
 
@@ -2573,7 +2771,7 @@ const getBoardKey = (b) => {
             specialPriority,
             violatesN2
           );
-
+		  pushTopCandidate(ev, newNode, score, violatesN2);
           considerBest(ev, score, newNode, violatesN2);
           continue;
         }
@@ -2610,11 +2808,11 @@ const getBoardKey = (b) => {
 
         const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
         if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
-
+		pushTopCandidate(ev, newNode, score, violatesN2);
         considerBest(ev, score, newNode, violatesN2);
 
         if (
-          (!hasSpecial ? (ev.combos >= target) : isSolvedGoal(ev)) &&
+          (!hasSpecial ? ev.combos >= target : isSolvedGoal(ev)) &&
           shouldAcceptEnd(newNode) &&
           !violatesN2
         ) {
@@ -2675,7 +2873,12 @@ const getBoardKey = (b) => {
   bestGlobal.path = bestGlobal.node ? buildPath(bestGlobal.node) : [];
   bestGlobal.nodesExpanded = nodesExpanded;
   delete bestGlobal.node;
-  return bestGlobal;
+
+  return {
+    ...bestGlobal,
+    topSteps: topStepCandidates,
+    topCombos: topComboCandidates,
+  };
 };
   
   const stopToBase = useCallback((clearStep = true) => {
@@ -2698,6 +2901,258 @@ const getBoardKey = (b) => {
 	  // 4) Stop 是否要把路徑回到未開始
 	  if (clearStep) setCurrentStep(-1);
 	}, []);
+
+const [solutionPools, setSolutionPools] = useState({
+  steps: [],
+  combo: [],
+});
+
+const [selectedPoolIndex, setSelectedPoolIndex] = useState(0);
+
+const solutionPoolsRef = useRef({
+  steps: [],
+  combo: [],
+});
+
+const solutionPoolContextRef = useRef({
+  resetKey: "",
+});
+
+useEffect(() => {
+  solutionPoolsRef.current = solutionPools;
+}, [solutionPools]);
+
+const getPathSteps = (path) => Math.max(0, (path?.length || 0) - 1);
+
+const filterSolutionsByMaxSteps = (list, maxSteps) => {
+  return (list || []).filter((sol) => getPathSteps(sol.path) <= maxSteps);
+};
+
+const getSolutionGroupKey = (sol) => {
+  const initCombo = sol.initialCombos || 0;
+  const skyfallCombo = sol.skyfallCombos || 0;
+  return `${initCombo}|${skyfallCombo}`;
+};
+
+const getSolutionMergeSignature = (sol) => {
+  return `${sol.initialCombos || 0}|${sol.skyfallCombos || 0}`;
+};
+
+const shouldReplaceSameComboSignature = (
+  prev,
+  cur,
+  mode,
+  specialPriority,
+  initTargetCombo
+) => {
+  const prevSteps = getPathSteps(prev.path);
+  const curSteps = getPathSteps(cur.path);
+
+  // 同首消+疊消，只留步數最小
+  if (curSteps < prevSteps) return true;
+  if (curSteps > prevSteps) return false;
+
+  // 步數相同時，再用原本 rank 比高低
+  const prevRank = makePoolRank(prev, mode, specialPriority, initTargetCombo);
+  const curRank = makePoolRank(cur, mode, specialPriority, initTargetCombo);
+
+  return isLexBetter(curRank, prevRank);
+};
+
+const isSpecialSatisfiedBy = (ev, specialPriority) => {
+  if (!specialPriority || specialPriority.type === "none") return true;
+
+  if (specialPriority.type === "clearCount") {
+    return (ev.initialClearedCount || 0) === (specialPriority.clearCount || 0);
+  }
+
+  if (
+    specialPriority.type === "cross" ||
+    specialPriority.type === "l" ||
+    specialPriority.type === "t"
+  ) {
+    const group = ev.initialPatternCounts?.[specialPriority.type];
+    if (!group) return false;
+
+    const wantCount = specialPriority.count || 1;
+    const wantOrb = specialPriority.orb;
+
+    // 任意屬性
+    if (wantOrb === SPECIAL_ORB_ANY) {
+      return (group.total || 0) >= wantCount;
+    }
+
+    // 指定屬性
+    return (group.byOrb?.[wantOrb] || 0) >= wantCount;
+  }
+
+  return false;
+};
+
+const makePoolRank = (sol, mode, specialPriority, initTargetCombo) => {
+  const initialCombos = sol.initialCombos || 0;
+  const totalCombos = sol.combos || 0;
+  const cleared = sol.clearedCount || 0;
+  const steps = getPathSteps(sol.path);
+
+  const legal = sol.violatesN2 ? 0 : 1;
+  const specialSat = isSpecialSatisfiedBy(sol, specialPriority) ? 1 : 0;
+  const initExact = initialCombos === initTargetCombo ? 1 : 0;
+  const score = sol.score || 0;
+
+  if (mode === "steps") {
+    return [
+      legal,
+      specialSat,
+      initExact,
+      totalCombos,
+      -steps,
+      score,
+      cleared,
+    ];
+  }
+
+  return [
+    legal,
+    specialSat,
+    initExact,
+    totalCombos,
+    -steps,
+    score,
+    cleared,
+  ];
+};
+
+// lexicographic 比較 (desc)
+const lexCompareDesc = (a, b) => {
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const av = a[i] ?? 0;
+    const bv = b[i] ?? 0;
+    if (av !== bv) return bv - av;
+  }
+  return 0;
+};
+
+// a 是否比 b 好
+const isLexBetter = (a, b) => {
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const av = a[i] ?? 0;
+    const bv = b[i] ?? 0;
+    if (av > bv) return true;
+    if (av < bv) return false;
+  }
+  return false;
+};
+
+const mergeTopSolutions = (
+  oldList,
+  newList,
+  mode,
+  specialPriority,
+  initTargetCombo,
+  limit = 10
+) => {
+  const bestBySig = new Map();
+
+  for (const sol of [...oldList, ...newList]) {
+    if (!sol || !sol.path || sol.path.length === 0) continue;
+
+    const sig = getSolutionMergeSignature(sol);
+    const prev = bestBySig.get(sig);
+
+    if (!prev) {
+      bestBySig.set(sig, sol);
+      continue;
+    }
+
+    const replace = shouldReplaceSameComboSignature(
+      prev,
+      sol,
+      mode,
+      specialPriority,
+      initTargetCombo
+    );
+
+    if (replace) {
+      bestBySig.set(sig, sol);
+    }
+  }
+
+  const arr = Array.from(bestBySig.values());
+
+  arr.sort((a, b) =>
+    lexCompareDesc(
+      makePoolRank(a, mode, specialPriority, initTargetCombo),
+      makePoolRank(b, mode, specialPriority, initTargetCombo)
+    )
+  );
+
+  return arr.slice(0, limit);
+};
+
+const makeSolutionResetKey = (
+  baseBoard,
+  diagonalEnabled,
+  skyfallEnabled,
+  maxSteps
+) => {
+  return JSON.stringify({
+    board: getBoardKey(baseBoard),
+    diagonal: !!diagonalEnabled,
+    skyfall: !!skyfallEnabled,
+    maxSteps,
+  });
+};
+
+const clearSolutionPools = useCallback(() => {
+  setSolutionPools({ steps: [], combo: [] });
+  setSelectedPoolIndex(0);
+  solutionPoolContextRef.current.resetKey = "";
+}, []);
+
+const applySolvedCandidate = useCallback((sol) => {
+  if (!sol) return;
+
+  const steps = sol.path ? sol.path.length - 1 : 0;
+
+  const finalStats = {
+    combos: sol.initialCombos || 0,
+    skyfallCombos: sol.skyfallCombos || 0,
+    steps,
+    clearedOrbs: sol.clearedCount || 0,
+    initialClearedOrbs: sol.initialClearedCount || 0,
+    skyfallClearedOrbs: Math.max(
+      0,
+      (sol.clearedCount || 0) - (sol.initialClearedCount || 0)
+    ),
+    verticalCombos: sol.verticalCombos || 0,
+    horizontalCombos: sol.horizontalCombos || 0,
+    crossCount: sol.initialPatternCounts?.cross?.total || 0,
+    lCount: sol.initialPatternCounts?.l?.total || 0,
+    tCount: sol.initialPatternCounts?.t?.total || 0,
+  };
+
+  stopToBase(true);
+  setPath(sol.path || []);
+  setStats((prev) => ({ ...prev, ...finalStats }));
+}, [stopToBase]);
+
+useEffect(() => {
+  const activeList =
+    priorityMode === "steps" ? solutionPools.steps : solutionPools.combo;
+
+  if (!activeList.length) return;
+
+  const idx = Math.min(selectedPoolIndex, activeList.length - 1);
+  if (idx !== selectedPoolIndex) {
+    setSelectedPoolIndex(idx);
+    return;
+  }
+
+  applySolvedCandidate(activeList[idx]);
+}, [priorityMode, selectedPoolIndex, solutionPools, applySolvedCandidate]);
 
   const abortGifExport = useCallback(() => {
 	  // ✅ 讓正在跑的 exportGif 之後「所有 await 回來」都直接停掉
@@ -2878,9 +3333,11 @@ const getBoardKey = (b) => {
 	}, []);
 
   const solve = () => {
-  // ✅ 思考期間不顯示起手高亮
+	  solverCache.current.clear();
   stopToBase(true);
   setNeedsSolve(false);
+
+  const base = baseBoardRef.current;
 
   const configHash = JSON.stringify({
     ...solverConfig,
@@ -2894,16 +3351,41 @@ const getBoardKey = (b) => {
     autoRow0Expanded,
   });
 
-  const base = baseBoardRef.current;
   const boardKey = getBoardKey(base) + `|cfg:${configHash}`;
+  const resetKey = makeSolutionResetKey(
+  base,
+  diagonalEnabled,
+  skyfallEnabled,
+  solverConfig.maxSteps
+);
 
   if (solverCache.current.has(boardKey)) {
-    const cached = solverCache.current.get(boardKey);
+  const cached = solverCache.current.get(boardKey);
+
+  if (cached?.pools) {
+    const hasCachedPools =
+      (cached.pools.steps && cached.pools.steps.length > 0) ||
+      (cached.pools.combo && cached.pools.combo.length > 0);
+
+    if (hasCachedPools) {
+      setSolutionPools(cached.pools);
+
+      const activeList =
+        priorityMode === "steps" ? cached.pools.steps : cached.pools.combo;
+
+      const picked = activeList[selectedPoolIndex] || activeList[0];
+      if (picked) applySolvedCandidate(picked);
+      return;
+    }
+  }
+
+  if (cached?.path) {
     setPath(cached.path);
     const steps = cached.path ? cached.path.length - 1 : 0;
     setStats((prev) => ({ ...prev, ...cached.stats, steps }));
     return;
   }
+}
 
   setSolving(true);
 
@@ -2921,32 +3403,90 @@ const getBoardKey = (b) => {
       autoRow0Expanded
     );
 
-    const steps = result.path ? result.path.length - 1 : 0;
+    const rawOldPools =
+  solutionPoolContextRef.current.resetKey === resetKey
+    ? solutionPoolsRef.current
+    : { steps: [], combo: [] };
 
-    const finalStats = {
-      combos: result.initialCombos,
-      skyfallCombos: result.skyfallCombos,
-      steps,
-      clearedOrbs: result.clearedCount,
-      initialClearedOrbs: result.initialClearedCount || 0,
-      skyfallClearedOrbs: Math.max(
-        0,
-        (result.clearedCount || 0) - (result.initialClearedCount || 0)
-      ),
-      verticalCombos: result.verticalCombos,
-      horizontalCombos: result.horizontalCombos,
-      crossCount: result.initialPatternCounts?.cross?.total || 0,
-      lCount: result.initialPatternCounts?.l?.total || 0,
-      tCount: result.initialPatternCounts?.t?.total || 0,
-    };
+const oldPools = {
+  steps: filterSolutionsByMaxSteps(rawOldPools.steps, solverConfig.maxSteps),
+  combo: filterSolutionsByMaxSteps(rawOldPools.combo, solverConfig.maxSteps),
+};
 
-    solverCache.current.set(boardKey, { path: result.path, stats: finalStats });
-    setPath(result.path);
-    setStats((prev) => ({ ...prev, ...finalStats }));
+    const mergedPools =
+  priorityMode === "steps"
+    ? {
+        steps: mergeTopSolutions(
+          oldPools.steps,
+          result.topSteps || [],
+          "steps",
+          specialPriority,
+          initTargetCombo,
+          10
+        ),
+        combo: oldPools.combo || [],
+      }
+    : {
+        steps: oldPools.steps || [],
+        combo: mergeTopSolutions(
+          oldPools.combo,
+          result.topCombos || [],
+          "combo",
+          specialPriority,
+          initTargetCombo,
+          10
+        ),
+      };
+	
+    solutionPoolContextRef.current.resetKey = resetKey;
+    setSolutionPools(mergedPools);
+
+    if (mergedPools.steps.length || mergedPools.combo.length) {
+  solverCache.current.set(boardKey, {
+    pools: mergedPools,
+  });
+}
+
+    const activeList =
+      priorityMode === "steps" ? mergedPools.steps : mergedPools.combo;
+
+    const picked = activeList[selectedPoolIndex] || activeList[0] || null;
+
+    if (picked) {
+      applySolvedCandidate(picked);
+    } else {
+      const steps = result.path ? result.path.length - 1 : 0;
+
+      const finalStats = {
+        combos: result.initialCombos,
+        skyfallCombos: result.skyfallCombos,
+        steps,
+        clearedOrbs: result.clearedCount,
+        initialClearedOrbs: result.initialClearedCount || 0,
+        skyfallClearedOrbs: Math.max(
+          0,
+          (result.clearedCount || 0) - (result.initialClearedCount || 0)
+        ),
+        verticalCombos: result.verticalCombos,
+        horizontalCombos: result.horizontalCombos,
+        crossCount: result.initialPatternCounts?.cross?.total || 0,
+        lCount: result.initialPatternCounts?.l?.total || 0,
+        tCount: result.initialPatternCounts?.t?.total || 0,
+      };
+
+      setPath(result.path || []);
+      setStats((prev) => ({ ...prev, ...finalStats }));
+    }
+
     setSolving(false);
     setNeedsSolve(false);
   }, 50);
 };
+  
+  const activeSolutions =
+  priorityMode === "steps" ? solutionPools.steps : solutionPools.combo;
+  
+  ///////////////////////////
   
   const getCellCenterPx = useCallback((r, c) => {
 	  const rc = cellRectsRef.current?.[r]?.[c];
@@ -4300,6 +4840,35 @@ const displayBoard =
     ? renderBoard.slice(1)
     : renderBoard;
 
+const getSpecialPriorityLabel = (sp) => {
+  if (!sp || sp.type === "none") return "無";
+
+  if (sp.type === "clearCount") {
+    return `首消 ${sp.clearCount || 3} 粒盾`;
+  }
+
+  const shapeName =
+    sp.type === "cross" ? "十字盾" :
+    sp.type === "l" ? "L字盾" :
+    sp.type === "t" ? "T字盾" :
+    "無";
+
+  const orbNameMap = {
+    [SPECIAL_ORB_ANY]: " ( 任意屬性*",
+    [ORB_TYPES.WATER.id]: " ( 水屬性*",
+    [ORB_TYPES.FIRE.id]: " ( 火屬性*",
+    [ORB_TYPES.EARTH.id]: " ( 木屬性*",
+    [ORB_TYPES.LIGHT.id]: " ( 光屬性*",
+    [ORB_TYPES.DARK.id]: " ( 暗屬性*",
+    [ORB_TYPES.HEART.id]: " ( 心屬性*",
+  };
+
+  const orbLabel = orbNameMap[sp.orb] ?? "任意";
+  const count = sp.count || 1;
+
+  return `${shapeName}${orbLabel}${count} )`;
+};
+
   return (
   <div className="min-h-screen bg-neutral-950 text-white font-sans">
     <div className="w-full bg-neutral-900/95 backdrop-blur border-b border-white/10">
@@ -4358,84 +4927,211 @@ const displayBoard =
 
     <div className="mx-auto max-w-5xl w-full px-0 sm:px-4 pt-3 sm:pt-6 pb-4 flex-col items-center">
       {!isManual ? (
-        <div className="grid grid-cols-6 gap-1.5 mb-8 mt-0 text-[14px]">
-          <div className="col-span-2 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
-            <button
-              onClick={() => setSolverMode("horizontal")}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${
-                solverMode === "horizontal"
-                  ? "bg-blue-600 text-white"
-                  : "text-neutral-500 hover:bg-neutral-800"
-              }`}
-            >
-              <Rows size={14} /> 橫排
-            </button>
-            <button
-              onClick={() => setSolverMode("vertical")}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${
-                solverMode === "vertical"
-                  ? "bg-indigo-600 text-white"
-                  : "text-neutral-500 hover:bg-neutral-800"
-              }`}
-            >
-              直排 <Columns size={14} />
-            </button>
-          </div>
+  <>
+    <div className="grid grid-cols-6 gap-1.5 mb-3 mt-0 text-[14px]">
+      <div className="col-span-2 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
+        <button
+          onClick={() => setSolverMode("horizontal")}
+          className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${
+            solverMode === "horizontal"
+              ? "bg-blue-600 text-white"
+              : "text-neutral-500 hover:bg-neutral-800"
+          }`}
+        >
+          <Rows size={14} /> 橫排
+        </button>
+        <button
+          onClick={() => setSolverMode("vertical")}
+          className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${
+            solverMode === "vertical"
+              ? "bg-indigo-600 text-white"
+              : "text-neutral-500 hover:bg-neutral-800"
+          }`}
+        >
+          直排 <Columns size={14} />
+        </button>
+      </div>
 
-          <div className="col-span-2 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
-            <button
-              onClick={() => setPriorityMode("combo")}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${
-                priorityMode === "combo"
-                  ? "bg-emerald-600 text-white"
-                  : "text-neutral-500 hover:bg-neutral-800"
-              }`}
-            >
-              <Trophy size={14} /> 消除
-            </button>
-            <button
-              onClick={() => setPriorityMode("steps")}
-              className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${
-                priorityMode === "steps"
-                  ? "bg-amber-600 text-white"
-                  : "text-neutral-500 hover:bg-neutral-800"
-              }`}
-            >
-              步數 <Footprints size={14} />
-            </button>
-          </div>
+      <div className="col-span-2 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
+        <button
+          onClick={() => {
+            setPriorityMode("combo");
+            setSelectedPoolIndex(0);
+          }}
+          className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${
+            priorityMode === "combo"
+              ? "bg-emerald-600 text-white"
+              : "text-neutral-500 hover:bg-neutral-800"
+          }`}
+        >
+          <Trophy size={14} /> 消除
+        </button>
+        <button
+          onClick={() => {
+            setPriorityMode("steps");
+            setSelectedPoolIndex(0);
+          }}
+          className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${
+            priorityMode === "steps"
+              ? "bg-amber-600 text-white"
+              : "text-neutral-500 hover:bg-neutral-800"
+          }`}
+        >
+          步數 <Footprints size={14} />
+        </button>
+      </div>
 
-          <div className="col-span-1 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
-            <button
-              onClick={() => setSkyfallEnabled(!skyfallEnabled)}
-              className={`flex-1 flex items-center justify-center rounded-lg font-black transition-all ${
-                skyfallEnabled
-                  ? "bg-purple-600 text-white"
-                  : "text-neutral-500 hover:bg-neutral-800"
+      <div className="col-span-1 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
+        <button
+          onClick={() => setSkyfallEnabled(!skyfallEnabled)}
+          className={`flex-1 flex items-center justify-center rounded-lg font-black transition-all ${
+            skyfallEnabled
+              ? "bg-purple-600 text-white"
+              : "text-neutral-500 hover:bg-neutral-800"
+          }`}
+        >
+          疊珠 <CloudLightning size={14} />
+        </button>
+      </div>
+
+      <div className="col-span-1 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
+        <button
+          onClick={() => setDiagonalEnabled(!diagonalEnabled)}
+          className={`flex-1 flex items-center justify-center rounded-lg font-black transition-all ${
+            diagonalEnabled
+              ? "bg-rose-600 text-white"
+              : "text-neutral-500 hover:bg-neutral-800"
+          }`}
+        >
+          斜轉{" "}
+          {diagonalEnabled ? <MoveUpRight size={14} /> : <Move size={14} />}
+        </button>
+      </div>
+    </div>
+
+    <div className="mb-8 rounded-2xl border border-neutral-800 bg-neutral-900/70 p-3 shadow-xl">
+  <div className="mb-3 flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
+    <div className="flex items-center gap-2">
+  <Route size={16} className="text-yellow-300" />
+
+  <span className="text-sm font-black text-yellow-300">
+    路徑 10 解
+  </span>
+
+  <span className="text-xs text-white/50">
+    {pathsExpanded ? "已展開" : "已收起"}
+  </span>
+</div>
+
+    <button
+      type="button"
+      onClick={() => setPathsExpanded((v) => !v)}
+      className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+        pathsExpanded
+          ? "bg-yellow-400 text-black hover:bg-yellow-300"
+          : "bg-neutral-800 text-white hover:bg-neutral-700"
+      }`}
+    >
+      {pathsExpanded ? "收起" : "展開"}
+    </button>
+  </div>
+
+  {pathsExpanded && (
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+      {(activeSolutions || []).map((sol, idx) => {
+        const steps = getPathSteps(sol.path);
+        const initCombo = sol.initialCombos || 0;
+        const skyfallCombo = sol.skyfallCombos || 0;
+        const comboText =
+          skyfallCombo > 0 ? `${initCombo}+${skyfallCombo}` : `${initCombo}`;
+        const initCleared = sol.initialClearedCount || 0;
+        const skyfallCleared = Math.max(
+          0,
+          (sol.clearedCount || 0) - (sol.initialClearedCount || 0)
+        );
+        const clearedText =
+          skyfallCleared > 0 ? `${initCleared}+${skyfallCleared}` : `${initCleared}`;
+        const isActive = idx === selectedPoolIndex;
+        const specialSat = isSpecialSatisfiedBy(sol, specialPriority);
+
+        return (
+          <button
+            key={`${priorityMode}-${idx}-${getSolutionGroupKey(sol)}-${steps}`}
+            type="button"
+            onClick={() => {
+              setSelectedPoolIndex(idx);
+              applySolvedCandidate(sol);
+            }}
+            className={`rounded-xl border px-3 py-2 text-left transition-all ${
+              isActive
+                ? specialSat
+                  ? "border-yellow-400 bg-yellow-400/15 shadow-[0_0_18px_rgba(74,222,128,0.35)]"
+                  : "border-yellow-400 bg-yellow-400/15 shadow-[0_0_18px_rgba(239,68,68,0.35)]"
+                : specialSat
+                ? "border-emerald-500/50 bg-neutral-900 hover:bg-neutral-800 shadow-[0_0_14px_rgba(74,222,128,0.28)]"
+                : "border-rose-500/50 bg-neutral-900 hover:bg-neutral-800 shadow-[0_0_14px_rgba(239,68,68,0.24)]"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-black text-white">
+                #{idx + 1}
+              </span>
+              <span className="text-[11px] font-black text-white/65">
+                總粒 {clearedText}
+              </span>
+            </div>
+
+            <div className="mt-1 text-xs text-white/80">
+              {priorityMode === "steps" ? (
+                <>步數 {steps} ・Combo {comboText}</>
+              ) : (
+                <>Combo {comboText} ・步數 {steps}</>
+              )}
+            </div>
+
+            <div
+              className={`mt-1 text-[11px] font-black ${
+                specialSat ? "text-emerald-400" : "text-rose-400"
               }`}
             >
-              疊珠 <CloudLightning size={14} />
-            </button>
-          </div>
+              {specialSat ? "特優先級✓" : "特優先級×"}
+            </div>
+          </button>
+        );
+      })}
 
-          <div className="col-span-1 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
-            <button
-              onClick={() => setDiagonalEnabled(!diagonalEnabled)}
-              className={`flex-1 flex items-center justify-center rounded-lg font-black transition-all ${
-                diagonalEnabled
-                  ? "bg-rose-600 text-white"
-                  : "text-neutral-500 hover:bg-neutral-800"
-              }`}
-            >
-              斜轉{" "}
-              {diagonalEnabled ? <MoveUpRight size={14} /> : <Move size={14} />}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div />
-      )}
+      {(!activeSolutions || activeSolutions.length === 0) &&
+        Array.from({ length: 10 }).map((_, idx) => (
+          <div
+            key={`empty-${priorityMode}-${idx}`}
+            className="rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-left opacity-50"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-black text-white">
+                #{idx + 1}
+              </span>
+              <span className="text-[11px] text-white/35">尚無結果</span>
+            </div>
 
+            <div className="mt-1 text-xs text-white/35">
+              {priorityMode === "steps"
+                ? "步數 -- ・總 Combo --"
+                : "總 Combo -- ・步數 --"}
+            </div>
+
+            <div className="mt-1 text-[11px] text-white/25">
+              特優先級 --
+            </div>
+          </div>
+        ))}
+    </div>
+  )}
+</div>
+  </>
+) : (
+  <div />
+)}
+	  
       <div className="max-w-5xl w-full">
         <div className={`flex flex-row gap-2 mb-4 w-full items-stretch ${isManual ? "mt-3" : ""}`}>
 			<div className="flex-1 min-w-0 bg-neutral-900/50 p-1.5 sm:p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
@@ -4629,123 +5325,140 @@ const displayBoard =
 
     {!isManual && (
       <div className="md:col-span-3 rounded-2xl border border-neutral-800 bg-neutral-950/50 p-4">
-        <div className="text-sm font-black text-pink-300 mb-3">
-          特優先級（一次只能選一個）
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
-  {[
-    { key: "none", label: "無" },
-    { key: "clearCount", label: "首消n粒盾" },
-    { key: "cross", label: "十字盾" },
-    { key: "l", label: "L字盾" },
-    { key: "t", label: "T字盾" },
-  ].map((item) => (
-    <button
-      key={item.key}
-      onClick={() => updateSpecialPriority({ type: item.key })}
-      className={[
-        "px-3 py-2 rounded-xl border text-sm font-black transition-all",
-        specialPriority.type === item.key
-          ? "bg-pink-600 text-white border-pink-400/30"
-          : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
-      ].join(" ")}
-    >
-      {item.label}
-    </button>
-  ))}
-</div>
-
-{specialPriority.type === "clearCount" && (
-  <div className="flex flex-col gap-2">
-    <div className="flex items-center gap-3">
-      <span className="text-sm font-bold text-neutral-400">首消顆數</span>
-
-      <input
-        type="number"
-        min={3}
-        max={30}
-        value={specialPriority.clearCount}
-        onChange={(e) =>
-          updateSpecialPriority({
-            clearCount: e.target.value,
-          })
-        }
-        onBlur={(e) =>
-          updateSpecialPriority({
-            clearCount: Math.max(3, Math.min(30, Number(e.target.value) || 3)),
-          })
-        }
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.currentTarget.blur();
-          }
-        }}
-        className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right
-        appearance-none
-        [&::-webkit-outer-spin-button]:appearance-none
-        [&::-webkit-inner-spin-button]:appearance-none
-        [-moz-appearance:textfield]"
-      />
+  <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
+    <div className="flex items-center gap-2">
+      <span className="text-sm font-black text-pink-300">
+        {specialPriorityExpanded
+          ? "特優先級（一次只能選一個）"
+          : `特優先級：${getSpecialPriorityLabel(specialPriority)}`}
+      </span>
     </div>
 
-    <input
-      type="range"
-      min={3}
-      max={30}
-      step={1}
-      value={Math.max(3, Math.min(30, Number(specialPriority.clearCount) || 3))}
-      onChange={(e) =>
-        updateSpecialPriority({
-          clearCount: Number(e.target.value),
-        })
-      }
-      className="w-full accent-pink-500 cursor-pointer"
-    />
-
-    <span className="text-xs text-neutral-500">只算首消，不計疊珠</span>
-  </div>
-)}
-
-{(specialPriority.type === "cross" ||
-  specialPriority.type === "l" ||
-  specialPriority.type === "t") && (
-  <div className="flex flex-wrap items-center gap-3">
-    <span className="text-sm font-bold text-neutral-400">數量</span>
-
-    <select
-      value={specialPriority.count}
-      onChange={(e) =>
-        updateSpecialPriority({ count: Number(e.target.value) })
-      }
-      className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+    <button
+      type="button"
+      onClick={() => setSpecialPriorityExpanded((v) => !v)}
+      className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+        specialPriorityExpanded
+          ? "bg-pink-400 text-black hover:bg-pink-300"
+          : "bg-neutral-800 text-white hover:bg-neutral-700"
+      }`}
     >
-      <option value={1}>1</option>
-      <option value={2}>2</option>
-      <option value={3}>3</option>
-    </select>
-
-    <span className="text-sm font-bold text-neutral-400">屬性</span>
-
-    <select
-      value={specialPriority.orb}
-      onChange={(e) =>
-        updateSpecialPriority({ orb: Number(e.target.value) })
-      }
-      className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-    >
-      {SPECIAL_ORB_OPTIONS.map((opt) => (
-        <option key={opt.label} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
-    </select>
-
-    <span className="text-xs text-neutral-500">
-      只算首消，不計疊珠
-    </span>
+      {specialPriorityExpanded ? "收起" : "展開"}
+    </button>
   </div>
-)}</div>
+
+  {specialPriorityExpanded && (
+    <div className="mt-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
+        {[
+          { key: "none", label: "無" },
+          { key: "clearCount", label: "首消n粒盾" },
+          { key: "cross", label: "十字盾" },
+          { key: "l", label: "L字盾" },
+          { key: "t", label: "T字盾" },
+        ].map((item) => (
+          <button
+            key={item.key}
+            onClick={() => updateSpecialPriority({ type: item.key })}
+            className={[
+              "px-3 py-2 rounded-xl border text-sm font-black transition-all",
+              specialPriority.type === item.key
+                ? "bg-pink-600 text-white border-pink-400/30"
+                : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
+            ].join(" ")}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {specialPriority.type === "clearCount" && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-bold text-neutral-400">首消顆數</span>
+
+            <input
+              type="number"
+              min={3}
+              max={30}
+              value={specialPriority.clearCount}
+              onChange={(e) =>
+                updateSpecialPriority({
+                  clearCount: e.target.value,
+                })
+              }
+              onBlur={(e) =>
+                updateSpecialPriority({
+                  clearCount: Math.max(3, Math.min(30, Number(e.target.value) || 3)),
+                })
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
+              className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+            />
+          </div>
+
+          <input
+            type="range"
+            min={3}
+            max={30}
+            step={1}
+            value={Math.max(3, Math.min(30, Number(specialPriority.clearCount) || 3))}
+            onChange={(e) =>
+              updateSpecialPriority({
+                clearCount: Number(e.target.value),
+              })
+            }
+            className="w-full accent-pink-500 cursor-pointer"
+          />
+        </div>
+      )}
+
+      {(specialPriority.type === "cross" ||
+        specialPriority.type === "l" ||
+        specialPriority.type === "t") && (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-bold text-neutral-400">數量</span>
+
+          <select
+            value={specialPriority.count}
+            onChange={(e) =>
+              updateSpecialPriority({ count: Number(e.target.value) })
+            }
+            className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+          >
+            <option value={1}>1</option>
+            <option value={2}>2</option>
+            <option value={3}>3</option>
+          </select>
+
+          <span className="text-sm font-bold text-neutral-400">屬性</span>
+
+          <select
+            value={specialPriority.orb}
+            onChange={(e) =>
+              updateSpecialPriority({ orb: Number(e.target.value) })
+            }
+            className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+          >
+            {SPECIAL_ORB_OPTIONS.map((opt) => (
+              <option key={opt.label} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
+          <span className="text-xs text-neutral-500">
+            只算首消，不計疊珠
+          </span>
+        </div>
+      )}
+    </div>
+  )}
+</div>
     )}
   </div>
 )}
@@ -4898,11 +5611,20 @@ const displayBoard =
   {!isManual && (
     <div className="mb-2 flex items-center justify-between rounded-2xl border border-white/10 bg-neutral-900/70 px-3 py-2">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-black text-yellow-300">頭像珠</span>
-        <span className="text-xs text-white/50">
-          {autoRow0Expanded ? "已展開" : "已收起"}
-        </span>
-      </div>
+  <div className="flex h-5 w-5 items-center justify-center rounded-xl bg-yellow-400/15 text-yellow-300 ring-1 ring-yellow-300/20">
+    <Sparkles size={14} />
+  </div>
+
+  <div className="flex items-center gap-2">
+  <span className="text-sm font-black text-yellow-300">
+    頭像珠
+  </span>
+
+  <span className="text-xs text-white/50">
+    {autoRow0Expanded ? "已展開" : "已收起"}
+  </span>
+</div>
+</div>
 
       <button
         type="button"
@@ -5163,7 +5885,7 @@ const displayBoard =
             <path
               d={d}
               stroke="rgba(0,0,0,0.55)"
-              strokeWidth="10"
+              strokeWidth="5"
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -5177,7 +5899,7 @@ const displayBoard =
             <path
               d={d}
               stroke="rgba(255,255,255,0.95)"
-              strokeWidth="14"
+              strokeWidth="8"
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -5633,7 +6355,11 @@ const displayBoard =
               onClick={(e) => e.stopPropagation()}
             >
               <div
-                className="p-3 flex-1 overflow-y-auto overscroll-contain"
+  className="p-3 flex-1 overflow-y-auto overscroll-contain"
+  onMouseUp={endEditorPaint}
+  onMouseLeave={endEditorPaint}
+  onTouchEnd={endEditorPaint}
+  onTouchCancel={endEditorPaint}
                 style={{
                   WebkitOverflowScrolling: "touch",
                   contain: "content",
@@ -5652,96 +6378,37 @@ const displayBoard =
 
                           {row.map((orb, c) => (
                             <div
-                              key={`${r}-${c}`}
-                              onClick={() => {
-  const next = editingBoard.map((row) => [...row]);
-  const cur = next[r][c];
-
-  const o = orbOf(cur);
-  const xm = xMarkOf(cur);
-  const qm = qMarkOf(cur);
-  const nm = nMarkOf(cur);
-
-  if (selectedMark === 0) {
-    next[r][c] = withMarks(selectedBrush, xm, qm, nm);
-    setEditingBoard(next);
-    return;
-  }
-
-  if (selectedMark === 1 || selectedMark === 2) {
-    const want = selectedMark;
-    const nx = xm === want ? 0 : want;
-    const nq = nx !== 0 ? 0 : qm; // 有 X 時不保留 Q
-    next[r][c] = withMarks(o, nx, nq, nm);
-    setEditingBoard(next);
-    return;
-  }
-
-  if (selectedMark === 5 || selectedMark === 6) {
-    const wantN = selectedMark === 5 ? 1 : 2;
-    const targetOrb = orbOf(cur);
-    if (targetOrb < 0) return;
-
-    const shouldClear = nm === wantN;
-
-    for (let rr = 0; rr < TOTAL_ROWS; rr++) {
-      for (let cc = 0; cc < COLS; cc++) {
-        const v = next[rr][cc];
-        if (orbOf(v) !== targetOrb) continue;
-
-        next[rr][cc] = withMarks(
-          orbOf(v),
-          xMarkOf(v),
-          qMarkOf(v),
-          shouldClear ? 0 : wantN
-        );
-      }
-    }
-
-    setEditingBoard(next);
-    return;
-  }
-
-  if (selectedMark === 3 || selectedMark === 4) {
-    const wantQ = selectedMark === 3 ? 1 : 2;
-
-    if (wantQ === 1 && xm !== 0) return;
-    if (wantQ === 2 && xm === 1) return;
-
-    if (qm === wantQ) {
-      next[r][c] = withMarks(o, xm, 0, nm);
-      setEditingBoard(next);
-      return;
-    }
-
-    if (r === 0) {
-      for (let cc = 0; cc < COLS; cc++) {
-        const v = next[0][cc];
-        if (wantQ === 1 && qMarkOf(v) === 2) return;
-        if (wantQ === 2 && qMarkOf(v) === 1) return;
-      }
-    }
-
-    for (let rr = 0; rr < TOTAL_ROWS; rr++) {
-      for (let cc = 0; cc < COLS; cc++) {
-        const v = next[rr][cc];
-        if (qMarkOf(v) === wantQ) {
-          next[rr][cc] = withMarks(
-            orbOf(v),
-            xMarkOf(v),
-            0,
-            nMarkOf(v)
-          );
-        }
-      }
-    }
-
-    next[r][c] = withMarks(o, xm, wantQ, nm);
-    setEditingBoard(next);
-    return;
-  }
+  key={`${r}-${c}`}
+  data-editor-cell="1"
+  data-r={r}
+  data-c={c}
+                              onMouseDown={(e) => {
+  e.preventDefault();
+  startEditorPaint(r, c);
 }}
-                              className="relative w-full aspect-square flex items-center justify-center transition-all duration-75 rounded-2xl"
+onMouseEnter={() => {
+  moveEditorPaint(r, c);
+}}
+onTouchStart={(e) => {
+  e.preventDefault();
+  startEditorPaint(r, c);
+}}
+onTouchMove={(e) => {
+  e.preventDefault();
+  const touch = e.touches?.[0];
+  if (!touch) return;
+
+  const el = document.elementFromPoint(touch.clientX, touch.clientY);
+  const cell = el?.closest?.("[data-editor-cell]");
+  if (!cell) return;
+
+  const rr = Number(cell.getAttribute("data-r"));
+  const cc = Number(cell.getAttribute("data-c"));
+  if (Number.isNaN(rr) || Number.isNaN(cc)) return;
+
+  moveEditorPaint(rr, cc);
+}}
+							  className="relative w-full aspect-square flex items-center justify-center transition-all duration-75 rounded-2xl"
                             >
                               <div
                                 className={`absolute inset-0 m-auto w-[95%] h-[95%] rounded-2xl pointer-events-none transition-all duration-75
@@ -6018,24 +6685,28 @@ const displayBoard =
 
                   <button
   onClick={() => {
-    stopToBase(true);   // 清掉播放/暫停/浮動珠/目前步數，回到底盤
-    setPath([]);        // 清掉舊路徑
-    setStats((prev) => ({
-      ...prev,
-      combos: 0,
-      skyfallCombos: 0,
-      steps: 0,
-      clearedOrbs: 0,
-      initialClearedOrbs: 0,
-      skyfallClearedOrbs: 0,
-      verticalCombos: 0,
-      horizontalCombos: 0,
-      crossCount: 0,
-      lCount: 0,
-      tCount: 0,
-    }));
-    handleApplyCustomBoard();
-  }}
+  stopToBase(true);
+  setPath([]);
+  pathRef.current = [];
+  setCurrentStep(-1);
+
+  setStats((prev) => ({
+    ...prev,
+    combos: 0,
+    skyfallCombos: 0,
+    steps: 0,
+    clearedOrbs: 0,
+    initialClearedOrbs: 0,
+    skyfallClearedOrbs: 0,
+    verticalCombos: 0,
+    horizontalCombos: 0,
+    crossCount: 0,
+    lCount: 0,
+    tCount: 0,
+  }));
+
+  handleApplyCustomBoard();
+}}
   className="w-full py-5 rounded-2xl font-black bg-indigo-600 hover:bg-indigo-500 shadow-xl shadow-indigo-900/20 transition-all flex items-center justify-center gap-2 text-base"
 >
   <Check size={22} /> 完成
