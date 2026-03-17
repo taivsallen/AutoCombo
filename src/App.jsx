@@ -242,6 +242,50 @@ const [manualActive, setManualActive] = useState(false); // 轉珠是否已開�
   const editorDraggingRef = useRef(false);
 const editorLastPaintRef = useRef({ r: -1, c: -1 });
 
+const editorScrollLockRef = useRef({
+  locked: false,
+  scrollY: 0,
+  prevBodyOverflow: "",
+  prevBodyPosition: "",
+  prevBodyTop: "",
+  prevBodyWidth: "",
+  prevHtmlOverflow: "",
+});
+
+const lockPageScrollForEditorPaint = useCallback(() => {
+  const st = editorScrollLockRef.current;
+  if (st.locked) return;
+
+  st.locked = true;
+  st.scrollY = window.scrollY || window.pageYOffset || 0;
+
+  st.prevBodyOverflow = document.body.style.overflow;
+  st.prevBodyPosition = document.body.style.position;
+  st.prevBodyTop = document.body.style.top;
+  st.prevBodyWidth = document.body.style.width;
+  st.prevHtmlOverflow = document.documentElement.style.overflow;
+
+  document.documentElement.style.overflow = "hidden";
+  document.body.style.overflow = "hidden";
+  document.body.style.position = "fixed";
+  document.body.style.top = `-${st.scrollY}px`;
+  document.body.style.width = "100%";
+}, []);
+
+const unlockPageScrollForEditorPaint = useCallback(() => {
+  const st = editorScrollLockRef.current;
+  if (!st.locked) return;
+
+  document.documentElement.style.overflow = st.prevHtmlOverflow;
+  document.body.style.overflow = st.prevBodyOverflow;
+  document.body.style.position = st.prevBodyPosition;
+  document.body.style.top = st.prevBodyTop;
+  document.body.style.width = st.prevBodyWidth;
+
+  window.scrollTo(0, st.scrollY || 0);
+  st.locked = false;
+}, []);
+
 const applyEditAtCell = useCallback((r, c) => {
   setEditingBoard((prev) => {
     const next = prev.map((row) => [...row]);
@@ -340,9 +384,11 @@ const applyEditAtCell = useCallback((r, c) => {
 
 const startEditorPaint = useCallback((r, c) => {
   editorDraggingRef.current = true;
-  editorLastPaintRef.current = { r, c };
+  editorLastPaintRef.current = { r: r, c: c };
+
+  lockPageScrollForEditorPaint();
   applyEditAtCell(r, c);
-}, [applyEditAtCell]);
+}, [applyEditAtCell, lockPageScrollForEditorPaint]);
 
 const moveEditorPaint = useCallback((r, c) => {
   if (!editorDraggingRef.current) return;
@@ -357,7 +403,9 @@ const moveEditorPaint = useCallback((r, c) => {
 const endEditorPaint = useCallback(() => {
   editorDraggingRef.current = false;
   editorLastPaintRef.current = { r: -1, c: -1 };
-}, []);
+
+  unlockPageScrollForEditorPaint();
+}, [unlockPageScrollForEditorPaint]);
   
   const baseBoardRef = useRef([]);
   const [holePos, setHolePos] = useState(null);
@@ -5009,7 +5057,7 @@ const getSpecialPriorityLabel = (sp) => {
       </div>
     </div>
 
-    <div className="mb-8 rounded-2xl border border-neutral-800 bg-neutral-900/70 p-3 shadow-xl">
+    <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/70 px-3 py-2 shadow-xl">
   <div className="mb-3 flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
     <div className="flex items-center gap-2">
   <Route size={16} className="text-yellow-300" />
@@ -5572,8 +5620,6 @@ const getSpecialPriorityLabel = (sp) => {
   contain: "layout paint",
   touchAction: isManual ? "none" : "auto",
   userSelect: isManual ? "none" : "auto",
-  WebkitUserSelect: isManual ? "none" : "auto",
-  msUserSelect: isManual ? "none" : "auto",
 }}
           onMouseMove={(e) => {
             if (!isManual || manualLocked || !isDraggingRef.current) return;
@@ -6361,10 +6407,7 @@ const getSpecialPriorityLabel = (sp) => {
   onTouchEnd={endEditorPaint}
   onTouchCancel={endEditorPaint}
                 style={{
-                  WebkitOverflowScrolling: "touch",
                   contain: "content",
-                  willChange: "transform",
-                  transform: "translateZ(0)",
                 }}
               >
                 <div className="flex flex-col items-center">
