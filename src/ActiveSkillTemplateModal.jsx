@@ -316,7 +316,7 @@ const handleCloseAttributePicker = () => {
 
   return (
     <div className="fixed inset-0 z-[5000] bg-black/80 p-4 flex items-start md:items-center justify-center">
-      <div className="w-full max-w-5xl max-h-[90vh] bg-neutral-900 rounded-3xl border border-neutral-800 shadow-2xl overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-5xl max-h-[90vh] bg-neutral-900 rounded-3xl border border-neutral-800 shadow-2xl overflow-hidden flex flex-col">
         {/* header */}
         <div className="p-4 border-b border-neutral-800 flex items-start justify-between gap-3">
           <div className="flex flex-col gap-1 min-w-0 md:flex-1">
@@ -523,6 +523,40 @@ const handleCloseAttributePicker = () => {
             </div>
           )}
         </div>
+		        {showAttributePicker && pendingTemplate && (
+          <div className="absolute inset-0 z-[5200] bg-black/75 flex items-center justify-center">
+            <div className="bg-neutral-900 rounded-3xl p-6 border border-white/10 shadow-2xl w-full max-w-md">
+              
+              <div className="text-lg font-black text-white text-center mb-4">
+                {pendingTemplate.follow
+                  ? `【${pendingTemplate.follow}】`
+                  : "【選取屬性】"}
+              </div>
+
+              <div className="grid grid-cols-5 gap-3">
+                {ATTRIBUTE_PICKER_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleResolveXAttribute(opt.value)}
+                    className="p-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 flex flex-col items-center"
+                  >
+                    <img src={opt.img} className="w-10 h-10" />
+                    <span className="text-xs mt-1 text-white font-bold">
+                      {opt.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={handleCloseAttributePicker}
+                className="mt-4 w-full py-2 rounded-xl bg-neutral-700 text-white font-bold"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
