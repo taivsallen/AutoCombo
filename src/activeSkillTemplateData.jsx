@@ -6,6 +6,7 @@ import {
   TEMPLATE_CHAR_TO_ORB_ID,
   convertTemplateBoardToEditorBoard,
   convertTemplateBoardTo2D,
+  templateBoardHasX,
 } from "./templateConstants";
 import { ACTIVE_SKILL_TEMPLATE_DATA_ENCODED } from "./activeSkillTemplateData.enc";
 
@@ -35,12 +36,17 @@ function decodeBase64Unicode(str) {
 
 function restoreData(compactList) {
   return compactList.map((item) => ({
+    type: item.t,
     id: item.i,
     characterName: item.n,
     note: item.o,
     characterImg: item.g,
     attribute: ATTRIBUTE_MAP[item.a],
     race: RACE_MAP[item.r],
+
+    // 新增 follow
+    follow: item.fw || null,
+
     board: item.b.split(""),
   }));
 }
@@ -67,4 +73,5 @@ export {
   TEMPLATE_CHAR_TO_ORB_ID,
   convertTemplateBoardToEditorBoard,
   convertTemplateBoardTo2D,
+  templateBoardHasX,
 };

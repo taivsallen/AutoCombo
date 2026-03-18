@@ -6859,7 +6859,12 @@ onTouchMove={(e) => {
   onClose={() => setShowTemplateBrowser(false)}
   onSelectTemplate={(template) => {
     try {
-      const board2D = convertTemplateBoardTo2D(template.board);
+      const board2D = convertTemplateBoardTo2D(
+        template.board,
+        5,
+        6,
+        template.resolvedAttribute || null
+      );
 
       setEditingBoard((prev) => {
         const next = prev.map((r) => [...r]);
@@ -6873,6 +6878,7 @@ onTouchMove={(e) => {
         return next;
       });
 
+      setShowTemplateBrowser(false);
       console.log("已套用固版:", template.characterName, board2D);
     } catch (err) {
       console.error("套用固版失敗:", err);
