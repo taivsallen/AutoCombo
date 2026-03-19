@@ -174,8 +174,6 @@ const App = () => {
 
 
 const [pathsExpanded, setPathsExpanded] = useState(true);
-const [specialPriorityExpanded, setSpecialPriorityExpanded] = useState(false);
-	
 const [showTemplateBrowser, setShowTemplateBrowser] = useState(false);
 
 const [showTopBar, setShowTopBar] = useState(true);
@@ -210,16 +208,43 @@ useEffect(() => {
 
 const SPECIAL_ORB_ANY = -1;
 
-const [specialPriority, setSpecialPriority] = useState({
-  type: "none",      // "none" | "clearCount" | "cross" | "l" | "t"
-  count: 1,          // 1~3（shape 用）
-  orb: SPECIAL_ORB_ANY, // -1=無(任意), 0..6=水火木光暗心之類
-  clearCount: 3,     // 3~30（顆粒數用）
+const makeDefaultPriority = () => ({
+  type: "none",
+  count: 1,
+  orb: SPECIAL_ORB_ANY,
+  clearCount: 3,
 });
 
+const [specialPriorities, setSpecialPriorities] = useState([
+  makeDefaultPriority(),
+  makeDefaultPriority(),
+  makeDefaultPriority(),
+]);
+
+const [specialPriorityExpanded, setSpecialPriorityExpanded] = useState([
+  false,
+  false,
+  false,
+]);
+
+const updateSpecialPriorityAt = (idx, patch) => {
+  setSpecialPriorities((prev) =>
+    prev.map((sp, i) => (i === idx ? { ...sp, ...patch } : sp))
+  );
+  setNeedsSolve(true);
+};
+
+const toggleSpecialPriorityExpanded = (idx) => {
+  setSpecialPriorityExpanded((prev) =>
+    prev.map((v, i) => (i === idx ? !v : v))
+  );
+};
+
 useEffect(() => {
-  setClearCountText(String(specialPriority.clearCount ?? 3));
-}, [specialPriority.clearCount]);
+  setClearCountText(
+    specialPriorities.map((sp) => String(sp.clearCount ?? 3))
+  );
+}, [specialPriorities]);
 
 const [clearCountText, setClearCountText] = useState("3");
 
@@ -1790,6 +1815,49 @@ const getSpecialScore = (ev, special) => {
 
   return sat * 40000000 - lack * 3000000;
 };
+const getPriorityScoreTuple = (ev, specialPriorities = []) => {
+  return (specialPriorities || []).map((sp) => getSpecialScore(ev, sp));
+};
+const isSpecialSatisfiedBy = (ev, specialPriority) => {
+  if (!specialPriority || specialPriority.type === "none") return true;
+
+  if (specialPriority.type === "clearCount") {
+    return (ev.initialClearedCount || 0) === (specialPriority.clearCount || 0);
+  }
+
+  if (
+    specialPriority.type === "cross" ||
+    specialPriority.type === "l" ||
+    specialPriority.type === "t"
+  ) {
+    const group = ev.initialPatternCounts?.[specialPriority.type];
+    if (!group) return false;
+
+    const wantCount = specialPriority.count || 1;
+    const wantOrb = specialPriority.orb;
+
+    if (wantOrb === SPECIAL_ORB_ANY) {
+      return (group.total || 0) >= wantCount;
+    }
+
+    return (group.byOrb?.[wantOrb] || 0) >= wantCount;
+  }
+
+  return false;
+};
+const isAllSpecialSatisfied = (ev, specialPriorities = []) => {
+  return (specialPriorities || []).every((sp) => isSpecialSatisfiedBy(ev, sp));
+};
+const lexTupleBetter = (a, b) => {
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const av = a[i] ?? 0;
+    const bv = b[i] ?? 0;
+    if (av > bv) return true;
+    if (av < bv) return false;
+  }
+  return false;
+};
 const hasInitialN2Clear = (board, toClear1D) => {
   if (!toClear1D) return false;
 
@@ -2167,7 +2235,7 @@ const calcScore = (
   target,
   mode,
   priority,
-  specialPriority,
+  specialPriorities,
   violatesN2 = false
 ) => {
   const major = mode === "vertical" ? ev.verticalCombos : ev.horizontalCombos;
@@ -2179,7 +2247,12 @@ const calcScore = (
     priority === "steps" ? cfg.stepPenalty * 4 : cfg.stepPenalty;
   const clearedW = priority === "combo" ? 1000 : 200;
 
-  const specialScore = getSpecialScore(ev, specialPriority);
+  const priorityScores = getPriorityScoreTuple(ev, specialPriorities);
+
+const specialScore =
+  (priorityScores[0] || 0) * 1000000000000 +
+  (priorityScores[1] || 0) * 1000000 +
+  (priorityScores[2] || 0);
 
   // ✅ 不合法最終盤面的 soft penalty：可活著擴展，但不容易被當成最佳
   const illegalPenalty = violatesN2 ? 2200000 : 0;
@@ -2228,7 +2301,7 @@ const beamSolve = (
   priority,
   skyfall,
   diagonal,
-  specialPriority,
+  specialPriorities,
   initTargetCombo,
   autoRow0Expanded
 ) => {
@@ -2279,33 +2352,26 @@ const beamSolve = (
   };
 
   let bestGlobal = {
-    combos: -1,
-    skyfallCombos: 0,
-    clearedCount: -1,
-    node: null,
-    score: -Infinity,
-    specialScore: -Infinity,
-    verticalCombos: 0,
-    horizontalCombos: 0,
-  };
+  combos: -1,
+  skyfallCombos: 0,
+  clearedCount: -1,
+  node: null,
+  score: -Infinity,
+  specialScoreTuple: [-Infinity, -Infinity, -Infinity],
+  verticalCombos: 0,
+  horizontalCombos: 0,
+};
 
   let bestReachedSteps = Infinity;
 
-  const hasSpecial =
-    specialPriority &&
-    specialPriority.type &&
-    specialPriority.type !== "none";
+  const hasSpecial = (specialPriorities || []).some(
+  (sp) => sp && sp.type && sp.type !== "none"
+);
 
   const isSpecialSatisfied = (ev) => {
-    if (!hasSpecial) return true;
-
-    if (specialPriority.type === "clearCount") {
-      return (ev.initialClearedCount || 0) === (specialPriority.clearCount || 3);
-    }
-
-    const got = getSpecialMatchedValue(ev, specialPriority);
-    return got >= (specialPriority.count || 1);
-  };
+  if (!hasSpecial) return true;
+  return isAllSpecialSatisfied(ev, specialPriorities);
+};
 
   const isSolvedGoal = (ev) => {
     return ev.combos >= target && isSpecialSatisfied(ev);
@@ -2347,22 +2413,22 @@ const beamSolve = (
 
   if (priority === "steps") {
     topStepCandidates = mergeTopSolutions(
-      topStepCandidates,
-      [sol],
-      "steps",
-      specialPriority,
-      initTargetCombo,
-      10
-    );
+  topStepCandidates,
+  [sol],
+  "steps",
+  specialPriorities,
+  initTargetCombo,
+  10
+);
   } else {
     topComboCandidates = mergeTopSolutions(
-      topComboCandidates,
-      [sol],
-      "combo",
-      specialPriority,
-      initTargetCombo,
-      10
-    );
+  topComboCandidates,
+  [sol],
+  "combo",
+  specialPriorities,
+  initTargetCombo,
+  10
+);
   }
 };
 
@@ -2370,10 +2436,10 @@ const beamSolve = (
   if (!shouldAcceptEnd(node)) return;
 
   const curSteps = stepsOf(node);
-  const bestSteps = bestGlobal.node ? stepsOf(bestGlobal.node) : Infinity;
-
-  const curSpecial = getSpecialScore(ev, specialPriority);
-  const bestSpecial = bestGlobal.specialScore ?? -Infinity;
+const bestSteps = bestGlobal.node ? stepsOf(bestGlobal.node) : Infinity;
+  const curSpecialTuple = getPriorityScoreTuple(ev, specialPriorities);
+const bestSpecialTuple =
+  bestGlobal.specialScoreTuple ?? [-Infinity, -Infinity, -Infinity];
 
   const curInitExact = hitsInitTargetComboExactly(ev);
   const bestInitExact = hitsInitTargetComboExactly(bestGlobal);
@@ -2388,9 +2454,9 @@ const beamSolve = (
   // 先比合法性
   if (curLegal !== bestLegal) {
     isBetterGlobal = curLegal > bestLegal;
-  } else if (curSpecial > bestSpecial) {
-    isBetterGlobal = true;
-  } else if (curSpecial === bestSpecial) {
+  } else if (lexTupleBetter(curSpecialTuple, bestSpecialTuple)) {
+  isBetterGlobal = true;
+} else {
     if (curInitExact !== bestInitExact) {
       isBetterGlobal = curInitExact;
     } else {
@@ -2415,12 +2481,12 @@ const beamSolve = (
 
   if (isBetterGlobal) {
     bestGlobal = {
-      ...ev,
-      node,
-      score,
-      specialScore: curSpecial,
-      violatesN2: !!violatesN2,
-    };
+  ...ev,
+  node,
+  score,
+  specialScoreTuple: curSpecialTuple,
+  violatesN2: !!violatesN2,
+};
   }
 
   // ✅ bestReachedSteps 只讓「合法且達標」的解更新
@@ -2576,7 +2642,7 @@ const shortScore = calcScore(
   target,
   mode,
   priority,
-  specialPriority,
+  specialPriorities,
   violatesN2
 );
 
@@ -2590,7 +2656,7 @@ const score =
         target,
         mode,
         priority,
-        specialPriority,
+        specialPriorities,
         violatesN2
       )
     : shortScore;
@@ -2650,10 +2716,12 @@ const score =
       if (a.violatesN2 !== b.violatesN2) return a.violatesN2 ? 1 : -1;
 
       if (hasSpecial) {
-        const aSpecial = getSpecialScore(a.ev, specialPriority);
-        const bSpecial = getSpecialScore(b.ev, specialPriority);
-        if (aSpecial !== bSpecial) return bSpecial - aSpecial;
-      }
+  const aSpecial = getPriorityScoreTuple(a.ev, specialPriorities);
+  const bSpecial = getPriorityScoreTuple(b.ev, specialPriorities);
+
+  if (lexTupleBetter(aSpecial, bSpecial)) return -1;
+  if (lexTupleBetter(bSpecial, aSpecial)) return 1;
+}
 
       if ((a.shortScore || 0) !== (b.shortScore || 0)) {
   return (b.shortScore || 0) - (a.shortScore || 0);
@@ -3032,7 +3100,7 @@ const shortScore = calcScore(
   target,
   mode,
   priority,
-  specialPriority,
+  specialPriorities,
   violatesN2
 );
 
@@ -3046,7 +3114,7 @@ const score =
         target,
         mode,
         priority,
-        specialPriority,
+        specialPriorities,
         violatesN2
       )
     : shortScore;
@@ -3120,7 +3188,7 @@ const shortScore = calcScore(
   target,
   mode,
   priority,
-  specialPriority,
+  specialPriorities,
   violatesN2
 );
 
@@ -3134,7 +3202,7 @@ const score =
         target,
         mode,
         priority,
-        specialPriority,
+        specialPriorities,
         violatesN2
       )
     : shortScore;
@@ -3170,7 +3238,7 @@ const shortScore = calcScore(
   target,
   mode,
   priority,
-  specialPriority,
+  specialPriorities,
   violatesN2
 );
 
@@ -3184,7 +3252,7 @@ const score =
         target,
         mode,
         priority,
-        specialPriority,
+        specialPriorities,
         violatesN2
       )
     : shortScore;
@@ -3328,7 +3396,7 @@ const shouldReplaceSameComboSignature = (
   prev,
   cur,
   mode,
-  specialPriority,
+  specialPriorities,
   initTargetCombo
 ) => {
   const prevSteps = getPathSteps(prev.path);
@@ -3338,67 +3406,28 @@ const shouldReplaceSameComboSignature = (
   if (curSteps < prevSteps) return true;
   if (curSteps > prevSteps) return false;
 
-  // 步數相同時，再用原本 rank 比高低
-  const prevRank = makePoolRank(prev, mode, specialPriority, initTargetCombo);
-  const curRank = makePoolRank(cur, mode, specialPriority, initTargetCombo);
+  // 步數相同時，再用 rank 比高低
+  const prevRank = makePoolRank(prev, mode, specialPriorities, initTargetCombo);
+  const curRank = makePoolRank(cur, mode, specialPriorities, initTargetCombo);
 
   return isLexBetter(curRank, prevRank);
 };
-const isSpecialSatisfiedBy = (ev, specialPriority) => {
-  if (!specialPriority || specialPriority.type === "none") return true;
-
-  if (specialPriority.type === "clearCount") {
-    return (ev.initialClearedCount || 0) === (specialPriority.clearCount || 0);
-  }
-
-  if (
-    specialPriority.type === "cross" ||
-    specialPriority.type === "l" ||
-    specialPriority.type === "t"
-  ) {
-    const group = ev.initialPatternCounts?.[specialPriority.type];
-    if (!group) return false;
-
-    const wantCount = specialPriority.count || 1;
-    const wantOrb = specialPriority.orb;
-
-    // 任意屬性
-    if (wantOrb === SPECIAL_ORB_ANY) {
-      return (group.total || 0) >= wantCount;
-    }
-
-    // 指定屬性
-    return (group.byOrb?.[wantOrb] || 0) >= wantCount;
-  }
-
-  return false;
-};
-const makePoolRank = (sol, mode, specialPriority, initTargetCombo) => {
+const makePoolRank = (sol, mode, specialPriorities, initTargetCombo) => {
   const initialCombos = sol.initialCombos || 0;
   const totalCombos = sol.combos || 0;
   const cleared = sol.clearedCount || 0;
   const steps = getPathSteps(sol.path);
 
   const legal = sol.violatesN2 ? 0 : 1;
-  const specialSat = isSpecialSatisfiedBy(sol, specialPriority) ? 1 : 0;
+  const specialSatTuple = (specialPriorities || []).map((sp) =>
+    isSpecialSatisfiedBy(sol, sp) ? 1 : 0
+  );
   const initExact = initialCombos === initTargetCombo ? 1 : 0;
   const score = sol.score || 0;
 
-  if (mode === "steps") {
-    return [
-      legal,
-      specialSat,
-      initExact,
-      totalCombos,
-      -steps,
-      score,
-      cleared,
-    ];
-  }
-
   return [
     legal,
-    specialSat,
+    ...specialSatTuple,
     initExact,
     totalCombos,
     -steps,
@@ -3429,7 +3458,7 @@ const mergeTopSolutions = (
   oldList,
   newList,
   mode,
-  specialPriority,
+  specialPriorities,
   initTargetCombo,
   limit = 10
 ) => {
@@ -3447,12 +3476,12 @@ const mergeTopSolutions = (
     }
 
     const replace = shouldReplaceSameComboSignature(
-      prev,
-      sol,
-      mode,
-      specialPriority,
-      initTargetCombo
-    );
+  prev,
+  sol,
+  mode,
+  specialPriorities,
+  initTargetCombo
+);
 
     if (replace) {
       bestBySig.set(sig, sol);
@@ -3462,11 +3491,11 @@ const mergeTopSolutions = (
   const arr = Array.from(bestBySig.values());
 
   arr.sort((a, b) =>
-    lexCompareDesc(
-      makePoolRank(a, mode, specialPriority, initTargetCombo),
-      makePoolRank(b, mode, specialPriority, initTargetCombo)
-    )
-  );
+  lexCompareDesc(
+    makePoolRank(a, mode, specialPriorities, initTargetCombo),
+    makePoolRank(b, mode, specialPriorities, initTargetCombo)
+  )
+);
 
   return arr.slice(0, limit);
 };
@@ -3474,14 +3503,12 @@ const makeSolutionResetKey = (
   baseBoard,
   diagonalEnabled,
   skyfallEnabled,
-  maxSteps,
   autoRow0Expanded
 ) => {
   return JSON.stringify({
     board: getBoardKey(baseBoard),
     diagonal: !!diagonalEnabled,
     skyfall: !!skyfallEnabled,
-    maxSteps,
     autoRow0Expanded: !!autoRow0Expanded,
   });
 };
@@ -3726,7 +3753,7 @@ const solve = () => {
     priority: priorityMode,
     skyfall: skyfallEnabled,
     diagonal: diagonalEnabled,
-    specialPriority,
+    specialPriorities,
     autoRow0Expanded,
   });
 
@@ -3777,7 +3804,7 @@ const solve = () => {
       priorityMode,
       skyfallEnabled,
       diagonalEnabled,
-      specialPriority,
+      specialPriorities,
       initTargetCombo,
       autoRow0Expanded
     );
@@ -3799,7 +3826,7 @@ const oldPools = {
           oldPools.steps,
           result.topSteps || [],
           "steps",
-          specialPriority,
+          specialPriorities,
           initTargetCombo,
           10
         ),
@@ -3811,7 +3838,7 @@ const oldPools = {
           oldPools.combo,
           result.topCombos || [],
           "combo",
-          specialPriority,
+          specialPriorities,
           initTargetCombo,
           10
         ),
@@ -5177,6 +5204,10 @@ const getSpecialPriorityLabel = (sp) => {
   return `${shapeName}${orbLabel}${count} )`;
 };
 
+const specialPriority1 = specialPriorities[0];
+const specialPriority2 = specialPriorities[1];
+const specialPriority3 = specialPriorities[2];
+
 return (
   <div className="min-h-screen bg-neutral-950 text-white font-sans">
     <div className="w-full bg-neutral-900/95 backdrop-blur border-b border-white/10">
@@ -5360,7 +5391,16 @@ return (
         const clearedText =
           skyfallCleared > 0 ? `${initCleared}+${skyfallCleared}` : `${initCleared}`;
         const isActive = idx === selectedPoolIndex;
-        const specialSat = isSpecialSatisfiedBy(sol, specialPriority);
+
+const specialSatList = (specialPriorities || []).map((sp) =>
+  isSpecialSatisfiedBy(sol, sp)
+);
+
+while (specialSatList.length < 3) {
+  specialSatList.push(true);
+}
+
+const specialSat = specialSatList[0] && specialSatList[1] && specialSatList[2];
 
         return (
           <button
@@ -5371,15 +5411,15 @@ return (
               applySolvedCandidate(sol);
             }}
             className={`rounded-xl border px-3 py-2 text-left transition-all ${
-              isActive
-                ? specialSat
-                  ? "border-yellow-400 bg-yellow-400/15 shadow-[0_0_18px_rgba(74,222,128,0.35)]"
-                  : "border-yellow-400 bg-yellow-400/15 shadow-[0_0_18px_rgba(239,68,68,0.35)]"
-                : specialSat
-                ? "border-emerald-500/50 bg-neutral-900 hover:bg-neutral-800 shadow-[0_0_14px_rgba(74,222,128,0.28)]"
-                : "border-rose-500/50 bg-neutral-900 hover:bg-neutral-800 shadow-[0_0_14px_rgba(239,68,68,0.24)]"
-            }`}
-          >
+  isActive
+    ? specialSat
+      ? "border-emerald-400 bg-emerald-400/15 shadow-[0_0_18px_rgba(74,222,128,0.35)]"
+      : "border-rose-400 bg-rose-400/15 shadow-[0_0_18px_rgba(239,68,68,0.35)]"
+    : specialSat
+    ? "border-emerald-500/50 bg-neutral-900 hover:bg-neutral-800 shadow-[0_0_14px_rgba(74,222,128,0.28)]"
+    : "border-rose-500/50 bg-neutral-900 hover:bg-neutral-800 shadow-[0_0_14px_rgba(239,68,68,0.24)]"
+}`}
+			>
             <div className="flex items-center justify-between">
               <span className="text-sm font-black text-white">
                 #{idx + 1}
@@ -5397,13 +5437,21 @@ return (
               )}
             </div>
 
-            <div
-              className={`mt-1 text-[11px] font-black ${
-                specialSat ? "text-emerald-400" : "text-rose-400"
-              }`}
-            >
-              {specialSat ? "特優先級✓" : "特優先級×"}
-            </div>
+            <div className="mt-1 flex items-center gap-1 text-[11px] font-black">
+  <span className="text-white/70">特優先級</span>
+
+  <span className={specialSatList[0] ? "text-emerald-400" : "text-rose-400"}>
+    {specialSatList[0] ? "✓" : "✕"}
+  </span>
+
+  <span className={specialSatList[1] ? "text-emerald-400" : "text-rose-400"}>
+    {specialSatList[1] ? "✓" : "✕"}
+  </span>
+
+  <span className={specialSatList[2] ? "text-emerald-400" : "text-rose-400"}>
+    {specialSatList[2] ? "✓" : "✕"}
+  </span>
+</div>
           </button>
         );
       })}
@@ -5442,7 +5490,7 @@ return (
 	  
       <div className="max-w-5xl w-full">
         <div className={`flex flex-row gap-2 mb-4 w-full items-stretch ${isManual ? "mt-3" : ""}`}>
-			<div className="flex-1 min-w-0 bg-neutral-900/50 p-1.5 sm:p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
+			<div className="flex-[0.7] min-w-0 bg-neutral-900/50 p-1.5 sm:p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
 			  <span className="text-xs text-neutral-500 font-bold uppercase truncate w-full text-center leading-none">
 				上限
 			  </span>
@@ -5461,70 +5509,28 @@ return (
     </span>
   </div>
 
-  {/* ✅ 和總粒交換寬度：flex-[1.5] -> flex-1 */}
-  <div className="flex-[1] min-w-0 bg-indigo-900/20 p-1.5 sm:p-2.5 rounded-xl border border-indigo-500/30 ring-1 ring-blue-500/20 flex flex-col items-center justify-center">
-    {isManual ? (
-      <div className="flex w-full items-center justify-center">
-        <div className="flex-1 flex flex-col items-center min-w-0 space-y-1">
-          <span className="text-xs text-indigo-400/80 font-bold truncate w-full text-center leading-none">
-            橫
-          </span>
-          <span className="text-xl font-black text-indigo-400 w-full text-center leading-none">
-            {stats.horizontalCombos}
-          </span>
-        </div>
-
-        <div className="w-[1px] h-5 bg-indigo-500/20 shrink-0 mx-1" />
-
-        <div className="flex-1 flex flex-col items-center min-w-0 space-y-1">
-          <span className="text-xs text-indigo-400/80 font-bold truncate w-full text-center leading-none">
-            直
-          </span>
-          <span className="text-xl font-black text-indigo-400 w-full text-center leading-none">
-            {stats.verticalCombos}
-          </span>
-        </div>
-      </div>
-    ) : (
-      <div className="flex flex-col items-center justify-center space-y-1 w-full">
-        <span className="text-xs text-indigo-400 font-bold uppercase truncate w-full text-center leading-none">
-          {solverMode === "horizontal" ? "橫向" : "直向"}
-        </span>
-        <span className="text-xl font-black text-indigo-400 w-full text-center leading-none">
-          {solverMode === "horizontal"
-            ? stats.horizontalCombos
-            : stats.verticalCombos}
-        </span>
-      </div>
-    )}
-  </div>
-
   {/* ✅ 手轉模式隱藏 十字/L字/T字 */}
   {!isManual &&
-    (specialPriority.type === "cross" ||
-      specialPriority.type === "l" ||
-      specialPriority.type === "t") && (
-      <div className="flex-1 min-w-0 bg-pink-900/20 p-1.5 sm:p-2.5 rounded-xl border border-pink-500/30 ring-1 ring-pink-500/20 flex flex-col items-center justify-center space-y-1">
-        <span className="text-xs text-pink-300 font-bold truncate w-full text-center leading-none">
-          {specialPriority.type === "cross"
-            ? "十字"
-            : specialPriority.type === "l"
-            ? "L字"
-            : "T字"}
-        </span>
+  specialPriorities.some(
+    (sp) =>
+      sp.type === "cross" ||
+      sp.type === "l" ||
+      sp.type === "t"
+  ) && (
+    <div className="flex-[1.8] min-w-0 bg-pink-900/20 p-1.5 sm:p-2.5 rounded-xl border border-pink-500/30 ring-1 ring-pink-500/20 flex flex-col items-center justify-center space-y-1">
+      
+      {/* 上：固定顯示三種 */}
+      <span className="text-xs text-pink-300 font-bold truncate w-full text-center leading-none">
+        十 / T / L
+      </span>
 
-        <span className="text-xl font-black text-pink-400 w-full text-center leading-none">
-          {specialPriority.type === "cross"
-            ? stats.crossCount || 0
-            : specialPriority.type === "l"
-            ? stats.lCount || 0
-            : stats.tCount || 0}
-        </span>
-      </div>
-    )}
-
-  {/* ✅ 和直向/橫向交換寬度：flex-1 -> flex-[1.5] */}
-  <div className="flex-[1.5] min-w-0 bg-neutral-900/50 p-1.5 sm:p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
+      {/* 下：三個數量 */}
+      <span className="text-xl font-black text-pink-400 w-full text-center leading-none">
+        {(stats.crossCount || 0)} / {(stats.tCount || 0)} / {(stats.lCount || 0)}
+      </span>
+    </div>
+  )}
+  <div className="flex-[1.2] min-w-0 bg-neutral-900/50 p-1.5 sm:p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
     <span className="text-xs text-neutral-500 font-bold uppercase truncate w-full text-center leading-none">
       總粒
     </span>
@@ -5534,7 +5540,7 @@ return (
     </span>
   </div>
 
-  <div className="flex-1 min-w-0 bg-neutral-900/50 p-1.5 sm:p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
+  <div className="flex-[0.7] min-w-0 bg-neutral-900/50 p-1.5 sm:p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
     <span className="text-xs text-neutral-500 font-bold uppercase truncate w-full text-center leading-none">
       步數
     </span>
@@ -5578,7 +5584,7 @@ return (
     {!isManual && (
       <>
         <ParamSlider
-  label="🎯 期望首批 Combo"
+  label="🎯 期望首消 Combo"
   value={initTargetCombo}
   min={1}
   max={stats.theoreticalMax || 1}
@@ -5662,165 +5668,497 @@ return (
 )}
 
     {!isManual && (
-      <div className="md:col-span-3 rounded-2xl border border-neutral-800 bg-neutral-950/50 p-4">
-  <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
-    <div className="flex items-center gap-2">
-      <span className="text-sm font-black text-pink-300 flex items-center gap-2">
-  {specialPriorityExpanded ? (
-    "特優先級（一次只能選一個）"
-  ) : (
-    <>
-      <span>特優先級：</span>
+  <div className="md:col-span-3">
+    {/* 第一優先 */}
+    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/50 p-4">
+      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-black text-pink-300 flex items-center gap-2">
+            {specialPriorityExpanded[0] ? (
+              "第一優先（一次只能選一個）"
+            ) : (
+              <>
+                <span>第一優先：</span>
 
-      {specialPriority.type !== "none" ? (
-        <span
-  className="px-1.5 py-[1px] rounded bg-pink-400 text-white text-sm font-black leading-none"
-  style={{
-    textShadow: `
-    0 0 1px rgba(0,0,0,0.9),
-    0 0 2px rgba(0,0,0,0.6)
-  `
-  }}
->
-          {getSpecialPriorityLabel(specialPriority)}
-        </span>
-      ) : (
-        <span className="text-neutral-400">
-          {getSpecialPriorityLabel(specialPriority)}
-        </span>
-      )}
-    </>
-  )}
-</span>
-    </div>
-
-    <button
-      type="button"
-      onClick={() => setSpecialPriorityExpanded((v) => !v)}
-      className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
-        specialPriorityExpanded
-          ? "bg-pink-400 text-black hover:bg-pink-300"
-          : "bg-neutral-800 text-white hover:bg-neutral-700"
-      }`}
-    >
-      {specialPriorityExpanded ? "收起" : "展開"}
-    </button>
-  </div>
-
-  {specialPriorityExpanded && (
-    <div className="mt-4">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
-        {[
-          { key: "none", label: "無" },
-          { key: "clearCount", label: "首消n粒盾" },
-          { key: "cross", label: "十字盾" },
-          { key: "l", label: "L字盾" },
-          { key: "t", label: "T字盾" },
-        ].map((item) => (
-          <button
-            key={item.key}
-            onClick={() => updateSpecialPriority({ type: item.key })}
-            className={[
-              "px-3 py-2 rounded-xl border text-sm font-black transition-all",
-              specialPriority.type === item.key
-                ? "bg-pink-600 text-white border-pink-400/30"
-                : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
-            ].join(" ")}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {specialPriority.type === "clearCount" && (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-bold text-neutral-400">首消顆數</span>
-
-            <input
-              type="number"
-              min={3}
-              max={30}
-              value={specialPriority.clearCount}
-              onChange={(e) =>
-                updateSpecialPriority({
-                  clearCount: e.target.value,
-                })
-              }
-              onBlur={(e) =>
-                updateSpecialPriority({
-                  clearCount: Math.max(3, Math.min(30, Number(e.target.value) || 3)),
-                })
-              }
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.currentTarget.blur();
-                }
-              }}
-              className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-            />
-          </div>
-
-          <input
-            type="range"
-            min={3}
-            max={30}
-            step={1}
-            value={Math.max(3, Math.min(30, Number(specialPriority.clearCount) || 3))}
-            onChange={(e) =>
-              updateSpecialPriority({
-                clearCount: Number(e.target.value),
-              })
-            }
-            className="w-full accent-pink-500 cursor-pointer"
-          />
-        </div>
-      )}
-
-      {(specialPriority.type === "cross" ||
-        specialPriority.type === "l" ||
-        specialPriority.type === "t") && (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-bold text-neutral-400">數量</span>
-
-          <select
-            value={specialPriority.count}
-            onChange={(e) =>
-              updateSpecialPriority({ count: Number(e.target.value) })
-            }
-            className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-          >
-            <option value={1}>1</option>
-            <option value={2}>2</option>
-            <option value={3}>3</option>
-          </select>
-
-          <span className="text-sm font-bold text-neutral-400">屬性</span>
-
-          <select
-            value={specialPriority.orb}
-            onChange={(e) =>
-              updateSpecialPriority({ orb: Number(e.target.value) })
-            }
-            className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-          >
-            {SPECIAL_ORB_OPTIONS.map((opt) => (
-              <option key={opt.label} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-
-          <span className="text-xs text-neutral-500">
-            只算首消，不計疊珠
+                {specialPriority1.type !== "none" ? (
+                  <span
+                    className="px-1.5 py-[1px] rounded bg-pink-400 text-white text-sm font-black leading-none"
+                    style={{
+                      textShadow: `
+                        0 0 1px rgba(0,0,0,0.9),
+                        0 0 2px rgba(0,0,0,0.6)
+                      `,
+                    }}
+                  >
+                    {getSpecialPriorityLabel(specialPriority1)}
+                  </span>
+                ) : (
+                  <span className="text-neutral-400">
+                    {getSpecialPriorityLabel(specialPriority1)}
+                  </span>
+                )}
+              </>
+            )}
           </span>
         </div>
+
+        <button
+          type="button"
+          onClick={() => toggleSpecialPriorityExpanded(0)}
+          className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+            specialPriorityExpanded[0]
+              ? "bg-pink-400 text-black hover:bg-pink-300"
+              : "bg-neutral-800 text-white hover:bg-neutral-700"
+          }`}
+        >
+          {specialPriorityExpanded[0] ? "收起" : "展開"}
+        </button>
+      </div>
+
+      {specialPriorityExpanded[0] && (
+        <div className="mt-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
+            {[
+              { key: "none", label: "無" },
+              { key: "clearCount", label: "首消n粒盾" },
+              { key: "cross", label: "十字盾" },
+              { key: "l", label: "L字盾" },
+              { key: "t", label: "T字盾" },
+            ].map((item) => (
+              <button
+                key={item.key}
+                onClick={() => updateSpecialPriorityAt(0, { type: item.key })}
+                className={[
+                  "px-3 py-2 rounded-xl border text-sm font-black transition-all",
+                  specialPriority1.type === item.key
+                    ? "bg-pink-600 text-white border-pink-400/30"
+                    : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
+                ].join(" ")}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {specialPriority1.type === "clearCount" && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-bold text-neutral-400">首消顆數</span>
+
+                <input
+                  type="number"
+                  min={3}
+                  max={30}
+                  value={specialPriority1.clearCount}
+                  onChange={(e) =>
+                    updateSpecialPriorityAt(0, {
+                      clearCount: e.target.value,
+                    })
+                  }
+                  onBlur={(e) =>
+                    updateSpecialPriorityAt(0, {
+                      clearCount: Math.max(
+                        3,
+                        Math.min(30, Number(e.target.value) || 3)
+                      ),
+                    })
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                  }}
+                  className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                />
+              </div>
+
+              <input
+                type="range"
+                min={3}
+                max={30}
+                step={1}
+                value={Math.max(
+                  3,
+                  Math.min(30, Number(specialPriority1.clearCount) || 3)
+                )}
+                onChange={(e) =>
+                  updateSpecialPriorityAt(0, {
+                    clearCount: Number(e.target.value),
+                  })
+                }
+                className="w-full accent-pink-500 cursor-pointer"
+              />
+            </div>
+          )}
+
+          {(specialPriority1.type === "cross" ||
+            specialPriority1.type === "l" ||
+            specialPriority1.type === "t") && (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-bold text-neutral-400">數量</span>
+
+              <select
+                value={specialPriority1.count}
+                onChange={(e) =>
+                  updateSpecialPriorityAt(0, { count: Number(e.target.value) })
+                }
+                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+              >
+                <option value={1}>1</option>
+                <option value={2}>2</option>
+                <option value={3}>3</option>
+              </select>
+
+              <span className="text-sm font-bold text-neutral-400">屬性</span>
+
+              <select
+                value={specialPriority1.orb}
+                onChange={(e) =>
+                  updateSpecialPriorityAt(0, { orb: Number(e.target.value) })
+                }
+                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+              >
+                {SPECIAL_ORB_OPTIONS.map((opt) => (
+                  <option key={opt.label} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+
+              <span className="text-xs text-neutral-500">
+                只算首消，不計疊珠
+              </span>
+            </div>
+          )}
+        </div>
       )}
     </div>
-  )}
-</div>
-    )}
+
+    {/* 第二優先 */}
+    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/50 p-4">
+      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-black text-pink-300 flex items-center gap-2">
+            {specialPriorityExpanded[1] ? (
+              "第二優先（一次只能選一個）"
+            ) : (
+              <>
+                <span>第二優先：</span>
+
+                {specialPriority2.type !== "none" ? (
+                  <span
+                    className="px-1.5 py-[1px] rounded bg-pink-400 text-white text-sm font-black leading-none"
+                    style={{
+                      textShadow: `
+                        0 0 1px rgba(0,0,0,0.9),
+                        0 0 2px rgba(0,0,0,0.6)
+                      `,
+                    }}
+                  >
+                    {getSpecialPriorityLabel(specialPriority2)}
+                  </span>
+                ) : (
+                  <span className="text-neutral-400">
+                    {getSpecialPriorityLabel(specialPriority2)}
+                  </span>
+                )}
+              </>
+            )}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => toggleSpecialPriorityExpanded(1)}
+          className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+            specialPriorityExpanded[1]
+              ? "bg-pink-400 text-black hover:bg-pink-300"
+              : "bg-neutral-800 text-white hover:bg-neutral-700"
+          }`}
+        >
+          {specialPriorityExpanded[1] ? "收起" : "展開"}
+        </button>
+      </div>
+
+      {specialPriorityExpanded[1] && (
+        <div className="mt-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
+            {[
+              { key: "none", label: "無" },
+              { key: "clearCount", label: "首消n粒盾" },
+              { key: "cross", label: "十字盾" },
+              { key: "l", label: "L字盾" },
+              { key: "t", label: "T字盾" },
+            ].map((item) => (
+              <button
+                key={item.key}
+                onClick={() => updateSpecialPriorityAt(1, { type: item.key })}
+                className={[
+                  "px-3 py-2 rounded-xl border text-sm font-black transition-all",
+                  specialPriority2.type === item.key
+                    ? "bg-pink-600 text-white border-pink-400/30"
+                    : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
+                ].join(" ")}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {specialPriority2.type === "clearCount" && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-bold text-neutral-400">首消顆數</span>
+
+                <input
+                  type="number"
+                  min={3}
+                  max={30}
+                  value={specialPriority2.clearCount}
+                  onChange={(e) =>
+                    updateSpecialPriorityAt(1, {
+                      clearCount: e.target.value,
+                    })
+                  }
+                  onBlur={(e) =>
+                    updateSpecialPriorityAt(1, {
+                      clearCount: Math.max(
+                        3,
+                        Math.min(30, Number(e.target.value) || 3)
+                      ),
+                    })
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                  }}
+                  className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                />
+              </div>
+
+              <input
+                type="range"
+                min={3}
+                max={30}
+                step={1}
+                value={Math.max(
+                  3,
+                  Math.min(30, Number(specialPriority2.clearCount) || 3)
+                )}
+                onChange={(e) =>
+                  updateSpecialPriorityAt(1, {
+                    clearCount: Number(e.target.value),
+                  })
+                }
+                className="w-full accent-pink-500 cursor-pointer"
+              />
+            </div>
+          )}
+
+          {(specialPriority2.type === "cross" ||
+            specialPriority2.type === "l" ||
+            specialPriority2.type === "t") && (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-bold text-neutral-400">數量</span>
+
+              <select
+                value={specialPriority2.count}
+                onChange={(e) =>
+                  updateSpecialPriorityAt(1, { count: Number(e.target.value) })
+                }
+                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+              >
+                <option value={1}>1</option>
+                <option value={2}>2</option>
+                <option value={3}>3</option>
+              </select>
+
+              <span className="text-sm font-bold text-neutral-400">屬性</span>
+
+              <select
+                value={specialPriority2.orb}
+                onChange={(e) =>
+                  updateSpecialPriorityAt(1, { orb: Number(e.target.value) })
+                }
+                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+              >
+                {SPECIAL_ORB_OPTIONS.map((opt) => (
+                  <option key={opt.label} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+
+              <span className="text-xs text-neutral-500">
+                只算首消，不計疊珠
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+
+    {/* 第三優先 */}
+    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/50 p-4">
+      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-black text-pink-300 flex items-center gap-2">
+            {specialPriorityExpanded[2] ? (
+              "第三優先（一次只能選一個）"
+            ) : (
+              <>
+                <span>第三優先：</span>
+
+                {specialPriority3.type !== "none" ? (
+                  <span
+                    className="px-1.5 py-[1px] rounded bg-pink-400 text-white text-sm font-black leading-none"
+                    style={{
+                      textShadow: `
+                        0 0 1px rgba(0,0,0,0.9),
+                        0 0 2px rgba(0,0,0,0.6)
+                      `,
+                    }}
+                  >
+                    {getSpecialPriorityLabel(specialPriority3)}
+                  </span>
+                ) : (
+                  <span className="text-neutral-400">
+                    {getSpecialPriorityLabel(specialPriority3)}
+                  </span>
+                )}
+              </>
+            )}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => toggleSpecialPriorityExpanded(2)}
+          className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+            specialPriorityExpanded[2]
+              ? "bg-pink-400 text-black hover:bg-pink-300"
+              : "bg-neutral-800 text-white hover:bg-neutral-700"
+          }`}
+        >
+          {specialPriorityExpanded[2] ? "收起" : "展開"}
+        </button>
+      </div>
+
+      {specialPriorityExpanded[2] && (
+        <div className="mt-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
+            {[
+              { key: "none", label: "無" },
+              { key: "clearCount", label: "首消n粒盾" },
+              { key: "cross", label: "十字盾" },
+              { key: "l", label: "L字盾" },
+              { key: "t", label: "T字盾" },
+            ].map((item) => (
+              <button
+                key={item.key}
+                onClick={() => updateSpecialPriorityAt(2, { type: item.key })}
+                className={[
+                  "px-3 py-2 rounded-xl border text-sm font-black transition-all",
+                  specialPriority3.type === item.key
+                    ? "bg-pink-600 text-white border-pink-400/30"
+                    : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
+                ].join(" ")}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {specialPriority3.type === "clearCount" && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-bold text-neutral-400">首消顆數</span>
+
+                <input
+                  type="number"
+                  min={3}
+                  max={30}
+                  value={specialPriority3.clearCount}
+                  onChange={(e) =>
+                    updateSpecialPriorityAt(2, {
+                      clearCount: e.target.value,
+                    })
+                  }
+                  onBlur={(e) =>
+                    updateSpecialPriorityAt(2, {
+                      clearCount: Math.max(
+                        3,
+                        Math.min(30, Number(e.target.value) || 3)
+                      ),
+                    })
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                  }}
+                  className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                />
+              </div>
+
+              <input
+                type="range"
+                min={3}
+                max={30}
+                step={1}
+                value={Math.max(
+                  3,
+                  Math.min(30, Number(specialPriority3.clearCount) || 3)
+                )}
+                onChange={(e) =>
+                  updateSpecialPriorityAt(2, {
+                    clearCount: Number(e.target.value),
+                  })
+                }
+                className="w-full accent-pink-500 cursor-pointer"
+              />
+            </div>
+          )}
+
+          {(specialPriority3.type === "cross" ||
+            specialPriority3.type === "l" ||
+            specialPriority3.type === "t") && (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-bold text-neutral-400">數量</span>
+
+              <select
+                value={specialPriority3.count}
+                onChange={(e) =>
+                  updateSpecialPriorityAt(2, { count: Number(e.target.value) })
+                }
+                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+              >
+                <option value={1}>1</option>
+                <option value={2}>2</option>
+                <option value={3}>3</option>
+              </select>
+
+              <span className="text-sm font-bold text-neutral-400">屬性</span>
+
+              <select
+                value={specialPriority3.orb}
+                onChange={(e) =>
+                  updateSpecialPriorityAt(2, { orb: Number(e.target.value) })
+                }
+                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+              >
+                {SPECIAL_ORB_OPTIONS.map((opt) => (
+                  <option key={opt.label} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+
+              <span className="text-xs text-neutral-500">
+                只算首消，不計疊珠
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   </div>
+)}</div>
 )}
 		</div>
 
