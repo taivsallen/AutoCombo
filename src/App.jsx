@@ -104,6 +104,32 @@ const DEFAULT_CONFIG = {
   replaySpeed: 250, 
 };
 
+const PERFORMANCE_PRESETS = [
+  { level: 1, beamWidth: 350, maxNodes: 50000, label: "極速" },
+  { level: 2, beamWidth: 550, maxNodes: 90000, label: "輕量" },
+  { level: 3, beamWidth: 800, maxNodes: 145000, label: "平衡" },
+  { level: 4, beamWidth: 1200, maxNodes: 240000, label: "高精" },
+  { level: 5, beamWidth: 2000, maxNodes: 400000, label: "極限" },
+];
+
+const getPerformanceLevelFromConfig = (beamWidth, maxNodes) => {
+  let bestLevel = 3;
+  let bestDist = Infinity;
+
+  for (const p of PERFORMANCE_PRESETS) {
+    const dist =
+      Math.abs((beamWidth || 0) - p.beamWidth) +
+      Math.abs((maxNodes || 0) - p.maxNodes) / 1000;
+
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestLevel = p.level;
+    }
+  }
+
+  return bestLevel;
+};
+
 function topKByScore(items, K, getScore) {
   if (K <= 0) return [];
   const heap = []; // min-heap: [score, item]
@@ -508,6 +534,22 @@ const endEditorPaint = useCallback(() => {
 
   const [solverMode, setSolverMode] = useState('vertical'); 
   const [priorityMode, setPriorityMode] = useState('steps'); 
+  useEffect(() => {
+  setConfig((prev) => {
+    const forced =
+      priorityMode === "steps"
+        ? 40
+        : 240;
+
+    if (prev.maxSteps === forced) return prev;
+
+    return {
+      ...prev,
+      maxSteps: forced,
+    };
+  });
+}, [priorityMode]);
+  
   const [skyfallEnabled, setSkyfallEnabled] = useState(true);
   const [diagonalEnabled, setDiagonalEnabled] = useState(true); 
   
@@ -544,9 +586,44 @@ useEffect(() => {
 const targetCombos = extremeTargetCombo;
 
   const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [performanceLevel, setPerformanceLevel] = useState(() =>
+  getPerformanceLevelFromConfig(
+    config.beamWidth,
+    config.maxNodes
+  )
+);
+  
   const [gifCaptureMode, setGifCaptureMode] = useState(false);
   
-  const updateParam = (key, val) => setConfig(prev => ({ ...prev, [key]: key === 'replaySpeed' ? Math.round(parseFloat(val)) : parseFloat(val) }));
+  const applyPerformanceLevel = useCallback((level) => {
+  const lv = Math.max(1, Math.min(5, Number(level) || 3));
+  const preset =
+    PERFORMANCE_PRESETS.find((p) => p.level === lv) || PERFORMANCE_PRESETS[2];
+
+  setPerformanceLevel(lv);
+  setConfig((prev) => ({
+    ...prev,
+    beamWidth: preset.beamWidth,
+    maxNodes: preset.maxNodes,
+  }));
+  setNeedsSolve(true);
+}, []);
+
+const updateParam = (key, val) =>
+  setConfig((prev) => ({
+    ...prev,
+    [key]:
+      key === "replaySpeed"
+        ? Math.round(parseFloat(val))
+        : parseFloat(val),
+  }));
+  
+  useEffect(() => {
+  setPerformanceLevel(
+    getPerformanceLevelFromConfig(config.beamWidth, config.maxNodes)
+  );
+}, [config.beamWidth, config.maxNodes]);
+  
   const renderBoard = replayBoard ?? board;
   const manualHiddenCell =
   isManual && isDragging && floating && path.length > 0
@@ -1451,22 +1528,18 @@ const clone2D = (b) => {
   for (let i = 0; i < len; i++) copy[i] = b[i].slice();
   return copy;
 };
-
-// 評分/顯示用：把洞補成「手上那顆 held(startOrb)」
 const boardWithHeldFilled = (b, hole, held) => {
   if (!hole) return b;
   const next = clone2D(b);
   next[hole.r][hole.c] = held;
   return next;
 };
-
 const holeStepInPlace = (b, hole, toRC) => {
   const moved = b[toRC.r][toRC.c];
   b[hole.r][hole.c] = moved;
   b[toRC.r][toRC.c] = -1;
   return toRC; // new hole
 };
-
 const compactnessScore = (b, phase = "initial") => {
   let minR = 99, maxR = -1;
   let minC = 99, maxC = -1;
@@ -1492,7 +1565,6 @@ const compactnessScore = (b, phase = "initial") => {
 
   return -area * 30;
 };
-
 const edgePotentialScore = (b, phase = "initial") => {
   let p = 0;
 
@@ -1518,7 +1590,6 @@ const edgePotentialScore = (b, phase = "initial") => {
 
   return p;
 };
-
 const regionOf = (r, c) => {
 
   const vr =
@@ -1533,8 +1604,6 @@ const regionOf = (r, c) => {
 
   return vr * 3 + vc;
 };
-
-// 🚀 搭配 1D toClearMap 的提速版 Gravity
 const applyGravity = (b, toClear1D) => {
   const next = clone2D(b);
   for (let c = 0; c < COLS; c++) {
@@ -1550,7 +1619,6 @@ const applyGravity = (b, toClear1D) => {
   }
   return next;
 };
-
 const potentialScore = (b, mode, phase = "initial") => {
   let p = 0;
   const hWeight = mode === "horizontal" ? 3 : 0.5;
@@ -1607,13 +1675,11 @@ const potentialScore = (b, mode, phase = "initial") => {
 
   return p;
 };
-
 const SHAPE_KIND = {
   CROSS: "cross",
   L: "l",
   T: "t",
 };
-
 const normalizeCells = (cells) => {
   let minR = Infinity;
   let minC = Infinity;
@@ -1626,7 +1692,6 @@ const normalizeCells = (cells) => {
     .sort();
   return arr.join("|");
 };
-
 const transformCells8 = (cells) => {
   // 8 個對稱：4 旋轉 + 鏡射
   return [
@@ -1641,7 +1706,6 @@ const transformCells8 = (cells) => {
     cells.map(([r, c]) => [-c, -r]),
   ];
 };
-
 const canonicalShapeKey = (cells) => {
   let best = null;
   for (const t of transformCells8(cells)) {
@@ -1650,7 +1714,6 @@ const canonicalShapeKey = (cells) => {
   }
   return best;
 };
-
 const SHAPE_TEMPLATES = {
   [SHAPE_KIND.CROSS]: [
     [0, 1],
@@ -1668,11 +1731,9 @@ const SHAPE_TEMPLATES = {
             [2, 1],
   ],
 };
-
 const SHAPE_CANONICAL = Object.fromEntries(
   Object.entries(SHAPE_TEMPLATES).map(([k, cells]) => [k, canonicalShapeKey(cells)])
 );
-
 const detectExact5Shape = (cells) => {
   if (!cells || cells.length !== 5) return null;
   const key = canonicalShapeKey(cells);
@@ -1681,18 +1742,15 @@ const detectExact5Shape = (cells) => {
   }
   return null;
 };
-
 const makePatternCounter = () => ({
   total: 0,
   byOrb: new Int16Array(8), // 夠用就好
 });
-
 const makePatternCounts = () => ({
   cross: makePatternCounter(),
   l: makePatternCounter(),
   t: makePatternCounter(),
 });
-
 const getSpecialMatchedValue = (ev, special) => {
   if (!special || special.type === "none") return 0;
 
@@ -1706,7 +1764,6 @@ const getSpecialMatchedValue = (ev, special) => {
   if (special.orb === SPECIAL_ORB_ANY) return group.total || 0;
   return group.byOrb?.[special.orb] || 0;
 };
-
 const getSpecialScore = (ev, special) => {
   if (!special || special.type === "none") return 0;
 
@@ -1733,7 +1790,6 @@ const getSpecialScore = (ev, special) => {
 
   return sat * 40000000 - lack * 3000000;
 };
-
 const hasInitialN2Clear = (board, toClear1D) => {
   if (!toClear1D) return false;
 
@@ -1747,7 +1803,6 @@ const hasInitialN2Clear = (board, toClear1D) => {
   }
   return false;
 };
-
 const getInitialMatchCheck = (board) => {
   const initial = findMatches(board, "initial");
 
@@ -1758,7 +1813,6 @@ const getInitialMatchCheck = (board) => {
     violatesN2: hasInitialN2Clear(board, vanillaToClear),
   };
 };
-
 const getVanillaInitialClearMap = (board) => {
   const totalCells = TOTAL_ROWS * COLS;
   const toClear1D = new Uint8Array(totalCells);
@@ -1817,7 +1871,6 @@ const getVanillaInitialClearMap = (board) => {
 
   return toClear1D;
 };
-
 const hasN2InVanillaInitialPattern = (board) => {
   const toClear1D = getVanillaInitialClearMap(board);
 
@@ -1832,7 +1885,6 @@ const hasN2InVanillaInitialPattern = (board) => {
 
   return false;
 };
-
 const findMatches = (tempBoard, phase = "initial") => {
   let combos = 0,
     clearedCount = 0,
@@ -1988,7 +2040,6 @@ while (k < TOTAL_ROWS && getOrbForMatchPhase(tempBoard[k][c], phase) === v0) k++
     patternCounts,
   };
 };
-
 const unlockN2Board = (b) => {
   const next = clone2D(b);
   for (let r = 0; r < TOTAL_ROWS; r++) {
@@ -2000,7 +2051,6 @@ const unlockN2Board = (b) => {
   }
   return next;
 };
-
 const combinedPotentialScore = (b, mode) => {
 
   const potInitial = potentialScore(b, mode, "initial");
@@ -2020,7 +2070,6 @@ const combinedPotentialScore = (b, mode) => {
     compact * 0.05
   );
 };
-
 const evaluateBoard = (tempBoard, skyfall, initialResult = null) => {
   const result = initialResult ?? findMatches(tempBoard, "initial");
 
@@ -2081,7 +2130,6 @@ const evaluateBoard = (tempBoard, skyfall, initialResult = null) => {
     initialPatternCounts,
   };
 };
-
 const getBoardKey = (b) => {
   // 兩個 32-bit hash 合成 BigInt 字串 key（低碰撞、Map key 短）
   let h1 = 2166136261 >>> 0; // FNV-ish
@@ -2111,9 +2159,7 @@ const getBoardKey = (b) => {
   const key = (BigInt(h1) << 32n) ^ BigInt(h2);
   return key.toString();
 };
-
-// ✅ 更更提升達標率：未達標評分更「以 miss 為王」，pot 只在接近時才放大
-  const calcScore = (
+const calcScore = (
   ev,
   pot,
   pathLen,
@@ -2173,9 +2219,8 @@ const getBoardKey = (b) => {
     stepSoft -
     illegalPenalty
   );
-};
-  
-  const beamSolve = (
+}; 
+const beamSolve = (
   originalBoard,
   cfg,
   target,
@@ -2212,10 +2257,7 @@ const getBoardKey = (b) => {
     return { ok: true, locked: false };
   };
 
-  const maxNodesEffective =
-    priority === "combo"
-      ? Math.max(cfg.maxNodes, cfg.maxSteps * cfg.beamWidth * 12)
-      : cfg.maxNodes;
+  const maxNodesEffective = cfg.maxNodes;
 
   let q1Pos = null;
   let q2Pos = null;
@@ -2280,16 +2322,18 @@ const getBoardKey = (b) => {
   let topStepCandidates = [];
   let topComboCandidates = [];
 
-  const packCandidateFromEv = (ev, node, score) => {
-    const path = node ? buildPath(node) : [];
-    return {
-      ...ev,
-      path,
-      score,
-    };
+  const packCandidateFromEv = (ev, node, score, shortScore = score, longScore = 0) => {
+  const path = node ? buildPath(node) : [];
+  return {
+    ...ev,
+    path,
+    score,
+    shortScore,
+    longScore,
   };
+};
 
-  const pushTopCandidate = (ev, node, score, violatesN2) => {
+  const pushTopCandidate = (ev, node, score, shortScore, longScore, violatesN2) => {
   if (!node) return;
 
   const steps = stepsOf(node);
@@ -2297,9 +2341,9 @@ const getBoardKey = (b) => {
   if (!shouldAcceptEnd(node)) return;
 
   const sol = {
-    ...packCandidateFromEv(ev, node, score),
-    violatesN2: !!violatesN2,
-  };
+  ...packCandidateFromEv(ev, node, score, shortScore, longScore),
+  violatesN2: !!violatesN2,
+};
 
   if (priority === "steps") {
     topStepCandidates = mergeTopSolutions(
@@ -2390,10 +2434,15 @@ const getBoardKey = (b) => {
   let beam = [];
 
   const visitedBest = new Map();
-  const betterThanVisited = (key, ev, score, steps, mode) => {
+
+const betterThanVisited = (key, ev, score, steps, mode) => {
+  // =========================
+  // STEP MODE：照舊版硬剪枝
+  // =========================
+  if (priority === "steps") {
     const prev = visitedBest.get(key);
     const major = mode === "vertical" ? ev.verticalCombos : ev.horizontalCombos;
-    const rec = [ev.combos, major, ev.clearedCount, -steps, score];
+    const rec = [ev.combos || 0, major || 0, ev.clearedCount || 0, -steps, score || 0];
 
     if (!prev) {
       visitedBest.set(key, rec);
@@ -2425,8 +2474,65 @@ const getBoardKey = (b) => {
 
     if (shouldUpdate) visitedBest.set(key, rec);
     return shouldUpdate;
+  }
+
+  // =========================
+  // COMBO MODE：保留新版 frontier
+  // =========================
+  const VISITED_FRONTIER_LIMIT = 10;
+
+  const dominatesRec = (a, b) => {
+    return a[0] >= b[0] && a[1] >= b[1] && a[2] >= b[2];
   };
 
+  const recLexBetter = (a, b) => {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      const av = a[i] ?? 0;
+      const bv = b[i] ?? 0;
+      if (av > bv) return true;
+      if (av < bv) return false;
+    }
+    return false;
+  };
+
+  const rec = [
+    ev.combos || 0,
+    ev.clearedCount || 0,
+    -steps,
+  ];
+
+  const frontier = visitedBest.get(key);
+
+  if (!frontier) {
+    visitedBest.set(key, [rec]);
+    return true;
+  }
+
+  for (const oldRec of frontier) {
+    if (dominatesRec(oldRec, rec)) return false;
+  }
+
+  const nextFrontier = [];
+  for (const oldRec of frontier) {
+    if (!dominatesRec(rec, oldRec)) nextFrontier.push(oldRec);
+  }
+
+  nextFrontier.push(rec);
+
+  nextFrontier.sort((a, b) => {
+    if (recLexBetter(a, b)) return -1;
+    if (recLexBetter(b, a)) return 1;
+    return 0;
+  });
+
+  if (nextFrontier.length > VISITED_FRONTIER_LIMIT) {
+    nextFrontier.length = VISITED_FRONTIER_LIMIT;
+  }
+
+  visitedBest.set(key, nextFrontier);
+  return true;
+};
+  
   const pushInitState = (r, c, heldFromRow0) => {
     if (!useRow0 && heldFromRow0) return;
     if (q1Pos && (r !== q1Pos.r || c !== q1Pos.c)) return;
@@ -2454,28 +2560,46 @@ const getBoardKey = (b) => {
     const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
     const ev = evaluateBoard(evalBoard, skyfall, initial);
 
+const diversityKey =
+  ((ev.initialCombos || 0) << 16) |
+  (regionOf(r, c) << 8) |
+  Math.min(15, ev.clearedCount || 0);
+
     if (exceedsInitialComboCap(ev)) return;
 
-    const pot = combinedPotentialScore(evalBoard, mode);
-    const rawScore = calcScore(
-      ev,
-      pot,
-      0,
-      cfg,
-      target,
-      mode,
-      priority,
-      specialPriority,
-      violatesN2
-    );
+    const longScore = combinedPotentialScore(evalBoard, mode);
+const shortScore = calcScore(
+  ev,
+  0,
+  0,
+  cfg,
+  target,
+  mode,
+  priority,
+  specialPriority,
+  violatesN2
+);
 
-    const score = hasSpecial ? rawScore - 6000000 : rawScore;
+const score =
+  priority === "steps"
+    ? calcScore(
+        ev,
+        longScore,
+        0,
+        cfg,
+        target,
+        mode,
+        priority,
+        specialPriority,
+        violatesN2
+      )
+    : shortScore;
 
     const key = `${getBoardKey(boardCopy)}|${held}|${r},${c}|${locked0 ? 1 : 0}`;
     if (!betterThanVisited(key, ev, score, 0, mode)) return;
 
     const node = makeNode(null, r, c);
-	pushTopCandidate(ev, node, score, violatesN2);
+	pushTopCandidate(ev, node, score, shortScore, longScore, violatesN2);
     considerBest(ev, score, node, violatesN2);
 
     if (
@@ -2487,18 +2611,20 @@ const getBoardKey = (b) => {
     }
 
     beam.push({
-      board: boardCopy,
-      held,
-      hole,
-      r,
-      c,
-      node,
-      score,
-      ev,
-      pot,
-      locked: locked0,
-      violatesN2,
-    });
+  board: boardCopy,
+  held,
+  hole,
+  r,
+  c,
+  node,
+  score,
+  shortScore,
+  longScore,
+  ev,
+  locked: locked0,
+  violatesN2,
+  diversityKey,
+});
   };
 
   if (useRow0) {
@@ -2529,8 +2655,15 @@ const getBoardKey = (b) => {
         if (aSpecial !== bSpecial) return bSpecial - aSpecial;
       }
 
-      if (a.score !== b.score) return b.score - a.score;
-      return (b.ev.clearedCount || 0) - (a.ev.clearedCount || 0);
+      if ((a.shortScore || 0) !== (b.shortScore || 0)) {
+  return (b.shortScore || 0) - (a.shortScore || 0);
+}
+
+if ((a.longScore || 0) !== (b.longScore || 0)) {
+  return (b.longScore || 0) - (a.longScore || 0);
+}
+
+return (b.ev.clearedCount || 0) - (a.ev.clearedCount || 0);
     });
   };
 
@@ -2557,40 +2690,125 @@ const getBoardKey = (b) => {
     }
     return quota;
   };
+  const stableStateSignature = (st) =>
+  `${getBoardKey(st.board)}|${st.held}|${st.r},${st.c}`;
 
-  const pickBeamComboExplore = (candidates) => {
-    sortComboCandidates(candidates);
+const hashString32 = (str) => {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+};
+  
+const randomPick = (arr, n) => {
+  if (!arr.length || n <= 0) return [];
 
-    const BW = cfg.beamWidth;
-    const out = [];
+  const decorated = arr.map((st, idx) => {
+    const sig = stableStateSignature(st);
+    const h = hashString32(`${sig}|${idx}`);
+    return { st, h };
+  });
 
-    const eliteN = Math.min(candidates.length, Math.max(6, (BW / 3) | 0));
-    for (let i = 0; i < eliteN && out.length < BW; i++) out.push(candidates[i]);
-    if (out.length >= BW) return out;
+  decorated.sort((a, b) => a.h - b.h);
 
-    const maxTier = 8;
-    const tierCount = maxTier + 1;
-    const quotaW = [3.0, 2.2, 1.6, 1.1, 0.8, 0.55, 0.4, 0.3, 0.2];
+  const out = [];
+  const used = new Set();
 
-    const counts = new Array(tierCount).fill(0);
-    for (let i = eliteN; i < candidates.length; i++) {
-      const miss = getMissTier(candidates[i]);
-      if (miss <= maxTier) counts[miss]++;
-    }
+  for (const item of decorated) {
+    const st = item.st;
+    const sig = stableStateSignature(st);
+    if (used.has(sig)) continue;
+    used.add(sig);
+    out.push(st);
+    if (out.length >= n) break;
+  }
 
-    const remain = BW - out.length;
-    const quota = buildQuota(counts, remain, quotaW);
+  return out;
+};
+const mergeUniqueStates = (list, limit) => {
+  const out = [];
+  const used = new Set();
 
-    const usedPos = new Set();
-    const usedRegion = new Set();
-    for (const st of out) {
-      usedPos.add((st.r << 8) | st.c);
-      usedRegion.add(regionOf(st.r, st.c));
-    }
+  for (const st of list) {
+    const sig = stableStateSignature(st);
+    if (used.has(sig)) continue;
+    used.add(sig);
+    out.push(st);
+    if (out.length >= limit) break;
+  }
 
-    const took = new Array(tierCount).fill(0);
-    const regionSkipProb = cfg.beamWidth >= 300 ? 0.8 : 0.7;
+  return out;
+};
+const pickBeamComboExplore = (candidates) => {
+  const BW = cfg.beamWidth;
+  const out = [];
 
+  const usedPos = new Set();
+  const usedRegion = new Set();
+  const usedDiversity = new Set();
+
+  const eliteN = Math.min(candidates.length, Math.max(6, (BW / 3) | 0));
+  for (let i = 0; i < eliteN && out.length < BW; i++) {
+    const st = candidates[i];
+    const pc = (st.r << 8) | st.c;
+    const rg = regionOf(st.r, st.c);
+
+    out.push(st);
+    usedPos.add(pc);
+    usedRegion.add(rg);
+    usedDiversity.add(st.diversityKey);
+  }
+
+  if (out.length >= BW) return out;
+
+  const maxTier = 8;
+  const tierCount = maxTier + 1;
+  const quotaW = [3.0, 2.2, 1.6, 1.1, 0.8, 0.55, 0.4, 0.3, 0.2];
+
+  const counts = new Array(tierCount).fill(0);
+  for (let i = eliteN; i < candidates.length; i++) {
+    const miss = getMissTier(candidates[i]);
+    if (miss <= maxTier) counts[miss]++;
+  }
+
+  const remain = BW - out.length;
+  const quota = buildQuota(counts, remain, quotaW);
+
+  const took = new Array(tierCount).fill(0);
+  const regionSkipProb = cfg.beamWidth >= 300 ? 0.8 : 0.7;
+
+  // 第一輪：優先保多樣性
+  for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+    const st = candidates[i];
+    const miss = getMissTier(st);
+    if (miss > maxTier) continue;
+    if (took[miss] >= quota[miss]) continue;
+
+    const pc = (st.r << 8) | st.c;
+    const rg = regionOf(st.r, st.c);
+
+    if (usedPos.has(pc)) continue;
+    if (out.length >= Math.floor(BW * 0.5) && usedDiversity.has(st.diversityKey)) continue;
+    const regionHash = hashString32(`${stableStateSignature(st)}|region`);
+const regionRoll = (regionHash % 1000) / 1000;
+
+if (
+  out.length >= Math.floor(BW * 0.35) &&
+  usedRegion.has(rg) &&
+  regionRoll < regionSkipProb
+) continue;
+
+    out.push(st);
+    usedPos.add(pc);
+    usedRegion.add(rg);
+    usedDiversity.add(st.diversityKey);
+    took[miss]++;
+  }
+
+  // 第二輪：放寬 region，但仍保 diversity
+  if (out.length < BW) {
     for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
       const st = candidates[i];
       const miss = getMissTier(st);
@@ -2598,42 +2816,50 @@ const getBoardKey = (b) => {
       if (took[miss] >= quota[miss]) continue;
 
       const pc = (st.r << 8) | st.c;
-      const rg = regionOf(st.r, st.c);
-
       if (usedPos.has(pc)) continue;
-      if (usedRegion.has(rg) && Math.random() < regionSkipProb) continue;
+      if (out.length >= Math.floor(BW * 0.5) && usedDiversity.has(st.diversityKey)) continue;
 
       out.push(st);
       usedPos.add(pc);
-      usedRegion.add(rg);
+      usedDiversity.add(st.diversityKey);
       took[miss]++;
     }
+  }
 
-    if (out.length < BW) {
-      for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
-        const st = candidates[i];
-        const miss = getMissTier(st);
-        if (miss > maxTier) continue;
-        if (took[miss] >= quota[miss]) continue;
+  // 第三輪：只補 quota，不再硬卡 diversity，但仍避免完全重複位置
+  if (out.length < BW) {
+    for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+      const st = candidates[i];
+      const miss = getMissTier(st);
+      if (miss > maxTier) continue;
+      if (took[miss] >= quota[miss]) continue;
 
-        const pc = (st.r << 8) | st.c;
-        if (usedPos.has(pc)) continue;
+      const pc = (st.r << 8) | st.c;
+      if (usedPos.has(pc)) continue;
 
-        out.push(st);
-        usedPos.add(pc);
-        took[miss]++;
-      }
+      out.push(st);
+      usedPos.add(pc);
+      took[miss]++;
     }
+  }
 
-    if (out.length < BW) {
-      for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
-        out.push(candidates[i]);
-      }
+  // 最後補滿：仍避免完全相同 state
+  if (out.length < BW) {
+    const usedStateSig = new Set(out.map(stableStateSignature));
+
+    for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+      const st = candidates[i];
+      const sig = stableStateSignature(st);
+      if (usedStateSig.has(sig)) continue;
+
+      out.push(st);
+      usedStateSig.add(sig);
     }
+  }
 
-    return out.slice(0, BW);
-  };
-
+  return out.slice(0, BW);
+};
+  
   const pickBeamComboFocus = (candidates) => {
     sortComboCandidates(candidates);
 
@@ -2677,33 +2903,80 @@ const getBoardKey = (b) => {
     }
 
     if (out.length < BW) {
-      for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
-        const st = candidates[i];
-        const miss = getMissTier(st);
-        if (miss > maxTier) continue;
-        if (took[miss] >= quota[miss]) continue;
+  for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+    const st = candidates[i];
+    const miss = getMissTier(st);
+    if (miss > maxTier) continue;
+    if (took[miss] >= quota[miss]) continue;
 
-        out.push(st);
-        took[miss]++;
-      }
-    }
+    const pc = (st.r << 8) | st.c;
+    if (usedPos.has(pc)) continue;
 
-    if (out.length < BW) {
-      for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
-        out.push(candidates[i]);
-      }
-    }
+    out.push(st);
+    usedPos.add(pc);
+    took[miss]++;
+  }
+}
+
+if (out.length < BW) {
+  const usedStateSig = new Set(out.map(stableStateSignature));
+
+  for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+    const st = candidates[i];
+    const sig = stableStateSignature(st);
+    if (usedStateSig.has(sig)) continue;
+
+    out.push(st);
+    usedStateSig.add(sig);
+  }
+}
 
     return out.slice(0, BW);
   };
 
-  const pickBeamComboAdaptive = (candidates) => {
-    const useExploreBeam = diagonal && skyfall;
-    return useExploreBeam
-      ? pickBeamComboExplore(candidates)
-      : pickBeamComboFocus(candidates);
-  };
+  const pickBeamComboAdaptive = (candidates, step) => {
+  sortComboCandidates(candidates);
 
+  const BW = cfg.beamWidth;
+  if (candidates.length <= BW) return candidates;
+
+  const pureTop = candidates.slice(0, Math.max(12, Math.floor(BW * 0.25)));
+
+  const earlyPhase = step < Math.floor(cfg.maxSteps * 0.45);
+
+  const eliteCount = earlyPhase
+    ? Math.max(8, Math.floor(BW * 0.55))
+    : Math.max(8, Math.floor(BW * 0.35));
+
+  const exploreCount = earlyPhase
+    ? Math.max(6, Math.floor(BW * 0.20))
+    : Math.max(6, Math.floor(BW * 0.30));
+
+  const longCount = earlyPhase
+    ? Math.max(6, Math.floor(BW * 0.20))
+    : Math.max(6, Math.floor(BW * 0.25));
+
+  const elite = candidates.slice(0, eliteCount);
+
+  const explorePool =
+    diagonal && skyfall
+      ? pickBeamComboExplore(candidates).slice(0, exploreCount)
+      : randomPick(candidates, exploreCount);
+
+  const longTerm = [...candidates]
+    .sort((a, b) => {
+      if ((b.longScore || 0) !== (a.longScore || 0)) {
+        return (b.longScore || 0) - (a.longScore || 0);
+      }
+      return (b.shortScore || 0) - (a.shortScore || 0);
+    })
+    .slice(0, longCount);
+
+  return mergeUniqueStates(
+    [...pureTop, ...elite, ...explorePool, ...longTerm, ...candidates],
+    BW
+  );
+};
   for (let step = 0; step < cfg.maxSteps; step++) {
     if (bestReachedSteps !== Infinity && step >= bestReachedSteps) break;
 
@@ -2750,23 +3023,45 @@ const getBoardKey = (b) => {
           const ev = evaluateBoard(evalBoard, skyfall, initial);
           if (exceedsInitialComboCap(ev)) continue;
 
-          const pot = combinedPotentialScore(evalBoard, mode);
-          const score = calcScore(
-            ev,
-            pot,
-            newSteps,
-            cfg,
-            target,
-            mode,
-            priority,
-            specialPriority,
-            violatesN2
-          );
+          const longScore = combinedPotentialScore(evalBoard, mode);
+const shortScore = calcScore(
+  ev,
+  0,
+  newSteps,
+  cfg,
+  target,
+  mode,
+  priority,
+  specialPriority,
+  violatesN2
+);
+
+const score =
+  priority === "steps"
+    ? calcScore(
+        ev,
+        longScore,
+        newSteps,
+        cfg,
+        target,
+        mode,
+        priority,
+        specialPriority,
+        violatesN2
+      )
+    : shortScore;
 
           const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
-          if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
 
-		  pushTopCandidate(ev, newNode, score, violatesN2);
+if (priority === "steps") {
+  if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
+} else {
+  if (newSteps > 12) {
+    if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
+  }
+}
+
+		  pushTopCandidate(ev, newNode, score, shortScore, longScore, violatesN2);
           considerBest(ev, score, newNode, violatesN2);
 
           if (
@@ -2778,6 +3073,11 @@ const getBoardKey = (b) => {
             continue;
           }
 
+const diversityKey =
+  ((ev.initialCombos || 0) << 16) |
+  (regionOf(nr, nc) << 8) |
+  Math.min(15, ev.clearedCount || 0);
+
           candidates.push({
             board: nextBoard,
             held: state.held,
@@ -2788,8 +3088,10 @@ const getBoardKey = (b) => {
             locked: nextLocked,
             score,
             ev,
-            pot,
+            shortScore,
+  longScore,
             violatesN2,
+			diversityKey,
           });
           nodesExpanded++;
           continue;
@@ -2809,19 +3111,35 @@ const getBoardKey = (b) => {
           const ev = evaluateBoard(evalBoard, skyfall, initial);
           if (exceedsInitialComboCap(ev)) continue;
 
-          const pot = combinedPotentialScore(evalBoard, mode);
-          const score = calcScore(
-            ev,
-            pot,
-            newSteps,
-            cfg,
-            target,
-            mode,
-            priority,
-            specialPriority,
-            violatesN2
-          );
-		  pushTopCandidate(ev, newNode, score, violatesN2);
+          const longScore = combinedPotentialScore(evalBoard, mode);
+const shortScore = calcScore(
+  ev,
+  0,
+  newSteps,
+  cfg,
+  target,
+  mode,
+  priority,
+  specialPriority,
+  violatesN2
+);
+
+const score =
+  priority === "steps"
+    ? calcScore(
+        ev,
+        longScore,
+        newSteps,
+        cfg,
+        target,
+        mode,
+        priority,
+        specialPriority,
+        violatesN2
+      )
+    : shortScore;
+
+		  pushTopCandidate(ev, newNode, score, shortScore, longScore, violatesN2);
           considerBest(ev, score, newNode, violatesN2);
           continue;
         }
@@ -2843,22 +3161,44 @@ const getBoardKey = (b) => {
 
         if (exceedsInitialComboCap(ev)) continue;
 
-        const pot = combinedPotentialScore(evalBoard, mode);
-        const score = calcScore(
-          ev,
-          pot,
-          newSteps,
-          cfg,
-          target,
-          mode,
-          priority,
-          specialPriority,
-          violatesN2
-        );
+        const longScore = combinedPotentialScore(evalBoard, mode);
+const shortScore = calcScore(
+  ev,
+  0,
+  newSteps,
+  cfg,
+  target,
+  mode,
+  priority,
+  specialPriority,
+  violatesN2
+);
+
+const score =
+  priority === "steps"
+    ? calcScore(
+        ev,
+        longScore,
+        newSteps,
+        cfg,
+        target,
+        mode,
+        priority,
+        specialPriority,
+        violatesN2
+      )
+    : shortScore;
 
         const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
-        if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
-		pushTopCandidate(ev, newNode, score, violatesN2);
+
+if (priority === "steps") {
+  if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
+} else {
+  if (newSteps > 12) {
+    if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
+  }
+}
+		pushTopCandidate(ev, newNode, score, shortScore, longScore, violatesN2);
         considerBest(ev, score, newNode, violatesN2);
 
         if (
@@ -2870,6 +3210,11 @@ const getBoardKey = (b) => {
           continue;
         }
 
+const diversityKey =
+  ((ev.initialCombos || 0) << 16) |
+  (regionOf(nr, nc) << 8) |
+  Math.min(15, ev.clearedCount || 0);
+
         candidates.push({
           board: nextBoard,
           held: state.held,
@@ -2880,8 +3225,10 @@ const getBoardKey = (b) => {
           locked: nextLocked,
           score,
           ev,
-          pot,
+          shortScore,
+  longScore,
           violatesN2,
+		  diversityKey,
         });
         nodesExpanded++;
       }
@@ -2890,7 +3237,7 @@ const getBoardKey = (b) => {
     if (candidates.length === 0 || nodesExpanded > maxNodesEffective) break;
 
     if (priority === "combo") {
-      beam = pickBeamComboAdaptive(candidates);
+      beam = pickBeamComboAdaptive(candidates, step);
     } else {
       const buckets = new Map();
       for (const st of candidates) {
@@ -2929,9 +3276,8 @@ const getBoardKey = (b) => {
     topSteps: topStepCandidates,
     topCombos: topComboCandidates,
   };
-};
-  
-  const stopToBase = useCallback((clearStep = true) => {
+}; 
+const stopToBase = useCallback((clearStep = true) => {
 	  // 1) 停動畫
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
 	  replayAnimRef.current.raf = 0;
@@ -2951,43 +3297,33 @@ const getBoardKey = (b) => {
 	  // 4) Stop 是否要把路徑回到未開始
 	  if (clearStep) setCurrentStep(-1);
 	}, []);
-
 const [solutionPools, setSolutionPools] = useState({
   steps: [],
   combo: [],
 });
-
 const [selectedPoolIndex, setSelectedPoolIndex] = useState(0);
-
 const solutionPoolsRef = useRef({
   steps: [],
   combo: [],
 });
-
 const solutionPoolContextRef = useRef({
   resetKey: "",
 });
-
 useEffect(() => {
   solutionPoolsRef.current = solutionPools;
 }, [solutionPools]);
-
 const getPathSteps = (path) => Math.max(0, (path?.length || 0) - 1);
-
 const filterSolutionsByMaxSteps = (list, maxSteps) => {
   return (list || []).filter((sol) => getPathSteps(sol.path) <= maxSteps);
 };
-
 const getSolutionGroupKey = (sol) => {
   const initCombo = sol.initialCombos || 0;
   const skyfallCombo = sol.skyfallCombos || 0;
   return `${initCombo}|${skyfallCombo}`;
 };
-
 const getSolutionMergeSignature = (sol) => {
   return `${sol.initialCombos || 0}|${sol.skyfallCombos || 0}`;
 };
-
 const shouldReplaceSameComboSignature = (
   prev,
   cur,
@@ -3008,7 +3344,6 @@ const shouldReplaceSameComboSignature = (
 
   return isLexBetter(curRank, prevRank);
 };
-
 const isSpecialSatisfiedBy = (ev, specialPriority) => {
   if (!specialPriority || specialPriority.type === "none") return true;
 
@@ -3038,7 +3373,6 @@ const isSpecialSatisfiedBy = (ev, specialPriority) => {
 
   return false;
 };
-
 const makePoolRank = (sol, mode, specialPriority, initTargetCombo) => {
   const initialCombos = sol.initialCombos || 0;
   const totalCombos = sol.combos || 0;
@@ -3072,8 +3406,6 @@ const makePoolRank = (sol, mode, specialPriority, initTargetCombo) => {
     cleared,
   ];
 };
-
-// lexicographic 比較 (desc)
 const lexCompareDesc = (a, b) => {
   const len = Math.max(a.length, b.length);
   for (let i = 0; i < len; i++) {
@@ -3083,8 +3415,6 @@ const lexCompareDesc = (a, b) => {
   }
   return 0;
 };
-
-// a 是否比 b 好
 const isLexBetter = (a, b) => {
   const len = Math.max(a.length, b.length);
   for (let i = 0; i < len; i++) {
@@ -3095,7 +3425,6 @@ const isLexBetter = (a, b) => {
   }
   return false;
 };
-
 const mergeTopSolutions = (
   oldList,
   newList,
@@ -3141,7 +3470,6 @@ const mergeTopSolutions = (
 
   return arr.slice(0, limit);
 };
-
 const makeSolutionResetKey = (
   baseBoard,
   diagonalEnabled,
@@ -3157,13 +3485,11 @@ const makeSolutionResetKey = (
     autoRow0Expanded: !!autoRow0Expanded,
   });
 };
-
 const clearSolutionPools = useCallback(() => {
   setSolutionPools({ steps: [], combo: [] });
   setSelectedPoolIndex(0);
   solutionPoolContextRef.current.resetKey = "";
 }, []);
-
 const toggleAutoRow0Expanded = useCallback(() => {
   setAutoRow0Expanded((v) => !v);
   clearSolutionPools();
@@ -3171,7 +3497,6 @@ const toggleAutoRow0Expanded = useCallback(() => {
   setPath([]);
   setCurrentStep(-1);
 }, [clearSolutionPools]);
-
 const applySolvedCandidate = useCallback((sol) => {
   if (!sol) return;
 
@@ -3198,7 +3523,6 @@ const applySolvedCandidate = useCallback((sol) => {
   setPath(sol.path || []);
   setStats((prev) => ({ ...prev, ...finalStats }));
 }, [stopToBase]);
-
 useEffect(() => {
   const activeList =
     priorityMode === "steps" ? solutionPools.steps : solutionPools.combo;
@@ -3213,8 +3537,7 @@ useEffect(() => {
 
   applySolvedCandidate(activeList[idx]);
 }, [priorityMode, selectedPoolIndex, solutionPools, applySolvedCandidate]);
-
-  const abortGifExport = useCallback(() => {
+const abortGifExport = useCallback(() => {
 	  // ✅ 讓正在跑的 exportGif 之後「所有 await 回來」都直接停掉
 	  exportTokenRef.current.cancelled = true;
 
@@ -3229,8 +3552,7 @@ useEffect(() => {
 	  // ✅ 畫面立刻回底盤、停止匯出動畫
 	  stopToBase(true);
 	}, [stopToBase]);
-
-  const pauseReplay = useCallback(() => {
+const pauseReplay = useCallback(() => {
   if (!isReplaying) return;
   if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
   replayAnimRef.current.raf = 0;
@@ -3244,8 +3566,7 @@ useEffect(() => {
 
   setIsPaused(true);
 }, [isReplaying]);
-
-  const resumeReplay = useCallback(() => {
+const resumeReplay = useCallback(() => {
   if (!isPaused) return;
 
   const st = replayAnimRef.current;
@@ -3375,8 +3696,7 @@ useEffect(() => {
 
   st.raf = requestAnimationFrame(tick);
 }, [isPaused]);
-
-  const stopReplay = useCallback((clearPath = false) => {
+const stopReplay = useCallback((clearPath = false) => {
 	  if (replayAnimRef.current.raf) {
 		cancelAnimationFrame(replayAnimRef.current.raf);
 	  }
@@ -3391,8 +3711,7 @@ useEffect(() => {
 		setCurrentStep(-1);   // 只有真的要清掉才清
 	  }
 	}, []);
-
-  const solve = () => {
+const solve = () => {
 	  solverCache.current.clear();
   stopToBase(true);
   setNeedsSolve(false);
@@ -3416,7 +3735,6 @@ useEffect(() => {
   base,
   diagonalEnabled,
   skyfallEnabled,
-  solverConfig.maxSteps,
   autoRow0Expanded
 );
 
@@ -3470,8 +3788,8 @@ useEffect(() => {
     : { steps: [], combo: [] };
 
 const oldPools = {
-  steps: filterSolutionsByMaxSteps(rawOldPools.steps, solverConfig.maxSteps),
-  combo: filterSolutionsByMaxSteps(rawOldPools.combo, solverConfig.maxSteps),
+  steps: rawOldPools.steps || [],
+  combo: rawOldPools.combo || [],
 };
 
     const mergedPools =
@@ -3542,14 +3860,12 @@ const oldPools = {
     setSolving(false);
     setNeedsSolve(false);
   }, 50);
-};
-  
-  const activeSolutions =
-  priorityMode === "steps" ? solutionPools.steps : solutionPools.combo;
-  
-  ///////////////////////////
-  
-  const getCellCenterPx = useCallback((r, c) => {
+}; 
+const activeSolutions = priorityMode === "steps" ? solutionPools.steps : solutionPools.combo;
+
+///////////////////////////////
+
+const getCellCenterPx = useCallback((r, c) => {
 	  const rc = cellRectsRef.current?.[r]?.[c];
 	  const svgRect = svgRectRef.current || overlayRef.current?.getBoundingClientRect();
 	  if (!rc || !svgRect) return { x: 0, y: 0 };
@@ -3561,19 +3877,14 @@ const oldPools = {
 	  // ✅ 像素對齊：直接消滅 subpixel 抖動
 	  return { x: Math.round(x), y: Math.round(y) };
 	}, []);
-
-  // footer 文字（每幀可更新）
-  const [gifFooter, setGifFooter] = useState({
+const [gifFooter, setGifFooter] = useState({
 	  segment: 1,
 	  segmentTotal: 1,
 	  comboText: "0",
 	  step: 0,
 	  stepTotal: 0,
 	});
-
-  // 依 path 計算「每一步」屬於第幾段 segment（方向改變就 +1）
-  // segment: 1..N
-  const buildSegmentIndexByStep = (rcPath) => {
+const buildSegmentIndexByStep = (rcPath) => {
 	  const n = rcPath?.length || 0;
 	  if (n < 2) return { segAt: [1], segTotal: 1 };
 
@@ -3600,8 +3911,7 @@ const oldPools = {
 
 	  return { segAt, segTotal: seg };
 	};
-
-  const exportGif = useCallback(async () => {
+const exportGif = useCallback(async () => {
 	  // ✅ 開新的一次匯出：換 id、取消旗標歸零
 	  const myId = ++exportTokenRef.current.id;
 	  exportTokenRef.current.cancelled = false;
@@ -3897,8 +4207,7 @@ const oldPools = {
 		}
 	  }
 	}, [path, config.replaySpeed, stopToBase, getCellCenterPx, stats.combos, stats.skyfallCombos]);
-
-  const onGifDownloadClick = useCallback(async () => {
+const onGifDownloadClick = useCallback(async () => {
 	  const blob = gifBlobRef.current;
 	  const url = gifReady?.url;
 	  const name = gifReady?.name || "replay.gif";
@@ -3937,21 +4246,18 @@ const oldPools = {
 	  // 若是臨時 createObjectURL，回收
 	  if (!url && blob) setTimeout(() => URL.revokeObjectURL(downloadUrl), 10000);
 	}, [gifReady?.url, gifReady?.name]);
-
-  const buildPixelPath = (rcPath, startPx = null) => {
+const buildPixelPath = (rcPath, startPx = null) => {
     if (!rcPath || rcPath.length < 2) return null;
     const pts = rcPath.map(p => getCellCenterPx(p.r, p.c));
     if (startPx) pts[0] = startPx;
     return pts;
   };
-
-  const cellCenterByRC = (r, c) => {
+const cellCenterByRC = (r, c) => {
 	  const rc = cellRectsRef.current?.[r]?.[c];
 	  if (!rc) return { x: 0, y: 0 };
 	  return { x: (rc.left + rc.right) / 2, y: (rc.top + rc.bottom) / 2 };
 	};
-
-  const replayPathContinuous = (targetPath = path, startPx = null) => {
+const replayPathContinuous = (targetPath = path, startPx = null) => {
 	  if (!targetPath || targetPath.length < 2) return;
 
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
@@ -4122,14 +4428,8 @@ const oldPools = {
 
 	  replayAnimRef.current.raf = requestAnimationFrame(tick);
 	};
-
-  // =========================
-// ✅ Geometry helpers (deduped)
-// =========================
 const hypot = (x, y) => Math.hypot(x, y);
-
 const q = (v, unit = 0.25) => Math.round(v / unit) * unit;
-
 const lineIntersection = (P, r, Q, s, eps = 1e-9) => {
   // Solve: P + t r intersects Q + u s
   const cross = (a, b) => a.x * b.y - a.y * b.x;
@@ -4140,8 +4440,6 @@ const lineIntersection = (P, r, Q, s, eps = 1e-9) => {
   const t = cross(qmp, s) / rxs;
   return { x: P.x + r.x * t, y: P.y + r.y * t, t };
 };
-
-// ✅ 避免跟你檔案內既有名稱撞到
 const isReasonableIntersectionGeom = (hit, refA, refB, maxDist = 96) => {
   if (!hit) return false;
   if (!Number.isFinite(hit.x) || !Number.isFinite(hit.y)) return false;
@@ -4151,24 +4449,19 @@ const isReasonableIntersectionGeom = (hit, refA, refB, maxDist = 96) => {
 
   return d1 <= maxDist && d2 <= maxDist;
 };
-
-// Edge keys: undirected + quantized => reverse counts as overlap too
 const edgeKey = (a, b) => {
   const ax = q(a.x), ay = q(a.y);
   const bx = q(b.x), by = q(b.y);
   if (ax < bx || (ax === bx && ay <= by)) return `${ax},${ay}|${bx},${by}`;
   return `${bx},${by}|${ax},${ay}`;
 };
-
 const dirKey = (a, b, eps = 1e-6) => {
   const dx = b.x - a.x, dy = b.y - a.y;
   const sx = Math.abs(dx) < eps ? 0 : Math.sign(dx);
   const sy = Math.abs(dy) < eps ? 0 : Math.sign(dy);
   return `${sx},${sy}`;
 };
-
 const laneOf = (count) => (count === 0 ? 0 : (count % 2 ? (count + 1) / 2 : -(count / 2)));
-
 const dedupePts = (pts, eps = 1e-6) => {
   if (!pts || pts.length < 2) return pts;
   const out = [pts[0]];
@@ -4178,7 +4471,6 @@ const dedupePts = (pts, eps = 1e-6) => {
   }
   return out;
 };
-
 const simplifyPts = (pts, eps = 1e-6) => {
   if (!pts || pts.length < 2) return pts;
 
@@ -4203,18 +4495,10 @@ const simplifyPts = (pts, eps = 1e-6) => {
   out.push(a[a.length - 1]);
   return out;
 };
-
-// =========================
-// ✅ Utility wrappers (keep same signature)
-// =========================
 const getCellCenter = (p) => {
   const { x, y } = getCellCenterPx(p.r, p.c);
   return { x, y };
 };
-
-// =========================
-// ✅ v3: collapse overlap runs (prefix or suffix triggers whole-run bump)
-// =========================
 const collapseUpcomingOverlapRunsV3 = (
   pts,
   {
@@ -4330,10 +4614,6 @@ const collapseUpcomingOverlapRunsV3 = (
 
   return out;
 };
-
-// =========================
-// ✅ Optional: convert bump segment into straight detour line (kept signature)
-// =========================
 const straightenBumpToParallelLine = (C, A, B, D, h, eps = 1e-6) => {
   const abx = B.x - A.x, aby = B.y - A.y;
   const LAB = hypot(abx, aby);
@@ -4369,10 +4649,6 @@ const straightenBumpToParallelLine = (C, A, B, D, h, eps = 1e-6) => {
     nx, ny, ux, uy
   };
 };
-
-// =========================
-// ✅ v2: overlap edges -> ramped detours (kept signature)
-// =========================
 const deOverlapByRampedDetourV2 = (pts, spacing = 8, ramp = 14, eps = 1e-6) => {
   const clean = dedupePts(pts, eps);
   if (!clean || clean.length < 2) return clean;
@@ -4457,10 +4733,6 @@ const deOverlapByRampedDetourV2 = (pts, spacing = 8, ramp = 14, eps = 1e-6) => {
   flushRun();
   return out;
 };
-
-// =========================
-// ✅ sampling + rounded svg path (kept signature)
-// =========================
 const sampleAlongPolyline = (pts, spacing = 22, startOffset = 10) => {
   if (!pts || pts.length < 2) return [];
 
@@ -4493,7 +4765,6 @@ const sampleAlongPolyline = (pts, spacing = 22, startOffset = 10) => {
   }
   return out;
 };
-
 const buildPathStringAndMarkersRounded = (pts, radius = 8) => {
   if (!pts || pts.length < 2) return { d: "", start: null, tip: null };
 
@@ -4539,10 +4810,6 @@ const buildPathStringAndMarkersRounded = (pts, radius = 8) => {
   dStr += ` L ${tip.x} ${tip.y}`;
   return { d: dStr, start, tip };
 };
-
-// =========================
-// ✅ RC path utilities + segment labels (kept signatures)
-// =========================
 const normalizeRcPath = (rcPath) => {
   if (!rcPath || rcPath.length < 1) return [];
   const out = [rcPath[0]];
@@ -4552,7 +4819,6 @@ const normalizeRcPath = (rcPath) => {
   }
   return out;
 };
-
 const buildSegmentsFromRcPath = (rcPathRaw) => {
   const rcPath = normalizeRcPath(rcPathRaw);
   if (rcPath.length < 2) return [];
@@ -4574,7 +4840,6 @@ const buildSegmentsFromRcPath = (rcPathRaw) => {
   segs.push({ start, end: rcPath.length - 1 });
   return segs;
 };
-
 const buildSegmentLabelsFromRcPath = (
   rcPathRaw,
   getCellCenterPx,
@@ -4655,18 +4920,14 @@ const buildSegmentLabelsFromRcPath = (
 
   return labels;
 };
-
-  // 小工具：確保 <img> 真的載入完成
-  const ensureImageLoaded = (imgEl) =>
+const ensureImageLoaded = (imgEl) =>
 	  new Promise((resolve, reject) => {
 		if (!imgEl) return reject(new Error("imgEl is null"));
 		if (imgEl.complete && imgEl.naturalWidth > 0) return resolve();
 		imgEl.onload = () => resolve();
 		imgEl.onerror = () => reject(new Error("failed to load template image"));
 	  });
-
-// 取像素特徵：HSV-ish 直方圖 + 簡單亮度/邊緣資訊（全都很快）
-  const featureFromImageData = (imgData) => {
+const featureFromImageData = (imgData) => {
 	  const { data, width, height } = imgData;
 
 	  // bins: H(12) + S(6) + V(6) + edge(6) = 30 維
@@ -4744,15 +5005,12 @@ const buildSegmentLabelsFromRcPath = (
 
 	  return feat;
 	};
-
-  const dot = (a, b) => {
+const dot = (a, b) => {
 	  let s = 0;
 	  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
 	  return s;
 	};
-
-// 判斷一格是不是「幾乎全黑/空」：避免被硬比到某顆符石
-  const isProbablyEmptyCell = (imgData) => {
+const isProbablyEmptyCell = (imgData) => {
 	  const { data } = imgData;
 	  let n = 0;
 	  let mean = 0, m2 = 0;
@@ -4774,9 +5032,7 @@ const buildSegmentLabelsFromRcPath = (
 	  // 你盤面背景通常偏暗且變化小（黑格/空格）
 	  return (mean < 35 && varY < 120);
 	};
-
-// 建立模板庫（用你 ORB_TYPES 的圖片）
-  const buildTemplateDB = async (ORB_TYPES) => {
+const buildTemplateDB = async (ORB_TYPES) => {
 	  const types = Object.values(ORB_TYPES);
 
 	  // 確保模板圖都載入
@@ -4799,9 +5055,7 @@ const buildSegmentLabelsFromRcPath = (
 	  }
 	  return { db, size: SIZE };
 	};
-
-// 偵測主函式
-  const detectFromCroppedCanvas = (cropCanvas, ORB_TYPES, templateCacheRef, opts = {}) => {
+const detectFromCroppedCanvas = (cropCanvas, ORB_TYPES, templateCacheRef, opts = {}) => {
 	  const rows = opts.rows ?? 5;
 	  const cols = opts.cols ?? 6;
 
@@ -4877,7 +5131,6 @@ const buildSegmentLabelsFromRcPath = (
 
 	  return out;
 	};
-  
 const SPECIAL_ORB_OPTIONS = [
   { label: "無", value: SPECIAL_ORB_ANY },
   { label: "水", value: ORB_TYPES.WATER.id },
@@ -4887,7 +5140,6 @@ const SPECIAL_ORB_OPTIONS = [
   { label: "暗", value: ORB_TYPES.DARK.id },
   { label: "心", value: ORB_TYPES.HEART.id },
 ];
-
 const updateSpecialPriority = (patch) => {
   setSpecialPriority((prev) => ({
     ...prev,
@@ -4895,9 +5147,7 @@ const updateSpecialPriority = (patch) => {
   }));
   setNeedsSolve(true);
 };
-
 const displayBoard = renderBoard;
-
 const getSpecialPriorityLabel = (sp) => {
   if (!sp || sp.type === "none") return "無";
 
@@ -4927,7 +5177,7 @@ const getSpecialPriorityLabel = (sp) => {
   return `${shapeName}${orbLabel}${count} )`;
 };
 
-  return (
+return (
   <div className="min-h-screen bg-neutral-950 text-white font-sans">
     <div className="w-full bg-neutral-900/95 backdrop-blur border-b border-white/10">
   <div className="mx-auto max-w-5xl w-full px-4 py-3 flex items-center justify-between gap-1">
@@ -5300,7 +5550,7 @@ const getSpecialPriorityLabel = (sp) => {
               onClick={() => setShowBasicSettings(!showBasicSettings)}
               className="flex items-center gap-2 text-[14px] font-bold text-blue-300 pl-2"
             >
-              <Settings size={18} /> {isManual ? "手動設定" : "基本設定與目標"}
+              <Settings size={18} /> {isManual ? "手動設定" : "設定與目標"}
             </button>
 
             <div className="flex items-center gap-3 pr-2">
@@ -5337,17 +5587,6 @@ const getSpecialPriorityLabel = (sp) => {
   formatInput={(v) => String(v)}
   onChange={(n) => setInitTargetCombo(parseInt(n, 10))}
  />
-
-<ParamSlider
-  label="📏 步數上限 (Steps)"
-  value={config.maxSteps}
-  min={5}
-  max={240}
-  step={1}
-  inputMode="numeric"
-  formatInput={(v) => String(v)}
-  onChange={(n) => updateParam("maxSteps", Number(n))}
-/>
       </>
     )}
 
@@ -5380,16 +5619,79 @@ const getSpecialPriorityLabel = (sp) => {
         onChange={(n) => updateParam("replaySpeed", n * 1000)}
       />
     </div>
+	{!isManual && (
+  <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-3 flex flex-col justify-between">
+    
+    {/* 標題 */}
+    <div className="flex items-center justify-between mb-2">
+      <span className="text-sm font-bold text-neutral-300">
+        性能等級
+      </span>
+
+      <span className="text-xs font-black text-yellow-300">
+        {`Lv${performanceLevel} ${
+          PERFORMANCE_PRESETS[performanceLevel - 1]?.label || ""
+        }`}
+      </span>
+    </div>
+
+    {/* 按鈕 */}
+    <div className="flex gap-2 justify-between">
+      {[1, 2, 3, 4, 5].map((lv) => {
+        const active = lv === performanceLevel;
+
+        return (
+          <button
+            key={lv}
+            onClick={() => applyPerformanceLevel(lv)}
+            className={`
+              flex-1 py-1.5 rounded-lg text-xs font-black transition-all border
+              ${
+                active
+                  ? "bg-yellow-400 text-black border-yellow-300 shadow-md scale-105"
+                  : "bg-neutral-800 text-white border-white/10 hover:bg-neutral-700"
+              }
+            `}
+          >
+            Lv{lv}
+          </button>
+        );
+      })}
+    </div>
+  </div>
+)}
 
     {!isManual && (
       <div className="md:col-span-3 rounded-2xl border border-neutral-800 bg-neutral-950/50 p-4">
   <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
     <div className="flex items-center gap-2">
-      <span className="text-sm font-black text-pink-300">
-        {specialPriorityExpanded
-          ? "特優先級（一次只能選一個）"
-          : `特優先級：${getSpecialPriorityLabel(specialPriority)}`}
-      </span>
+      <span className="text-sm font-black text-pink-300 flex items-center gap-2">
+  {specialPriorityExpanded ? (
+    "特優先級（一次只能選一個）"
+  ) : (
+    <>
+      <span>特優先級：</span>
+
+      {specialPriority.type !== "none" ? (
+        <span
+  className="px-1.5 py-[1px] rounded bg-pink-400 text-white text-sm font-black leading-none"
+  style={{
+    textShadow: `
+    0 0 1px rgba(0,0,0,0.9),
+    0 0 2px rgba(0,0,0,0.6)
+  `
+  }}
+>
+          {getSpecialPriorityLabel(specialPriority)}
+        </span>
+      ) : (
+        <span className="text-neutral-400">
+          {getSpecialPriorityLabel(specialPriority)}
+        </span>
+      )}
+    </>
+  )}
+</span>
     </div>
 
     <button
@@ -5521,81 +5823,6 @@ const getSpecialPriorityLabel = (sp) => {
   </div>
 )}
 		</div>
-
-        {!isManual && (
-          <div className="mb-6 bg-neutral-900/80 rounded-2xl border border-neutral-800 overflow-hidden shadow-xl">
-            <div className="w-full p-3 flex items-center justify-between bg-zinc-800/30 border-b border-neutral-800">
-              <button
-                onClick={() => setShowConfig(!showConfig)}
-                className="flex items-center gap-2 text-[14px] font-bold text-neutral-400 pl-2"
-              >
-                <Settings2 size={18} /> 進階搜尋參數調優
-              </button>
-              <div className="flex items-center gap-3 pr-2">
-                <button
-                  onClick={resetAdvanced}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs font-bold transition-all border border-neutral-700 shadow-sm"
-                >
-                  <RotateCcw size={14} /> 恢復預設
-                </button>
-                <span
-                  className="text-xs text-neutral-600 uppercase font-bold cursor-pointer"
-                  onClick={() => setShowConfig(!showConfig)}
-                >
-                  {showConfig ? "收起" : "展開"}
-                </span>
-              </div>
-            </div>
-
-            {showConfig && (
-              <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 border-t border-neutral-800 bg-neutral-900/40">
-                <ParamSlider
-                  label="束寬 (Beam Width)"
-                  value={config.beamWidth}
-                  min={350}
-                  max={2000}
-                  step={10}
-                  inputMode="numeric"
-                  formatInput={(v) => String(v)}
-                  onChange={(v) => updateParam("beamWidth", Number(v))}
-                />
-
-                <ParamSlider
-                  label="潛在權重 (Potential)"
-                  value={config.potentialWeight}
-                  min={0}
-                  max={300}
-                  step={10}
-                  inputMode="numeric"
-                  formatInput={(v) => String(v)}
-                  onChange={(v) => updateParam("potentialWeight", Number(v))}
-                />
-
-                <ParamSlider
-                  label="節點上限"
-                  value={config.maxNodes}
-                  min={50000}
-                  max={400000}
-                  step={10000}
-                  inputMode="numeric"
-                  formatInput={(v) => String(v)}
-                  onChange={(v) => updateParam("maxNodes", Number(v))}
-                />
-
-                <ParamSlider
-                  label="達標後步數懲罰"
-                  value={config.stepPenalty}
-                  min={0}
-                  max={800}
-                  step={50}
-                  inputMode="numeric"
-                  formatInput={(v) => String(v)}
-                  onChange={(v) => updateParam("stepPenalty", Number(v))}
-                />
-              </div>
-            )}
-          </div>
-        )}
 
         {isManual && (
           <div className="mx-auto w-full max-w-[500px] mb-4 px-2">
