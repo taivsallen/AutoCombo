@@ -145,8 +145,6 @@ function topKByScore(items, K, getScore) {
 }
 
 const App = () => {
-
-
 const [pathsExpanded, setPathsExpanded] = useState(true);
 const [specialPriorityExpanded, setSpecialPriorityExpanded] = useState(false);
 	
@@ -636,7 +634,7 @@ const refreshTarget = useCallback((newBoard, row0Expanded = autoRow0Expanded) =>
   setStats((prev) => ({ ...prev, theoreticalMax: best }));
   setExtremeTargetCombo(best);
   setInitTargetCombo((prev) => Math.min(prev, Math.max(1, best)));
-}, [isManual, setExtremeTargetCombo]);
+}, [autoRow0Expanded, isManual, setExtremeTargetCombo]);
 
   const initBoard = useCallback((random = true, providedBoard = null) => {
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
@@ -3146,15 +3144,13 @@ const makeSolutionResetKey = (
   baseBoard,
   diagonalEnabled,
   skyfallEnabled,
-  maxSteps,
-  autoRow0Expanded
+  maxSteps
 ) => {
   return JSON.stringify({
     board: getBoardKey(baseBoard),
     diagonal: !!diagonalEnabled,
     skyfall: !!skyfallEnabled,
     maxSteps,
-    autoRow0Expanded: !!autoRow0Expanded,
   });
 };
 
@@ -3163,14 +3159,6 @@ const clearSolutionPools = useCallback(() => {
   setSelectedPoolIndex(0);
   solutionPoolContextRef.current.resetKey = "";
 }, []);
-
-const toggleAutoRow0Expanded = useCallback(() => {
-  setAutoRow0Expanded((v) => !v);
-  clearSolutionPools();
-  setNeedsSolve(true);
-  setPath([]);
-  setCurrentStep(-1);
-}, [clearSolutionPools]);
 
 const applySolvedCandidate = useCallback((sol) => {
   if (!sol) return;
@@ -3416,8 +3404,7 @@ useEffect(() => {
   base,
   diagonalEnabled,
   skyfallEnabled,
-  solverConfig.maxSteps,
-  autoRow0Expanded
+  solverConfig.maxSteps
 );
 
   if (solverCache.current.has(boardKey)) {
@@ -4896,7 +4883,10 @@ const updateSpecialPriority = (patch) => {
   setNeedsSolve(true);
 };
 
-const displayBoard = renderBoard;
+const displayBoard =
+  !isManual && !autoRow0Expanded
+    ? renderBoard.slice(1)
+    : renderBoard;
 
 const getSpecialPriorityLabel = (sp) => {
   if (!sp || sp.type === "none") return "無";
@@ -5673,7 +5663,7 @@ const getSpecialPriorityLabel = (sp) => {
 
   <div className="flex items-center gap-2">
   <span className="text-sm font-black text-yellow-300">
-    角色符石
+    頭像珠
   </span>
 
   <span className="text-xs text-white/50">
@@ -5684,7 +5674,13 @@ const getSpecialPriorityLabel = (sp) => {
 
       <button
         type="button"
-		onClick={toggleAutoRow0Expanded}
+        onClick={() => {
+          stopToBase(true);
+          setAutoRow0Expanded((v) => !v);
+          setNeedsSolve(true);
+          setPath([]);
+          setCurrentStep(-1);
+        }}
         className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
           autoRow0Expanded
             ? "bg-yellow-400 text-black hover:bg-yellow-300"
@@ -5697,10 +5693,8 @@ const getSpecialPriorityLabel = (sp) => {
   )}
 
   <div className="grid grid-cols-6 gap-0">
-    {displayBoard.map((row, r) => {
-  if (!isManual && !autoRow0Expanded && r === 0) {
-    return null;
-  }
+    {displayBoard.map((row, rr) => {
+      const r = !isManual && !autoRow0Expanded ? rr + 1 : rr;
 
       return (
         <React.Fragment key={r}>
@@ -6865,12 +6859,7 @@ onTouchMove={(e) => {
   onClose={() => setShowTemplateBrowser(false)}
   onSelectTemplate={(template) => {
     try {
-      const board2D = convertTemplateBoardTo2D(
-        template.board,
-        5,
-        6,
-        template.resolvedAttribute || null
-      );
+      const board2D = convertTemplateBoardTo2D(template.board);
 
       setEditingBoard((prev) => {
         const next = prev.map((r) => [...r]);
@@ -6884,7 +6873,6 @@ onTouchMove={(e) => {
         return next;
       });
 
-      setShowTemplateBrowser(false);
       console.log("已套用固版:", template.characterName, board2D);
     } catch (err) {
       console.error("套用固版失敗:", err);
