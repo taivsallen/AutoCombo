@@ -2329,7 +2329,8 @@ const specialScore =
     stepSoft -
     illegalPenalty
   );
-}; 
+}; //
+//
 const beamSolve = (
   originalBoard,
   cfg,
@@ -2855,7 +2856,7 @@ const pickBeamComboSimple = (candidates) => {
         const destVal = state.board[nr][nc];
         const chk = stepConstraint(destVal);
         if (!chk.ok) continue;
-        const nextLocked = chk.locked || isAtQ2(nr, nc);
+        const nextLocked = chk.locked;
 
         const nextBoard = clone2D(state.board);
         const nextHole = holeStepInPlace(nextBoard, state.hole, { r: nr, c: nc });
@@ -2976,6 +2977,7 @@ const pickBeamComboSimple = (candidates) => {
     topCombos: topComboCandidates,
   };
 };
+
 const stopToBase = useCallback((clearStep = true) => {
 	  // 1) 停動畫
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
