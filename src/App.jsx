@@ -563,7 +563,7 @@ const endEditorPaint = useCallback(() => {
   setConfig((prev) => {
     const forced =
       priorityMode === "steps"
-        ? 80
+        ? 40
         : 240;
 
     if (prev.maxSteps === forced) return prev;
@@ -1953,46 +1953,41 @@ const hasN2InVanillaInitialPattern = (board) => {
 
   return false;
 };
-const findMatches = (tempBoard, phase = "initial", needShape = false) => {
-  let combos = 0;
-  let clearedCount = 0;
-  let vC = 0;
-  let hC = 0;
+const findMatches = (tempBoard, phase = "initial") => {
+  let combos = 0,
+    clearedCount = 0,
+    vC = 0,
+    hC = 0;
 
   const totalCells = TOTAL_ROWS * COLS;
   const isH = new Uint8Array(totalCells);
   const isV = new Uint8Array(totalCells);
   const toClear1D = new Uint8Array(totalCells);
-
-  // 只有真的要算 shape 時才建立
-  const patternCounts = needShape ? makePatternCounts() : null;
+  const patternCounts = makePatternCounts();
 
   // ===== 水平三連 =====
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
     for (let c = 0; c < COLS - 2; ) {
       const v0 = getOrbForMatchPhase(tempBoard[r][c], phase);
-      if (v0 === -1) {
-        c++;
-        continue;
-      }
+if (v0 === -1) {
+  c++;
+  continue;
+}
 
-      const v1 = getOrbForMatchPhase(tempBoard[r][c + 1], phase);
-      const v2 = getOrbForMatchPhase(tempBoard[r][c + 2], phase);
+const v1 = getOrbForMatchPhase(tempBoard[r][c + 1], phase);
+const v2 = getOrbForMatchPhase(tempBoard[r][c + 2], phase);
+if (v0 !== v1 || v0 !== v2) {
+  c++;
+  continue;
+}
 
-      if (v0 !== v1 || v0 !== v2) {
-        c++;
-        continue;
-      }
-
-      let k = c + 3;
-      while (k < COLS && getOrbForMatchPhase(tempBoard[r][k], phase) === v0) k++;
+let k = c + 3;
+while (k < COLS && getOrbForMatchPhase(tempBoard[r][k], phase) === v0) k++;
 
       for (let x = c; x < k; x++) {
-        const idx = r * COLS + x;
-        toClear1D[idx] = 1;
-        isH[idx] = 1;
+        toClear1D[r * COLS + x] = 1;
+        isH[r * COLS + x] = 1;
       }
-
       c = k;
     }
   }
@@ -2001,28 +1996,25 @@ const findMatches = (tempBoard, phase = "initial", needShape = false) => {
   for (let c = 0; c < COLS; c++) {
     for (let r = PLAY_ROWS_START; r < TOTAL_ROWS - 2; ) {
       const v0 = getOrbForMatchPhase(tempBoard[r][c], phase);
-      if (v0 === -1) {
-        r++;
-        continue;
-      }
+if (v0 === -1) {
+  r++;
+  continue;
+}
 
-      const v1 = getOrbForMatchPhase(tempBoard[r + 1][c], phase);
-      const v2 = getOrbForMatchPhase(tempBoard[r + 2][c], phase);
+const v1 = getOrbForMatchPhase(tempBoard[r + 1][c], phase);
+const v2 = getOrbForMatchPhase(tempBoard[r + 2][c], phase);
+if (v0 !== v1 || v0 !== v2) {
+  r++;
+  continue;
+}
 
-      if (v0 !== v1 || v0 !== v2) {
-        r++;
-        continue;
-      }
-
-      let k = r + 3;
-      while (k < TOTAL_ROWS && getOrbForMatchPhase(tempBoard[k][c], phase) === v0) k++;
+let k = r + 3;
+while (k < TOTAL_ROWS && getOrbForMatchPhase(tempBoard[k][c], phase) === v0) k++;
 
       for (let y = r; y < k; y++) {
-        const idx = y * COLS + c;
-        toClear1D[idx] = 1;
-        isV[idx] = 1;
+        toClear1D[y * COLS + c] = 1;
+        isV[y * COLS + c] = 1;
       }
-
       r = k;
     }
   }
@@ -2042,47 +2034,27 @@ const findMatches = (tempBoard, phase = "initial", needShape = false) => {
 
       combos++;
       const type = getOrbForMatchPhase(tempBoard[r][c], phase);
+      let hasHM = false,
+        hasVM = false;
 
-      let hasHM = false;
-      let hasVM = false;
-
-      let head = 0;
-      let tail = 0;
+      let head = 0,
+        tail = 0;
       qR[tail] = r;
       qC[tail] = c;
       tail++;
       visited[idx0] = 1;
 
       let groupSize = 0;
-
-      // 只有 needShape 時才收 exact5 cell
-      let s0r = -1, s0c = -1;
-      let s1r = -1, s1c = -1;
-      let s2r = -1, s2c = -1;
-      let s3r = -1, s3c = -1;
-      let s4r = -1, s4c = -1;
+      const shapeCells = [];
 
       while (head < tail) {
         const cr = qR[head];
         const cc = qC[head];
         head++;
-
         clearedCount++;
         groupSize++;
 
-        if (needShape) {
-          if (groupSize === 1) {
-            s0r = cr; s0c = cc;
-          } else if (groupSize === 2) {
-            s1r = cr; s1c = cc;
-          } else if (groupSize === 3) {
-            s2r = cr; s2c = cc;
-          } else if (groupSize === 4) {
-            s3r = cr; s3c = cc;
-          } else if (groupSize === 5) {
-            s4r = cr; s4c = cc;
-          }
-        }
+        if (shapeCells.length < 5) shapeCells.push([cr, cc]);
 
         const idx = cr * COLS + cc;
         if (isH[idx]) hasHM = true;
@@ -2091,18 +2063,18 @@ const findMatches = (tempBoard, phase = "initial", needShape = false) => {
         for (let i = 0; i < 4; i++) {
           const nr = cr + drs[i];
           const nc = cc + dcs[i];
-          if (nr < PLAY_ROWS_START || nr >= TOTAL_ROWS || nc < 0 || nc >= COLS) continue;
-
-          const nidx = nr * COLS + nc;
-          if (
-            toClear1D[nidx] &&
-            !visited[nidx] &&
-            getOrbForMatchPhase(tempBoard[nr][nc], phase) === type
-          ) {
-            visited[nidx] = 1;
-            qR[tail] = nr;
-            qC[tail] = nc;
-            tail++;
+          if (nr >= PLAY_ROWS_START && nr < TOTAL_ROWS && nc >= 0 && nc < COLS) {
+            const nidx = nr * COLS + nc;
+            if (
+  toClear1D[nidx] &&
+  !visited[nidx] &&
+  getOrbForMatchPhase(tempBoard[nr][nc], phase) === type
+) {
+              visited[nidx] = 1;
+              qR[tail] = nr;
+              qC[tail] = nc;
+              tail++;
+            }
           }
         }
       }
@@ -2110,18 +2082,9 @@ const findMatches = (tempBoard, phase = "initial", needShape = false) => {
       if (hasHM) hC++;
       if (hasVM) vC++;
 
-      // 只有真的需要 shape 才辨識
-      if (needShape && groupSize === 5) {
-        const shapeCells = [
-          [s0r, s0c],
-          [s1r, s1c],
-          [s2r, s2c],
-          [s3r, s3c],
-          [s4r, s4c],
-        ];
-
+      // ✅ exact 5 才辨識特殊圖形
+      if (groupSize === 5) {
         const shape = detectExact5Shape(shapeCells);
-
         if (shape === SHAPE_KIND.CROSS) {
           patternCounts.cross.total++;
           patternCounts.cross.byOrb[type]++;
@@ -2329,8 +2292,7 @@ const specialScore =
     stepSoft -
     illegalPenalty
   );
-}; //
-//
+}; 
 const beamSolve = (
   originalBoard,
   cfg,
@@ -2339,7 +2301,7 @@ const beamSolve = (
   priority,
   skyfall,
   diagonal,
-  specialPriorities,
+  specialPriority,
   initTargetCombo,
   autoRow0Expanded
 ) => {
@@ -2384,7 +2346,6 @@ const beamSolve = (
   }
 
   const isAtQ2 = (r, c) => q2Pos && r === q2Pos.r && c === q2Pos.c;
-
   const shouldAcceptEnd = (endNode) => {
     if (!q2Pos) return true;
     return endNode?.r === q2Pos.r && endNode?.c === q2Pos.c;
@@ -2396,21 +2357,27 @@ const beamSolve = (
     clearedCount: -1,
     node: null,
     score: -Infinity,
-    specialTuple: [],
+    specialScore: -Infinity,
     verticalCombos: 0,
     horizontalCombos: 0,
-    violatesN2: false,
   };
 
-  // ✅ 只給 steps 模式用；combo 模式不拿它來提前結束
   let bestReachedSteps = Infinity;
 
-  const hasSpecial = (specialPriorities || []).some(
-    (sp) => sp && sp.type && sp.type !== "none"
-  );
+  const hasSpecial =
+    specialPriority &&
+    specialPriority.type &&
+    specialPriority.type !== "none";
 
   const isSpecialSatisfied = (ev) => {
-    return isAllSpecialSatisfied(ev, specialPriorities);
+    if (!hasSpecial) return true;
+
+    if (specialPriority.type === "clearCount") {
+      return (ev.initialClearedCount || 0) === (specialPriority.clearCount || 3);
+    }
+
+    const got = getSpecialMatchedValue(ev, specialPriority);
+    return got >= (specialPriority.count || 1);
   };
 
   const isSolvedGoal = (ev) => {
@@ -2438,69 +2405,67 @@ const beamSolve = (
   };
 
   const pushTopCandidate = (ev, node, score, violatesN2) => {
-    if (!node) return;
+  if (!node) return;
 
-    const steps = stepsOf(node);
-    if (steps <= 0) return;
-    if (!shouldAcceptEnd(node)) return;
+  const steps = stepsOf(node);
+  if (steps <= 0) return;
+  if (!shouldAcceptEnd(node)) return;
 
-    const sol = {
-      ...packCandidateFromEv(ev, node, score),
-      violatesN2: !!violatesN2,
-    };
-
-    if (priority === "steps") {
-      topStepCandidates = mergeTopSolutions(
-        topStepCandidates,
-        [sol],
-        "steps",
-        specialPriorities,
-        initTargetCombo,
-        10
-      );
-    } else {
-      topComboCandidates = mergeTopSolutions(
-        topComboCandidates,
-        [sol],
-        "combo",
-        specialPriorities,
-        initTargetCombo,
-        10
-      );
-    }
+  const sol = {
+    ...packCandidateFromEv(ev, node, score),
+    violatesN2: !!violatesN2,
   };
 
+  if (priority === "steps") {
+    topStepCandidates = mergeTopSolutions(
+      topStepCandidates,
+      [sol],
+      "steps",
+      specialPriority,
+      initTargetCombo,
+      10
+    );
+  } else {
+    topComboCandidates = mergeTopSolutions(
+      topComboCandidates,
+      [sol],
+      "combo",
+      specialPriority,
+      initTargetCombo,
+      10
+    );
+  }
+};
+
   const considerBest = (ev, score, node, violatesN2) => {
-    if (!shouldAcceptEnd(node)) return;
+  if (!shouldAcceptEnd(node)) return;
 
-    const curSteps = stepsOf(node);
-    const bestSteps = bestGlobal.node ? stepsOf(bestGlobal.node) : Infinity;
+  const curSteps = stepsOf(node);
+  const bestSteps = bestGlobal.node ? stepsOf(bestGlobal.node) : Infinity;
 
-    const curSpecialTuple = getPriorityScoreTuple(ev, specialPriorities);
-    const bestSpecialTuple = bestGlobal.specialTuple || [];
+  const curSpecial = getSpecialScore(ev, specialPriority);
+  const bestSpecial = bestGlobal.specialScore ?? -Infinity;
 
-    const curSpecialBetter = lexTupleBetter(curSpecialTuple, bestSpecialTuple);
-    const specialEqual =
-      !curSpecialBetter && !lexTupleBetter(bestSpecialTuple, curSpecialTuple);
+  const curInitExact = hitsInitTargetComboExactly(ev);
+  const bestInitExact = hitsInitTargetComboExactly(bestGlobal);
 
-    const curInitExact = hitsInitTargetComboExactly(ev);
-    const bestInitExact = hitsInitTargetComboExactly(bestGlobal);
+  const curLegal = violatesN2 ? 0 : 1;
+  const bestLegal = bestGlobal.node
+    ? (bestGlobal.violatesN2 ? 0 : 1)
+    : -1;
 
-    const curLegal = violatesN2 ? 0 : 1;
-    const bestLegal = bestGlobal.node
-      ? (bestGlobal.violatesN2 ? 0 : 1)
-      : -1;
+  let isBetterGlobal = false;
 
-    let isBetterGlobal = false;
-
-    if (curLegal !== bestLegal) {
-      isBetterGlobal = curLegal > bestLegal;
-    } else if (curSpecialBetter) {
-      isBetterGlobal = true;
-    } else if (specialEqual) {
-      if (curInitExact !== bestInitExact) {
-        isBetterGlobal = curInitExact;
-      } else if ((ev.combos || 0) > (bestGlobal.combos || 0)) {
+  // 先比合法性
+  if (curLegal !== bestLegal) {
+    isBetterGlobal = curLegal > bestLegal;
+  } else if (curSpecial > bestSpecial) {
+    isBetterGlobal = true;
+  } else if (curSpecial === bestSpecial) {
+    if (curInitExact !== bestInitExact) {
+      isBetterGlobal = curInitExact;
+    } else {
+      if ((ev.combos || 0) > (bestGlobal.combos || 0)) {
         isBetterGlobal = true;
       } else if ((ev.combos || 0) === (bestGlobal.combos || 0)) {
         if (curSteps < bestSteps) {
@@ -2517,28 +2482,24 @@ const beamSolve = (
         }
       }
     }
+  }
 
-    if (isBetterGlobal) {
-      bestGlobal = {
-        ...ev,
-        node,
-        score,
-        specialTuple: curSpecialTuple,
-        violatesN2: !!violatesN2,
-      };
-    }
+  if (isBetterGlobal) {
+    bestGlobal = {
+      ...ev,
+      node,
+      score,
+      specialScore: curSpecial,
+      violatesN2: !!violatesN2,
+    };
+  }
 
-    // ✅ 只有 steps 模式才更新 bestReachedSteps
-    const solved = hasSpecial ? isSolvedGoal(ev) : ev.combos >= target;
-    if (
-      priority === "steps" &&
-      !violatesN2 &&
-      solved &&
-      curSteps > 0
-    ) {
-      if (curSteps < bestReachedSteps) bestReachedSteps = curSteps;
-    }
-  };
+  // ✅ bestReachedSteps 只讓「合法且達標」的解更新
+  const solved = hasSpecial ? isSolvedGoal(ev) : ev.combos >= target;
+  if (!violatesN2 && solved && curSteps > 0) {
+    if (curSteps < bestReachedSteps) bestReachedSteps = curSteps;
+  }
+};
 
   const dirsPlay = diagonal ? DIRS_8 : DIRS_4;
   let beam = [];
@@ -2619,18 +2580,17 @@ const beamSolve = (
       target,
       mode,
       priority,
-      specialPriorities,
+      specialPriority,
       violatesN2
     );
 
-    const score = rawScore;
+    const score = hasSpecial ? rawScore - 6000000 : rawScore;
 
     const key = `${getBoardKey(boardCopy)}|${held}|${r},${c}|${locked0 ? 1 : 0}`;
     if (!betterThanVisited(key, ev, score, 0, mode)) return;
 
     const node = makeNode(null, r, c);
-
-    pushTopCandidate(ev, node, score, violatesN2);
+	pushTopCandidate(ev, node, score, violatesN2);
     considerBest(ev, score, node, violatesN2);
 
     if (
@@ -2667,7 +2627,6 @@ const beamSolve = (
   let nodesExpanded = 0;
 
   const sortComboCandidates = (candidates) => {
-	  
     candidates.sort((a, b) => {
       const aReach =
         (!hasSpecial ? a.ev.combos >= target : isSolvedGoal(a.ev)) &&
@@ -2680,22 +2639,15 @@ const beamSolve = (
       if (a.violatesN2 !== b.violatesN2) return a.violatesN2 ? 1 : -1;
 
       if (hasSpecial) {
-        const aTuple = getPriorityScoreTuple(a.ev, specialPriorities);
-        const bTuple = getPriorityScoreTuple(b.ev, specialPriorities);
-
-        if (lexTupleBetter(aTuple, bTuple)) return -1;
-        if (lexTupleBetter(bTuple, aTuple)) return 1;
+        const aSpecial = getSpecialScore(a.ev, specialPriority);
+        const bSpecial = getSpecialScore(b.ev, specialPriority);
+        if (aSpecial !== bSpecial) return bSpecial - aSpecial;
       }
 
       if (a.score !== b.score) return b.score - a.score;
       return (b.ev.clearedCount || 0) - (a.ev.clearedCount || 0);
     });
   };
-
-const pickBeamComboSimple = (candidates) => {
-  sortComboCandidates(candidates);
-  return candidates.slice(0, cfg.beamWidth);
-};
 
   const getMissTier = (st) => {
     return !hasSpecial
@@ -2721,15 +2673,154 @@ const pickBeamComboSimple = (candidates) => {
     return quota;
   };
 
-  for (let step = 0; step < cfg.maxSteps; step++) {
-    // ✅ 只有 steps 模式才會因最短達標步數而停
-    if (
-      priority === "steps" &&
-      bestReachedSteps !== Infinity &&
-      step >= bestReachedSteps
-    ) {
-      break;
+  const pickBeamComboExplore = (candidates) => {
+    sortComboCandidates(candidates);
+
+    const BW = cfg.beamWidth;
+    const out = [];
+
+    const eliteN = Math.min(candidates.length, Math.max(6, (BW / 3) | 0));
+    for (let i = 0; i < eliteN && out.length < BW; i++) out.push(candidates[i]);
+    if (out.length >= BW) return out;
+
+    const maxTier = 8;
+    const tierCount = maxTier + 1;
+    const quotaW = [3.0, 2.2, 1.6, 1.1, 0.8, 0.55, 0.4, 0.3, 0.2];
+
+    const counts = new Array(tierCount).fill(0);
+    for (let i = eliteN; i < candidates.length; i++) {
+      const miss = getMissTier(candidates[i]);
+      if (miss <= maxTier) counts[miss]++;
     }
+
+    const remain = BW - out.length;
+    const quota = buildQuota(counts, remain, quotaW);
+
+    const usedPos = new Set();
+    const usedRegion = new Set();
+    for (const st of out) {
+      usedPos.add((st.r << 8) | st.c);
+      usedRegion.add(regionOf(st.r, st.c));
+    }
+
+    const took = new Array(tierCount).fill(0);
+    const regionSkipProb = cfg.beamWidth >= 300 ? 0.8 : 0.7;
+
+    for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+      const st = candidates[i];
+      const miss = getMissTier(st);
+      if (miss > maxTier) continue;
+      if (took[miss] >= quota[miss]) continue;
+
+      const pc = (st.r << 8) | st.c;
+      const rg = regionOf(st.r, st.c);
+
+      if (usedPos.has(pc)) continue;
+      if (usedRegion.has(rg) && Math.random() < regionSkipProb) continue;
+
+      out.push(st);
+      usedPos.add(pc);
+      usedRegion.add(rg);
+      took[miss]++;
+    }
+
+    if (out.length < BW) {
+      for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+        const st = candidates[i];
+        const miss = getMissTier(st);
+        if (miss > maxTier) continue;
+        if (took[miss] >= quota[miss]) continue;
+
+        const pc = (st.r << 8) | st.c;
+        if (usedPos.has(pc)) continue;
+
+        out.push(st);
+        usedPos.add(pc);
+        took[miss]++;
+      }
+    }
+
+    if (out.length < BW) {
+      for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+        out.push(candidates[i]);
+      }
+    }
+
+    return out.slice(0, BW);
+  };
+
+  const pickBeamComboFocus = (candidates) => {
+    sortComboCandidates(candidates);
+
+    const BW = cfg.beamWidth;
+    const out = [];
+
+    const eliteN = Math.min(candidates.length, Math.max(6, (BW / 3) | 0));
+    for (let i = 0; i < eliteN && out.length < BW; i++) out.push(candidates[i]);
+    if (out.length >= BW) return out;
+
+    const maxTier = 8;
+    const tierCount = maxTier + 1;
+    const quotaW = [3.0, 2.2, 1.6, 1.1, 0.8, 0.55, 0.4, 0.3, 0.2];
+
+    const counts = new Array(tierCount).fill(0);
+    for (let i = eliteN; i < candidates.length; i++) {
+      const miss = getMissTier(candidates[i]);
+      if (miss <= maxTier) counts[miss]++;
+    }
+
+    const remain = BW - out.length;
+    const quota = buildQuota(counts, remain, quotaW);
+
+    const usedPos = new Set();
+    for (const st of out) usedPos.add((st.r << 8) | st.c);
+
+    const took = new Array(tierCount).fill(0);
+
+    for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+      const st = candidates[i];
+      const miss = getMissTier(st);
+      if (miss > maxTier) continue;
+      if (took[miss] >= quota[miss]) continue;
+
+      const pc = (st.r << 8) | st.c;
+      if (usedPos.has(pc)) continue;
+
+      out.push(st);
+      usedPos.add(pc);
+      took[miss]++;
+    }
+
+    if (out.length < BW) {
+      for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+        const st = candidates[i];
+        const miss = getMissTier(st);
+        if (miss > maxTier) continue;
+        if (took[miss] >= quota[miss]) continue;
+
+        out.push(st);
+        took[miss]++;
+      }
+    }
+
+    if (out.length < BW) {
+      for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
+        out.push(candidates[i]);
+      }
+    }
+
+    return out.slice(0, BW);
+  };
+
+  const pickBeamComboAdaptive = (candidates) => {
+    const useExploreBeam = diagonal && skyfall;
+    return useExploreBeam
+      ? pickBeamComboExplore(candidates)
+      : pickBeamComboFocus(candidates);
+  };
+
+  for (let step = 0; step < cfg.maxSteps; step++) {
+    if (bestReachedSteps !== Infinity && step >= bestReachedSteps) break;
 
     let candidates = [];
 
@@ -2783,14 +2874,14 @@ const pickBeamComboSimple = (candidates) => {
             target,
             mode,
             priority,
-            specialPriorities,
+            specialPriority,
             violatesN2
           );
 
           const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
           if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
 
-          pushTopCandidate(ev, newNode, score, violatesN2);
+		  pushTopCandidate(ev, newNode, score, violatesN2);
           considerBest(ev, score, newNode, violatesN2);
 
           if (
@@ -2842,11 +2933,10 @@ const pickBeamComboSimple = (candidates) => {
             target,
             mode,
             priority,
-            specialPriorities,
+            specialPriority,
             violatesN2
           );
-
-          pushTopCandidate(ev, newNode, score, violatesN2);
+		  pushTopCandidate(ev, newNode, score, violatesN2);
           considerBest(ev, score, newNode, violatesN2);
           continue;
         }
@@ -2856,7 +2946,7 @@ const pickBeamComboSimple = (candidates) => {
         const destVal = state.board[nr][nc];
         const chk = stepConstraint(destVal);
         if (!chk.ok) continue;
-        const nextLocked = chk.locked;
+        const nextLocked = chk.locked || isAtQ2(nr, nc);
 
         const nextBoard = clone2D(state.board);
         const nextHole = holeStepInPlace(nextBoard, state.hole, { r: nr, c: nc });
@@ -2877,14 +2967,13 @@ const pickBeamComboSimple = (candidates) => {
           target,
           mode,
           priority,
-          specialPriorities,
+          specialPriority,
           violatesN2
         );
 
         const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
         if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
-
-        pushTopCandidate(ev, newNode, score, violatesN2);
+		pushTopCandidate(ev, newNode, score, violatesN2);
         considerBest(ev, score, newNode, violatesN2);
 
         if (
@@ -2916,53 +3005,32 @@ const pickBeamComboSimple = (candidates) => {
     if (candidates.length === 0 || nodesExpanded > maxNodesEffective) break;
 
     if (priority === "combo") {
-	  beam = pickBeamComboSimple(candidates);
-	} else {
+      beam = pickBeamComboAdaptive(candidates);
+    } else {
       const buckets = new Map();
-
       for (const st of candidates) {
-        const specialTuple = getPriorityScoreTuple(st.ev, specialPriorities);
-        const legal = st.violatesN2 ? 0 : 1;
-        const major =
-          mode === "vertical" ? st.ev.verticalCombos : st.ev.horizontalCombos;
-
-        const bucketKey = JSON.stringify([
-          legal,
-          specialTuple[0] || 0,
-          specialTuple[1] || 0,
-          specialTuple[2] || 0,
-          st.ev.combos || 0,
-          major || 0,
-          st.ev.clearedCount || 0,
-        ]);
-
-        if (!buckets.has(bucketKey)) buckets.set(bucketKey, []);
-        buckets.get(bucketKey).push(st);
+        const legalBonus = st.violatesN2 ? 0 : 1000000000;
+        const k =
+          legalBonus +
+          (mode === "vertical" ? st.ev.verticalCombos : st.ev.horizontalCombos) * 1000000 +
+          st.ev.combos * 1000 +
+          st.ev.clearedCount;
+        if (!buckets.has(k)) buckets.set(k, []);
+        buckets.get(k).push(st);
       }
 
-      for (const arr of buckets.values()) {
-        arr.sort((a, b) => b.score - a.score);
-      }
-
-      const bucketKeys = Array.from(buckets.keys()).sort((ka, kb) => {
-        const a = JSON.parse(ka);
-        const b = JSON.parse(kb);
-        return lexCompareDesc(a, b);
-      });
+      for (const arr of buckets.values()) arr.sort((a, b) => b.score - a.score);
+      const bucketKeys = Array.from(buckets.keys()).sort((a, b) => b - a);
 
       const newBeam = [];
       let i = 0;
-
       while (newBeam.length < cfg.beamWidth && bucketKeys.length > 0) {
         const idx = i % bucketKeys.length;
         const arr = buckets.get(bucketKeys[idx]);
-
         if (arr.length > 0) newBeam.push(arr.shift());
         else bucketKeys.splice(idx, 1);
-
         i++;
       }
-
       beam = newBeam;
     }
   }
@@ -2977,8 +3045,8 @@ const pickBeamComboSimple = (candidates) => {
     topCombos: topComboCandidates,
   };
 };
-
-const stopToBase = useCallback((clearStep = true) => {
+  
+  const stopToBase = useCallback((clearStep = true) => {
 	  // 1) 停動畫
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
 	  replayAnimRef.current.raf = 0;
