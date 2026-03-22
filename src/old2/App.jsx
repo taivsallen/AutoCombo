@@ -2424,6 +2424,14 @@ const beamSolve = (
     return (ev.initialCombos || 0) === initTargetCombo;
   };
 
+  // ✅ 最小修正：補回舊版那種「未達成特優先要被壓分」
+  const SPECIAL_PENALTY = 6000000;
+  const applySpecialPenalty = (ev, rawScore) => {
+    if (!hasSpecial) return rawScore;
+    if (isSpecialSatisfied(ev)) return rawScore;
+    return rawScore - SPECIAL_PENALTY;
+  };
+
   let topStepCandidates = [];
   let topComboCandidates = [];
 
@@ -2621,8 +2629,7 @@ const beamSolve = (
       specialPriorities,
       violatesN2
     );
-
-    const score = rawScore;
+    const score = applySpecialPenalty(ev, rawScore);
 
     const key = `${getBoardKey(boardCopy)}|${held}|${r},${c}|${locked0 ? 1 : 0}`;
     if (!betterThanVisited(key, ev, score, 0, mode)) return;
@@ -2666,7 +2673,6 @@ const beamSolve = (
   let nodesExpanded = 0;
 
   const sortComboCandidates = (candidates) => {
-	  
     candidates.sort((a, b) => {
       const aReach =
         (!hasSpecial ? a.ev.combos >= target : isSolvedGoal(a.ev)) &&
@@ -2691,10 +2697,10 @@ const beamSolve = (
     });
   };
 
-const pickBeamComboSimple = (candidates) => {
-  sortComboCandidates(candidates);
-  return candidates.slice(0, cfg.beamWidth);
-};
+  const pickBeamComboSimple = (candidates) => {
+    sortComboCandidates(candidates);
+    return candidates.slice(0, cfg.beamWidth);
+  };
 
   const getMissTier = (st) => {
     return !hasSpecial
@@ -2774,7 +2780,7 @@ const pickBeamComboSimple = (candidates) => {
           if (exceedsInitialComboCap(ev)) continue;
 
           const pot = combinedPotentialScore(evalBoard, mode);
-          const score = calcScore(
+          const rawScore = calcScore(
             ev,
             pot,
             newSteps,
@@ -2785,6 +2791,7 @@ const pickBeamComboSimple = (candidates) => {
             specialPriorities,
             violatesN2
           );
+          const score = applySpecialPenalty(ev, rawScore);
 
           const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
           if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
@@ -2833,7 +2840,7 @@ const pickBeamComboSimple = (candidates) => {
           if (exceedsInitialComboCap(ev)) continue;
 
           const pot = combinedPotentialScore(evalBoard, mode);
-          const score = calcScore(
+          const rawScore = calcScore(
             ev,
             pot,
             newSteps,
@@ -2844,6 +2851,7 @@ const pickBeamComboSimple = (candidates) => {
             specialPriorities,
             violatesN2
           );
+          const score = applySpecialPenalty(ev, rawScore);
 
           pushTopCandidate(ev, newNode, score, violatesN2);
           considerBest(ev, score, newNode, violatesN2);
@@ -2868,7 +2876,7 @@ const pickBeamComboSimple = (candidates) => {
         if (exceedsInitialComboCap(ev)) continue;
 
         const pot = combinedPotentialScore(evalBoard, mode);
-        const score = calcScore(
+        const rawScore = calcScore(
           ev,
           pot,
           newSteps,
@@ -2879,6 +2887,7 @@ const pickBeamComboSimple = (candidates) => {
           specialPriorities,
           violatesN2
         );
+        const score = applySpecialPenalty(ev, rawScore);
 
         const key = `${getBoardKey(nextBoard)}|${state.held}|${nr},${nc}|${nextLocked ? 1 : 0}`;
         if (!betterThanVisited(key, ev, score, newSteps, mode)) continue;
@@ -2915,8 +2924,8 @@ const pickBeamComboSimple = (candidates) => {
     if (candidates.length === 0 || nodesExpanded > maxNodesEffective) break;
 
     if (priority === "combo") {
-	  beam = pickBeamComboSimple(candidates);
-	} else {
+      beam = pickBeamComboSimple(candidates);
+    } else {
       const buckets = new Map();
 
       for (const st of candidates) {
@@ -2976,6 +2985,7 @@ const pickBeamComboSimple = (candidates) => {
     topCombos: topComboCandidates,
   };
 };
+
 const stopToBase = useCallback((clearStep = true) => {
 	  // 1) 停動畫
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
