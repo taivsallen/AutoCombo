@@ -19,6 +19,20 @@ import x2Img from './assets/x2.png';
 import n1Img from './assets/n1.png';
 import n2Img from './assets/n2.png';
 import logoImg from './assets/logo.png';
+import boxPImg from "./assets/box_p.png";
+import boxWImg from "./assets/box_w.png";
+import boxDImg from "./assets/box_d.png";
+import boxFImg from "./assets/box_f.png";
+import boxLImg from "./assets/box_l.png";
+
+const ROW0_BOX_IMG_MAP = {
+  WATER: boxWImg,
+  FIRE: boxFImg,
+  EARTH: boxPImg,
+  LIGHT: boxLImg,
+  DARK: boxDImg,
+  // HEART 不寫 → 自動不顯示
+};
 
 const ORB_TYPES = {
   WATER: { id: 0, img: wImg },
@@ -172,6 +186,19 @@ function topKByScore(items, K, getScore) {
 
 const App = () => {
 
+const [solveProgress, setSolveProgress] = useState({
+  current: 0,
+  max: 1,
+  elapsedSec: 0,
+});
+
+const solveProgressRawRef = useRef({
+  current: 0,
+  max: 1,
+});
+
+const solveStartTimeRef = useRef(0);
+const solveProgressTimerRef = useRef(null);
 
 const [pathsExpanded, setPathsExpanded] = useState(true);
 const [showTemplateBrowser, setShowTemplateBrowser] = useState(false);
@@ -252,6 +279,7 @@ const updateSpecialPriorityAt = (idx, patch) => {
     prev.map((sp, i) => (i === idx ? { ...sp, ...patch } : sp))
   );
   setNeedsSolve(true);
+  clearSolutionPools();
 };
 
 const toggleSpecialPriorityExpanded = (idx) => {
@@ -583,7 +611,7 @@ const endEditorPaint = useCallback(() => {
   setConfig((prev) => {
     const forced =
       priorityMode === "steps"
-        ? 40
+        ? 80
         : 240;
 
     if (prev.maxSteps === forced) return prev;
@@ -1725,6 +1753,65 @@ const SHAPE_KIND = {
   L: "l",
   T: "t",
 };
+
+const getCheapRectGuideScoreBySpecial = (board, sp, phase = "initial") => {
+  if (!sp || sp.type !== "rect") return 0;
+
+  const m = Number(sp.rectM) || 3;
+  const n = Number(sp.rectN) || 3;
+  const wantOrb = sp.rectOrb ?? SPECIAL_ORB_ANY;
+
+  const RECT_ORBS =
+    wantOrb !== SPECIAL_ORB_ANY && wantOrb !== -1
+      ? [wantOrb]
+      : [
+          ORB_TYPES.WATER.id,
+          ORB_TYPES.FIRE.id,
+          ORB_TYPES.EARTH.id,
+          ORB_TYPES.LIGHT.id,
+          ORB_TYPES.DARK.id,
+          ORB_TYPES.HEART.id,
+        ];
+
+  let best = 0;
+
+  for (let r0 = PLAY_ROWS_START; r0 + m <= TOTAL_ROWS; r0++) {
+    for (let c0 = 0; c0 + n <= COLS; c0++) {
+      for (const orb of RECT_ORBS) {
+        let inside = 0;
+        let near = 0;
+
+        for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            const v = getOrbForMatchPhase(board[r][c], phase);
+            if (v !== orb) continue;
+
+            const inRect =
+              r >= r0 && r < r0 + m &&
+              c >= c0 && c < c0 + n;
+
+            if (inRect) {
+              inside++;
+              continue;
+            }
+
+            const nearRect =
+              r >= r0 - 1 && r <= r0 + m &&
+              c >= c0 - 1 && c <= c0 + n;
+
+            if (nearRect) near++;
+          }
+        }
+
+        const score = inside * 1000 + near * 80;
+        if (score > best) best = score;
+      }
+    }
+  }
+
+  return best;
+};
+
 const normalizeCells = (cells) => {
   let minR = Infinity;
   let minC = Infinity;
@@ -1737,20 +1824,21 @@ const normalizeCells = (cells) => {
     .sort();
   return arr.join("|");
 };
+
 const transformCells8 = (cells) => {
-  // 8 個對稱：4 旋轉 + 鏡射
   return [
-    cells.map(([r, c]) => [ r,  c]),
-    cells.map(([r, c]) => [ r, -c]),
-    cells.map(([r, c]) => [-r,  c]),
+    cells.map(([r, c]) => [r, c]),
+    cells.map(([r, c]) => [r, -c]),
+    cells.map(([r, c]) => [-r, c]),
     cells.map(([r, c]) => [-r, -c]),
 
-    cells.map(([r, c]) => [ c,  r]),
-    cells.map(([r, c]) => [ c, -r]),
-    cells.map(([r, c]) => [-c,  r]),
+    cells.map(([r, c]) => [c, r]),
+    cells.map(([r, c]) => [c, -r]),
+    cells.map(([r, c]) => [-c, r]),
     cells.map(([r, c]) => [-c, -r]),
   ];
 };
+
 const canonicalShapeKey = (cells) => {
   let best = null;
   for (const t of transformCells8(cells)) {
@@ -1759,6 +1847,17 @@ const canonicalShapeKey = (cells) => {
   }
   return best;
 };
+
+const normalizeSpecialPriorityList = (specialPriority) => {
+  if (Array.isArray(specialPriority)) {
+    return specialPriority.filter((sp) => sp && sp.type && sp.type !== "none");
+  }
+  if (specialPriority && specialPriority.type && specialPriority.type !== "none") {
+    return [specialPriority];
+  }
+  return [];
+};
+
 const normalizeSelectedEqualOrbs = (arr) => {
   if (!Array.isArray(arr)) return [];
   const set = new Set();
@@ -1767,6 +1866,256 @@ const normalizeSelectedEqualOrbs = (arr) => {
     if (EQUAL_FIRST_ORBS.includes(n)) set.add(n);
   }
   return [...set];
+};
+
+const getRectMatchedValueBySpecial = (ev, sp) => {
+  if (!sp || sp.type !== "rect") return 0;
+
+  const m = Number(sp.rectM) || 3;
+  const n = Number(sp.rectN) || 3;
+  const key = `${m}x${n}`;
+  const group = ev.initialPatternCounts?.rect?.[key];
+
+  if (!group) return 0;
+
+  const wantOrb = sp.rectOrb ?? SPECIAL_ORB_ANY;
+
+  // 沒指定屬性時，接受任何屬性
+  if (wantOrb === SPECIAL_ORB_ANY || wantOrb === -1) {
+    return group.total || 0;
+  }
+
+  // 有指定屬性時，只接受該屬性
+  return group.byOrb?.[wantOrb] || 0;
+};
+
+const getEqualFirstMatchedValueBySpecial = (ev, sp) => {
+  if (!sp || sp.type !== "equalFirst") return 0;
+
+  const selected = normalizeSelectedEqualOrbs(sp.equalOrbs);
+  if (selected.length === 0) return 0;
+
+  const counts = ev.initialComboCountsByOrb;
+  if (!counts) return 0;
+
+  const vals = selected.map((orb) => counts[orb] || 0);
+  const first = vals[0] || 0;
+  if (first <= 0) return 0;
+
+  for (let i = 1; i < vals.length; i++) {
+    if (vals[i] !== first) return 0;
+  }
+  return first;
+};
+
+const getSingleSpecialMatchedValue = (ev, sp) => {
+  if (!sp || sp.type === "none") return 0;
+
+  if (sp.type === "clearCount") {
+    return ev.initialClearedCount || 0;
+  }
+
+  if (sp.type === "equalFirst") {
+    return getEqualFirstMatchedValueBySpecial(ev, sp);
+  }
+
+  if (sp.type === "rect") {
+    return getRectMatchedValueBySpecial(ev, sp);
+  }
+
+  const group = ev.initialPatternCounts?.[sp.type];
+  if (!group) return 0;
+
+  if (sp.orb === SPECIAL_ORB_ANY) return group.total || 0;
+  return group.byOrb?.[sp.orb] || 0;
+};
+
+const isSingleSpecialSatisfied = (ev, sp, extraCtx = {}) => {
+  if (!sp || sp.type === "none") return true;
+
+  if (sp.type === "clearCount") {
+    return (ev.initialClearedCount || 0) === (sp.clearCount || 0);
+  }
+
+  if (sp.type === "equalFirst") {
+    return getEqualFirstMatchedValueBySpecial(ev, sp) > 0;
+  }
+
+  if (sp.type === "rect") {
+    return getRectMatchedValueBySpecial(ev, sp) >= 1;
+  }
+
+  if (sp.type === "cross" || sp.type === "l" || sp.type === "t") {
+    const got = getSingleSpecialMatchedValue(ev, sp);
+    return got >= (sp.count || 1);
+  }
+
+  return getSingleSpecialMatchedValue(ev, sp) >= (sp.count || 1);
+};
+
+const isAllSpecialSatisfied = (ev, specialPriorities = [], extraCtx = {}) => {
+  const list = normalizeSpecialPriorityList(specialPriorities);
+  return list.every((sp) => isSingleSpecialSatisfied(ev, sp, extraCtx));
+};
+
+const getSingleSpecialProgress = (ev, sp, extraCtx = {}) => {
+  if (!sp || sp.type === "none") return { done: 1, guide: 0 };
+
+  if (sp.type === "rect") {
+    return {
+      done: isSingleSpecialSatisfied(ev, sp, extraCtx) ? 1 : 0,
+      guide: extraCtx?.rectGuide || 0,
+    };
+  }
+
+  if (sp.type === "clearCount") {
+    const got = ev.initialClearedCount || 0;
+    const want = sp.clearCount || 0;
+    const diff = Math.abs(got - want);
+    return {
+      done: got === want ? 1 : 0,
+      guide: 100000 - diff * 1000 - Math.max(0, got - want) * 10,
+    };
+  }
+
+  if (sp.type === "equalFirst") {
+    const selected = normalizeSelectedEqualOrbs(sp.equalOrbs);
+    if (selected.length === 0) return { done: 0, guide: 0 };
+
+    const counts = ev.initialComboCountsByOrb;
+    if (!counts) return { done: 0, guide: 0 };
+
+    const vals = selected.map((orb) => counts[orb] || 0);
+    const minV = Math.min(...vals);
+    const maxV = Math.max(...vals);
+    const diff = maxV - minV;
+
+    return {
+      done: minV > 0 && diff === 0 ? 1 : 0,
+      guide: minV * 1000 - diff * 300,
+    };
+  }
+
+  const got = getSingleSpecialMatchedValue(ev, sp);
+  const want = sp.count || 1;
+
+  return {
+    done: got >= want ? 1 : 0,
+    guide: Math.min(got, want) * 1000 - Math.max(0, want - got) * 200,
+  };
+};
+
+const getSpecialPriorityTuple = (ev, specialPriorities = [], extraCtx = {}) => {
+  const slots = Array.isArray(specialPriorities)
+    ? specialPriorities.slice(0, 3)
+    : specialPriorities
+    ? [specialPriorities]
+    : [];
+
+  while (slots.length < 3) slots.push({ type: "none" });
+
+  const p1 =
+    slots[0] && slots[0].type !== "none"
+      ? getSingleSpecialProgress(ev, slots[0], extraCtx)
+      : { done: 0, guide: 0 };
+
+  const p2 =
+    slots[1] && slots[1].type !== "none"
+      ? getSingleSpecialProgress(ev, slots[1], extraCtx)
+      : { done: 0, guide: 0 };
+
+  const p3 =
+    slots[2] && slots[2].type !== "none"
+      ? getSingleSpecialProgress(ev, slots[2], extraCtx)
+      : { done: 0, guide: 0 };
+
+  const mask = (p1.done ? 4 : 0) | (p2.done ? 2 : 0) | (p3.done ? 1 : 0);
+
+  // 你指定的順序：
+  // 111 > 110 > 101 > 011 > 100 > 010 > 001 > 000
+  const SPECIAL_COMBO_SCORE = {
+    7: 7, // 一+二+三
+    6: 6, // 一+二
+    5: 5, // 一+三
+    3: 4, // 二+三
+    4: 3, // 一
+    2: 2, // 二
+    1: 1, // 三
+    0: 0, // 無
+  };
+
+  return [
+    SPECIAL_COMBO_SCORE[mask] || 0,
+    p1.done,
+    p2.done,
+    p3.done,
+    p1.guide,
+    p2.guide,
+    p3.guide,
+  ];
+};
+
+const lexTupleCompareDesc = (a, b) => {
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const av = a[i] ?? 0;
+    const bv = b[i] ?? 0;
+    if (av !== bv) return bv - av;
+  }
+  return 0;
+};
+
+const lexTupleBetter = (a, b) => lexTupleCompareDesc(a, b) < 0;
+
+const getRectGuideScoreBySpecial = (board, sp, phase = "initial") => {
+  if (!sp || sp.type !== "rect") return 0;
+
+  const m = Number(sp.rectM) || 3;
+  const n = Number(sp.rectN) || 3;
+  const wantOrb = sp.rectOrb ?? SPECIAL_ORB_ANY;
+
+  const RECT_ORBS = [
+    ORB_TYPES.WATER.id,
+    ORB_TYPES.FIRE.id,
+    ORB_TYPES.EARTH.id,
+    ORB_TYPES.LIGHT.id,
+    ORB_TYPES.DARK.id,
+    ORB_TYPES.HEART.id,
+  ];
+
+  let best = 0;
+
+  for (let r0 = PLAY_ROWS_START; r0 + m <= TOTAL_ROWS; r0++) {
+    for (let c0 = 0; c0 + n <= COLS; c0++) {
+      // 有指定屬性時：只看那個屬性
+      if (wantOrb !== SPECIAL_ORB_ANY && wantOrb !== -1) {
+        const s = scoreRectGuideWindow(board, r0, c0, m, n, wantOrb, phase);
+        if (s > best) best = s;
+        continue;
+      }
+
+      // 沒指定屬性時：才枚舉全部屬性
+      for (const orb of RECT_ORBS) {
+        const s = scoreRectGuideWindow(board, r0, c0, m, n, orb, phase);
+        if (s > best) best = s;
+      }
+    }
+  }
+
+  return best;
+};
+
+const getRectGuideScoreFromSpecialList = (board, specialPriorities = [], phase = "initial") => {
+  const list = normalizeSpecialPriorityList(specialPriorities);
+  let best = 0;
+
+  for (const sp of list) {
+    if (sp.type !== "rect") continue;
+    const s = getRectGuideScoreBySpecial(board, sp, phase);
+    if (s > best) best = s;
+  }
+
+  return best;
 };
 
 const toggleEqualOrbAt = (idx, orbId) => {
@@ -1785,6 +2134,7 @@ const toggleEqualOrbAt = (idx, orbId) => {
   );
   setNeedsSolve(true);
 };
+
 const SHAPE_TEMPLATES = {
   [SHAPE_KIND.CROSS]: [
     [0, 1],
@@ -1802,6 +2152,7 @@ const SHAPE_TEMPLATES = {
             [2, 1],
   ],
 };
+
 const RECT_GUIDE_PATTERNS = {
   cross: [
     [0, 1],
@@ -1840,6 +2191,7 @@ const RECT_GUIDE_PATTERNS = {
     [2, 0],
   ],
 };
+
 const matchSubPatternAt = (
   board,
   r0,
@@ -1854,12 +2206,10 @@ const matchSubPatternAt = (
     const r = r0 + winR + dr;
     const c = c0 + winC + dc;
 
-    // 超出整盤
     if (r < PLAY_ROWS_START || r >= TOTAL_ROWS || c < 0 || c >= COLS) {
       return false;
     }
 
-    // 超出目前 m*n 視窗
     if (winR + dr < 0 || winR + dr >= 999) return false;
     if (winC + dc < 0 || winC + dc >= 999) return false;
 
@@ -1869,6 +2219,7 @@ const matchSubPatternAt = (
 
   return true;
 };
+
 const matchSubPatternInWindow = (
   board,
   baseR,
@@ -1894,6 +2245,7 @@ const matchSubPatternInWindow = (
   }
   return true;
 };
+
 const countWindowOrb = (board, baseR, baseC, m, n, orb, phase = "initial") => {
   let cnt = 0;
   for (let r = 0; r < m; r++) {
@@ -1932,6 +2284,7 @@ const countBoundaryOrb = (board, baseR, baseC, m, n, orb, phase = "initial") => 
 
   return cnt;
 };
+
 const countPatternHitsInWindow = (
   board,
   baseR,
@@ -2012,6 +2365,7 @@ const countPatternHitsInWindow = (
 
   return { cross, t, l, block2x2, rect2x3, rect3x2, lineH3, lineV3 };
 };
+
 const scoreRectGuideWindow = (
   board,
   baseR,
@@ -2027,10 +2381,7 @@ const scoreRectGuideWindow = (
 
   let score = 0;
 
-  // 基礎：視窗內目標色越多越好
   score += insideCount * 100;
-
-  // 邊界外同色太多，代表容易長成大塊，不利純矩形
   score -= boundaryCount * 25;
 
   if (m === 3 && n === 3) {
@@ -2051,19 +2402,20 @@ const scoreRectGuideWindow = (
 
   return score;
 };
-const getRectPatternGuideScore = (board, specialPriority, phase = "initial") => {
-  if (!specialPriority || specialPriority.type !== "rect") return 0;
 
-  const m = Number(specialPriority.rectM) || 3;
-  const n = Number(specialPriority.rectN) || 3;
-  const wantOrb = specialPriority.rectOrb ?? SPECIAL_ORB_ANY;
+const getRectPatternGuideScore = (board, specialPriority, phase = "initial") => {
+  const activeSpecial = getActiveSpecialPriority(specialPriority);
+  if (!activeSpecial || activeSpecial.type !== "rect") return 0;
+
+  const m = Number(activeSpecial.rectM) || 3;
+  const n = Number(activeSpecial.rectN) || 3;
+  const wantOrb = activeSpecial.rectOrb ?? SPECIAL_ORB_ANY;
 
   let best = 0;
 
   for (let r0 = PLAY_ROWS_START; r0 + m <= TOTAL_ROWS; r0++) {
     for (let c0 = 0; c0 + n <= COLS; c0++) {
       if (wantOrb === SPECIAL_ORB_ANY) {
-        // 任意屬性：挑這個視窗內最好的顏色
         for (const orb of [
           ORB_TYPES.WATER.id,
           ORB_TYPES.FIRE.id,
@@ -2084,9 +2436,11 @@ const getRectPatternGuideScore = (board, specialPriority, phase = "initial") => 
 
   return best;
 };
+
 const SHAPE_CANONICAL = Object.fromEntries(
   Object.entries(SHAPE_TEMPLATES).map(([k, cells]) => [k, canonicalShapeKey(cells)])
 );
+
 const detectExact5Shape = (cells) => {
   if (!cells || cells.length !== 5) return null;
   const key = canonicalShapeKey(cells);
@@ -2095,14 +2449,17 @@ const detectExact5Shape = (cells) => {
   }
   return null;
 };
+
 const makePatternCounter = () => ({
   total: 0,
-  byOrb: new Int16Array(8), // 夠用就好
+  byOrb: new Int16Array(8),
 });
+
 const makeRectCounter = () => ({
   total: 0,
   byOrb: new Int16Array(8),
 });
+
 const makeRectCounts = () => {
   const out = {};
   for (const m of RECT_M_OPTIONS) {
@@ -2112,13 +2469,16 @@ const makeRectCounts = () => {
   }
   return out;
 };
+
 const makePatternCounts = () => ({
   cross: makePatternCounter(),
   l: makePatternCounter(),
   t: makePatternCounter(),
   rect: makeRectCounts(),
 });
+
 const makeComboCountsByOrb = () => new Int16Array(8);
+
 const isPureRectGroup = (cells, expectedRows, expectedCols) => {
   if (!cells || cells.length !== expectedRows * expectedCols) return false;
 
@@ -2149,23 +2509,28 @@ const isPureRectGroup = (cells, expectedRows, expectedCols) => {
 
   return true;
 };
+
 const getRectMatchedValue = (ev, special) => {
-  if (!special) return 0;
-  const m = Number(special.rectM) || 3;
-  const n = Number(special.rectN) || 3;
+  const activeSpecial = getActiveSpecialPriority(special);
+  if (!activeSpecial) return 0;
+
+  const m = Number(activeSpecial.rectM) || 3;
+  const n = Number(activeSpecial.rectN) || 3;
   const key = `${m}x${n}`;
   const group = ev.initialPatternCounts?.rect?.[key];
   if (!group) return 0;
 
-  if (special.rectOrb === SPECIAL_ORB_ANY) return group.total || 0;
-  return group.byOrb?.[special.rectOrb] || 0;
+  if (activeSpecial.rectOrb === SPECIAL_ORB_ANY) return group.total || 0;
+  return group.byOrb?.[activeSpecial.rectOrb] || 0;
 };
-const getRectPotentialScore = (board, special, phase = "initial") => {
-  if (!special || special.type !== "rect") return 0;
 
-  const m = Number(special.rectM) || 3;
-  const n = Number(special.rectN) || 3;
-  const wantOrb = special.rectOrb ?? SPECIAL_ORB_ANY;
+const getRectPotentialScore = (board, special, phase = "initial") => {
+  const activeSpecial = getActiveSpecialPriority(special);
+  if (!activeSpecial || activeSpecial.type !== "rect") return 0;
+
+  const m = Number(activeSpecial.rectM) || 3;
+  const n = Number(activeSpecial.rectN) || 3;
+  const wantOrb = activeSpecial.rectOrb ?? SPECIAL_ORB_ANY;
 
   let best = 0;
 
@@ -2227,8 +2592,10 @@ const getRectPotentialScore = (board, special, phase = "initial") => {
 
   return best;
 };
+
 const getEqualFirstMatchedValue = (ev, special) => {
-  const selected = normalizeSelectedEqualOrbs(special?.equalOrbs);
+  const activeSpecial = getActiveSpecialPriority(special);
+  const selected = normalizeSelectedEqualOrbs(activeSpecial?.equalOrbs);
   if (selected.length === 0) return 0;
 
   const counts = ev.initialComboCountsByOrb;
@@ -2243,135 +2610,7 @@ const getEqualFirstMatchedValue = (ev, special) => {
   }
   return first;
 };
-const getSpecialMatchedValue = (ev, special) => {
-  if (!special || special.type === "none") return 0;
 
-  if (special.type === "clearCount") {
-    return ev.initialClearedCount || 0;
-  }
-
-  if (special.type === "equalFirst") {
-    return getEqualFirstMatchedValue(ev, special);
-  }
-
-  if (special.type === "rect") {
-    return getRectMatchedValue(ev, special);
-  }
-
-  const group = ev.initialPatternCounts?.[special.type];
-  if (!group) return 0;
-
-  if (special.orb === SPECIAL_ORB_ANY) return group.total || 0;
-  return group.byOrb?.[special.orb] || 0;
-};
-const getSpecialScore = (ev, special) => {
-  if (!special || special.type === "none") return 0;
-
-  // 1) 指定首消顆粒數
-  if (special.type === "clearCount") {
-    const got = ev.initialClearedCount || 0;
-    const want = special.clearCount || 3;
-    const diff = Math.abs(got - want);
-    return 50000000 - diff * 1200000 - Math.max(0, got - want) * 50000;
-  }
-
-  // 2) 首消相等盾
-  if (special.type === "equalFirst") {
-    const selected = normalizeSelectedEqualOrbs(special.equalOrbs);
-    if (selected.length === 0) return 0;
-
-    const counts = ev.initialComboCountsByOrb;
-    if (!counts) return 0;
-
-    const vals = selected.map((orb) => counts[orb] || 0);
-    const positive = vals.filter((v) => v > 0);
-
-    if (positive.length === 0) return 0;
-
-    const minV = Math.min(...vals);
-    const maxV = Math.max(...vals);
-    const diff = maxV - minV;
-
-    if (minV <= 0) {
-      return 2000000 - diff * 600000;
-    }
-
-    if (diff === 0) {
-      return 46000000 + minV * 1200000;
-    }
-
-    return 12000000 - diff * 2200000 + minV * 200000;
-  }
-
-  // 3) 靈罩
-  if (special.type === "rect") {
-    const got = getRectMatchedValue(ev, special);
-    if (got <= 0) return 0;
-    return 44000000 + Math.min(got, 1) * 1000000;
-  }
-
-  // 4) 十字 / L / T
-  const got = getSpecialMatchedValue(ev, special);
-  const want = special.count || 1;
-
-  if (got <= 0) return 0;
-
-  const sat = Math.min(got, want);
-  const lack = Math.max(0, want - got);
-
-  return sat * 40000000 - lack * 3000000;
-};
-const getPriorityScoreTuple = (ev, specialPriorities = []) => {
-  return (specialPriorities || []).map((sp) => getSpecialScore(ev, sp));
-};
-const isSpecialSatisfiedBy = (ev, specialPriority) => {
-  if (!specialPriority || specialPriority.type === "none") return true;
-
-  if (specialPriority.type === "clearCount") {
-    return (ev.initialClearedCount || 0) === (specialPriority.clearCount || 0);
-  }
-
-  if (specialPriority.type === "equalFirst") {
-    return getEqualFirstMatchedValue(ev, specialPriority) > 0;
-  }
-
-  if (specialPriority.type === "rect") {
-    return getRectMatchedValue(ev, specialPriority) >= 1;
-  }
-
-  if (
-    specialPriority.type === "cross" ||
-    specialPriority.type === "l" ||
-    specialPriority.type === "t"
-  ) {
-    const group = ev.initialPatternCounts?.[specialPriority.type];
-    if (!group) return false;
-
-    const wantCount = specialPriority.count || 1;
-    const wantOrb = specialPriority.orb;
-
-    if (wantOrb === SPECIAL_ORB_ANY) {
-      return (group.total || 0) >= wantCount;
-    }
-
-    return (group.byOrb?.[wantOrb] || 0) >= wantCount;
-  }
-
-  return false;
-};
-const isAllSpecialSatisfied = (ev, specialPriorities = []) => {
-  return (specialPriorities || []).every((sp) => isSpecialSatisfiedBy(ev, sp));
-};
-const lexTupleBetter = (a, b) => {
-  const len = Math.max(a.length, b.length);
-  for (let i = 0; i < len; i++) {
-    const av = a[i] ?? 0;
-    const bv = b[i] ?? 0;
-    if (av > bv) return true;
-    if (av < bv) return false;
-  }
-  return false;
-};
 const hasInitialN2Clear = (board, toClear1D) => {
   if (!toClear1D) return false;
 
@@ -2643,6 +2882,20 @@ const findMatches = (tempBoard, phase = "initial") => {
   };
 };
 
+const specialPriorityTupleToScore = (tuple = []) => {
+  if (!Array.isArray(tuple) || tuple.length === 0) return 0;
+
+  let score = 0;
+  let weight = 1e15;
+
+  for (let i = 0; i < tuple.length; i++) {
+    const v = Number(tuple[i] || 0);
+    score += v * weight;
+    weight /= 1000;
+  }
+
+  return score;
+};
 const unlockN2Board = (b) => {
   const next = clone2D(b);
   for (let r = 0; r < TOTAL_ROWS; r++) {
@@ -2692,8 +2945,14 @@ const evaluateBoard = (tempBoard, skyfall, initialResult = null) => {
       initialClearedCount: initialCleared,
       verticalCombos: initialV,
       horizontalCombos: initialH,
+
+      // 新 multi-special helper 主要會吃這兩個
       initialPatternCounts,
       initialComboCountsByOrb,
+
+      // 保留 alias，避免舊程式其他地方還在吃舊欄位
+      patternCounts: initialPatternCounts,
+      comboCountsByOrb: initialComboCountsByOrb,
     };
   }
 
@@ -2731,11 +2990,16 @@ const evaluateBoard = (tempBoard, skyfall, initialResult = null) => {
     initialClearedCount: initialCleared,
     verticalCombos: totalV,
     horizontalCombos: totalH,
+
+    // 新 multi-special helper 主要吃初盤圖形資訊
     initialPatternCounts,
     initialComboCountsByOrb,
+
+    // 保留 alias
+    patternCounts: initialPatternCounts,
+    comboCountsByOrb: initialComboCountsByOrb,
   };
 };
-
 const getBoardKey = (b) => {
   // 兩個 32-bit hash 合成 BigInt 字串 key（低碰撞、Map key 短）
   let h1 = 2166136261 >>> 0; // FNV-ish
@@ -2774,26 +3038,63 @@ const calcScore = (
   mode,
   priority,
   specialPriorities,
-  violatesN2 = false
+  violatesN2 = false,
+  extraCtx = {}
 ) => {
   const major = mode === "vertical" ? ev.verticalCombos : ev.horizontalCombos;
+  const normalizedSpecials = normalizeSpecialPriorityList(specialPriorities);
+  const hasSpecial = normalizedSpecials.length > 0;
 
   const over = Math.max(0, ev.combos - target);
   const overPenalty = over * over * 600000;
-
   const effectiveStepPenalty =
     priority === "steps" ? cfg.stepPenalty * 4 : cfg.stepPenalty;
   const clearedW = priority === "combo" ? 1000 : 200;
-
-  const priorityScores = getPriorityScoreTuple(ev, specialPriorities);
-
-const specialScore =
-  (priorityScores[0] || 0) * 1000000000000 +
-  (priorityScores[1] || 0) * 1000000 +
-  (priorityScores[2] || 0);
-
-  // ✅ 不合法最終盤面的 soft penalty：可活著擴展，但不容易被當成最佳
   const illegalPenalty = violatesN2 ? 2200000 : 0;
+
+  // =========================
+  // 無特優先：盡量退回舊版味道
+  // =========================
+  if (!hasSpecial) {
+    if (ev.combos >= target) {
+      const stepCost = pathLen * effectiveStepPenalty;
+      return (
+        5200000 -
+        stepCost -
+        overPenalty +
+        ev.clearedCount * clearedW -
+        illegalPenalty
+      );
+    }
+
+    const miss = target - ev.combos;
+    const missPenalty = -(miss * miss * 320000);
+    const nearBonus =
+      (target - miss) * 50000 +
+      (miss <= 4 ? (5 - miss) * (miss <= 2 ? 260000 : 120000) : 0);
+
+    const t = Math.max(0, 1 - miss / Math.max(1, target));
+    const majorBonus = major * (1200000 * t * t);
+    const potWeight = cfg.potentialWeight * (0.08 + 0.92 * t * t);
+    const stepSoft = pathLen * 35;
+    const clearedBonus = ev.clearedCount * clearedW;
+
+    return (
+      missPenalty +
+      nearBonus +
+      majorBonus +
+      pot * potWeight +
+      clearedBonus -
+      stepSoft -
+      illegalPenalty
+    );
+  }
+
+  // =========================
+  // 有特優先：新版 multi-special
+  // =========================
+  const specialTuple = getSpecialPriorityTuple(ev, normalizedSpecials, extraCtx);
+  const specialScore = specialPriorityTupleToScore(specialTuple);
 
   if (ev.combos >= target) {
     const stepCost = pathLen * effectiveStepPenalty;
@@ -2809,7 +3110,6 @@ const specialScore =
 
   const miss = target - ev.combos;
   const missPenalty = -(miss * miss * 320000);
-
   const nearBonus =
     (target - miss) * 50000 +
     (miss <= 4 ? (5 - miss) * (miss <= 2 ? 260000 : 120000) : 0);
@@ -2830,8 +3130,273 @@ const specialScore =
     stepSoft -
     illegalPenalty
   );
-}; 
-const beamSolve = (
+};
+
+const sumSpecialDoneFromTuple = (tuple = []) => {
+  let s = 0;
+  for (let i = 0; i < tuple.length; i += 2) s += Number(tuple[i] || 0);
+  return s;
+};
+
+const sumSpecialGuideFromTuple = (tuple = []) => {
+  let s = 0;
+  for (let i = 1; i < tuple.length; i += 2) s += Number(tuple[i] || 0);
+  return s;
+};
+
+const yieldToBrowser = () =>
+  new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+
+const compileSpecialPriorityList = (specialPriority) => {
+  const raw = normalizeSpecialPriorityList(specialPriority);
+
+  return raw.map((sp) => {
+    const type = sp.type;
+
+    if (type === "rect") {
+      const m = Number(sp.rectM) || 3;
+      const n = Number(sp.rectN) || 3;
+      const rectOrb = sp.rectOrb ?? SPECIAL_ORB_ANY;
+
+      return {
+        ...sp,
+        type,
+        m,
+        n,
+        rectKey: `${m}x${n}`,
+        rectOrb,
+      };
+    }
+
+    if (type === "equalFirst") {
+      return {
+        ...sp,
+        type,
+        selectedOrbs: normalizeSelectedEqualOrbs(sp.equalOrbs),
+      };
+    }
+
+    if (type === "clearCount") {
+      return {
+        ...sp,
+        type,
+        clearCountValue: Number(sp.clearCount) || 0,
+      };
+    }
+
+    return {
+      ...sp,
+      type,
+      countValue: Number(sp.count) || 1,
+      orbValue: sp.orb ?? SPECIAL_ORB_ANY,
+    };
+  });
+};
+
+const getSingleSpecialMatchedValueCompiled = (ev, sp) => {
+  if (!sp || sp.type === "none") return 0;
+
+  switch (sp.type) {
+    case "clearCount":
+      return ev.initialClearedCount || 0;
+
+    case "equalFirst": {
+      const selected = sp.selectedOrbs || [];
+      if (selected.length === 0) return 0;
+
+      const counts = ev.initialComboCountsByOrb;
+      if (!counts) return 0;
+
+      const vals = selected.map((orb) => counts[orb] || 0);
+      const first = vals[0] || 0;
+      if (first <= 0) return 0;
+
+      for (let i = 1; i < vals.length; i++) {
+        if (vals[i] !== first) return 0;
+      }
+      return first;
+    }
+
+    case "rect": {
+      const group = ev.initialPatternCounts?.rect?.[sp.rectKey];
+      if (!group) return 0;
+
+      if (sp.rectOrb === SPECIAL_ORB_ANY || sp.rectOrb === -1) {
+        return group.total || 0;
+      }
+      return group.byOrb?.[sp.rectOrb] || 0;
+    }
+
+    default: {
+      const group = ev.initialPatternCounts?.[sp.type];
+      if (!group) return 0;
+
+      if (sp.orbValue === SPECIAL_ORB_ANY) return group.total || 0;
+      return group.byOrb?.[sp.orbValue] || 0;
+    }
+  }
+};
+
+const isSingleSpecialSatisfiedCompiled = (ev, sp, extraCtx = {}) => {
+  if (!sp || sp.type === "none") return true;
+
+  const initCleared = Number(
+    extraCtx?.initialClearedCount ??
+      ev?.initialClearedCount ??
+      ev?.initClearedCount ??
+      ev?.initialCleared ??
+      0
+  );
+
+  const wantClearCount = Number(
+    sp?.clearCountValue ??
+      sp?.clearCount ??
+      sp?.countValue ??
+      sp?.count ??
+      0
+  );
+
+  switch (sp.type) {
+    case "clearCount":
+      return initCleared === wantClearCount;
+
+    case "equalFirst":
+      return getSingleSpecialMatchedValueCompiled(ev, sp, extraCtx) > 0;
+
+    case "rect":
+      return getSingleSpecialMatchedValueCompiled(ev, sp, extraCtx) >= 1;
+
+    default:
+      return (
+        getSingleSpecialMatchedValueCompiled(ev, sp, extraCtx) >=
+        Number(sp?.countValue ?? sp?.count ?? 1)
+      );
+  }
+};
+
+const isAllSpecialSatisfiedCompiled = (ev, compiledSpecials = [], extraCtx = {}) => {
+  for (let i = 0; i < compiledSpecials.length; i++) {
+    if (!isSingleSpecialSatisfiedCompiled(ev, compiledSpecials[i], extraCtx)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const getSingleSpecialProgressCompiled = (ev, sp, extraCtx = {}) => {
+  if (!sp || sp.type === "none") return { done: 1, guide: 0 };
+
+  const getInitCleared = () =>
+    Number(
+      extraCtx?.initialClearedCount ??
+        ev?.initialClearedCount ??
+        ev?.initClearedCount ??
+        ev?.initialCleared ??
+        0
+    );
+
+  const getInitComboCountsByOrb = () =>
+    extraCtx?.initialComboCountsByOrb ??
+    ev?.initialComboCountsByOrb ??
+    ev?.initComboCountsByOrb ??
+    null;
+
+  const getClearCountWant = () =>
+    Number(
+      sp?.clearCountValue ??
+        sp?.clearCount ??
+        sp?.countValue ??
+        sp?.count ??
+        0
+    );
+
+  const getSelectedOrbs = () =>
+    sp?.selectedOrbs ??
+    sp?.equalOrbs ??
+    [];
+
+  switch (sp.type) {
+    case "rect":
+      return {
+        done: isSingleSpecialSatisfiedCompiled(ev, sp, extraCtx) ? 1 : 0,
+        guide: extraCtx?.rectGuide || 0,
+      };
+
+    case "clearCount": {
+      const got = getInitCleared();
+      const want = getClearCountWant();
+      const diff = Math.abs(got - want);
+
+      return {
+        done: got === want ? 1 : 0,
+        guide: 100000 - diff * 1000 - Math.max(0, got - want) * 10,
+      };
+    }
+
+    case "equalFirst": {
+      const selected = getSelectedOrbs();
+      if (!selected || selected.length === 0) return { done: 0, guide: 0 };
+
+      const counts = getInitComboCountsByOrb();
+      if (!counts) return { done: 0, guide: 0 };
+
+      const vals = selected.map((orb) => Number(counts[orb] || 0));
+      const minV = Math.min(...vals);
+      const maxV = Math.max(...vals);
+      const diff = maxV - minV;
+
+      return {
+        done: minV > 0 && diff === 0 ? 1 : 0,
+        guide: minV * 1000 - diff * 300,
+      };
+    }
+
+    default: {
+      const got = getSingleSpecialMatchedValueCompiled(ev, sp);
+      const want = Number(sp?.countValue ?? sp?.count ?? 1);
+
+      return {
+        done: got >= want ? 1 : 0,
+        guide: Math.min(got, want) * 1000 - Math.max(0, want - got) * 200,
+      };
+    }
+  }
+};
+
+const getSpecialPriorityTupleCompiled = (ev, compiledSpecials = [], extraCtx = {}) => {
+  const tuple = new Array(compiledSpecials.length * 2);
+  let k = 0;
+
+  for (let i = 0; i < compiledSpecials.length; i++) {
+    const p = getSingleSpecialProgressCompiled(ev, compiledSpecials[i], extraCtx);
+    tuple[k++] = p.done;
+    tuple[k++] = p.guide;
+  }
+
+  return tuple;
+};
+
+const getCheapRectGuideScoreFromCompiledSpecialList = (
+  board,
+  compiledSpecials = [],
+  phase = "initial"
+) => {
+  let best = 0;
+
+  for (let i = 0; i < compiledSpecials.length; i++) {
+    const sp = compiledSpecials[i];
+    if (sp.type !== "rect") continue;
+
+    const s = getCheapRectGuideScoreBySpecial(board, sp, phase);
+    if (s > best) best = s;
+  }
+
+  return best;
+};
+
+const beamSolve = async (
   originalBoard,
   cfg,
   target,
@@ -2841,26 +3406,38 @@ const beamSolve = (
   diagonal,
   specialPriority,
   initTargetCombo,
-  autoRow0Expanded
+  autoRow0Expanded,
+  onProgress = null
 ) => {
   const useRow0 = !!autoRow0Expanded;
-  const hasSpecial =
-    specialPriority && specialPriority.type && specialPriority.type !== "none";
-  const isRectMode = specialPriority?.type === "rect";
-  const rectPhaseSteps = isRectMode
-    ? Math.max(4, Math.floor(cfg.maxSteps * 0.6))
-    : 0;
+
+  const compiledSpecials = compileSpecialPriorityList(specialPriority);
+  const hasSpecial = compiledSpecials.length > 0;
+  const hasRectSpecial = compiledSpecials.some((sp) => sp.type === "rect");
+
+  const hasInitClearCountSpecial = compiledSpecials.some(
+    (sp) =>
+      sp &&
+      (sp.type === "clearCount" ||
+        sp.type === "initClearCount" ||
+        sp.type === "firstClearCount")
+  );
+
+  const hasInitEqualSpecial = compiledSpecials.some(
+    (sp) =>
+      sp &&
+      (sp.type === "same" ||
+        sp.type === "equal" ||
+        sp.type === "sameSize" ||
+        sp.type === "initEqual" ||
+        sp.type === "firstEqual")
+  );
+
+  const hasInitSensitiveSpecial =
+    hasInitClearCountSpecial || hasInitEqualSpecial;
+
   const dirsPlay = diagonal ? DIRS_8 : DIRS_4;
   const maxNodesEffective = cfg.maxNodes;
-
-  const RECT_TARGET_ORBS = [
-    ORB_TYPES.WATER.id,
-    ORB_TYPES.FIRE.id,
-    ORB_TYPES.EARTH.id,
-    ORB_TYPES.LIGHT.id,
-    ORB_TYPES.DARK.id,
-    ORB_TYPES.HEART.id,
-  ];
 
   const makeNode = (parent, r, c) => ({
     parent,
@@ -2877,11 +3454,21 @@ const beamSolve = (
   };
 
   const stepsOf = (node) => Math.max(0, (node?.len || 0) - 1);
-  const isRectBuildPhase = (step) => isRectMode && step < rectPhaseSteps;
-  const exceedsInitialComboCap = (ev) =>
-    (ev.initialCombos || 0) > initTargetCombo;
-  const hitsInitTargetComboExactly = (ev) =>
-    (ev.initialCombos || 0) === initTargetCombo;
+
+  const exceedsInitialComboCap = (ev) => {
+    const cap = Number(initTargetCombo);
+    if (!Number.isFinite(cap) || cap <= 0) return false;
+    const initialCombos = Number(
+      ev?.initialCombos ?? ev?.initCombos ?? ev?.combos ?? 0
+    );
+    return initialCombos > cap;
+  };
+
+  const hitsInitTargetComboExactly = (ev) => {
+    const t = Number(initTargetCombo);
+    if (!Number.isFinite(t) || t <= 0) return false;
+    return Number(ev?.initialCombos || 0) === t;
+  };
 
   const stepConstraint = (cellVal) => {
     const m = xMarkOf(cellVal);
@@ -2890,8 +3477,207 @@ const beamSolve = (
     return { ok: true, locked: false };
   };
 
+  const toNum = (v, d = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : d;
+  };
+
+  const extractInitialMatchSizes = (initial, ev = null) => {
+    if (Array.isArray(initial?.matchSizes)) {
+      return initial.matchSizes.map((x) => toNum(x, 0)).filter((x) => x > 0);
+    }
+
+    if (Array.isArray(initial?.comboSizes)) {
+      return initial.comboSizes.map((x) => toNum(x, 0)).filter((x) => x > 0);
+    }
+
+    if (Array.isArray(initial?.groups)) {
+      const arr = [];
+      for (const g of initial.groups) {
+        const sz = toNum(
+          g?.size ?? g?.count ?? g?.len ?? g?.cells?.length ?? g?.orbs?.length,
+          0
+        );
+        if (sz > 0) arr.push(sz);
+      }
+      if (arr.length) return arr;
+    }
+
+    if (Array.isArray(initial?.matches)) {
+      const arr = [];
+      for (const g of initial.matches) {
+        const sz = toNum(
+          g?.size ?? g?.count ?? g?.len ?? g?.cells?.length ?? g?.orbs?.length,
+          0
+        );
+        if (sz > 0) arr.push(sz);
+      }
+      if (arr.length) return arr;
+    }
+
+    if (Array.isArray(ev?.initialMatchSizes)) {
+      return ev.initialMatchSizes.map((x) => toNum(x, 0)).filter((x) => x > 0);
+    }
+
+    if (Array.isArray(ev?.initialComboSizes)) {
+      return ev.initialComboSizes.map((x) => toNum(x, 0)).filter((x) => x > 0);
+    }
+
+    return [];
+  };
+
+  const extractInitialInfo = (initial, ev = null) => {
+    const matchSizes = extractInitialMatchSizes(initial, ev);
+    const combosFromSizes = matchSizes.length;
+
+    const combos = toNum(
+      initial?.combos ??
+        initial?.comboCount ??
+        ev?.initialCombos ??
+        ev?.initCombos ??
+        (combosFromSizes > 0 ? combosFromSizes : 0),
+      0
+    );
+
+    const cleared = toNum(
+      initial?.clearedCount ??
+        initial?.clearCount ??
+        initial?.totalCleared ??
+        ev?.initialClearedCount ??
+        ev?.initClearedCount ??
+        ev?.initialCleared ??
+        (matchSizes.length ? matchSizes.reduce((a, b) => a + b, 0) : 0),
+      0
+    );
+
+    const distinctSizeCount = new Set(matchSizes).size;
+    const allEqual =
+      matchSizes.length > 0 &&
+      matchSizes.every((x) => x === matchSizes[0]);
+
+    return {
+      combos,
+      cleared,
+      matchSizes,
+      distinctSizeCount,
+      allEqual,
+      signature: `${combos}:${cleared}:${matchSizes.join(",")}`,
+    };
+  };
+
+  const buildVisitedInitPart = (initInfo) =>
+    `${initInfo.combos}|${initInfo.cleared}|${initInfo.matchSizes.join(".")}`;
+
+  const getModeMajor = (ev) =>
+    mode === "vertical"
+      ? ev?.verticalCombos || 0
+      : ev?.horizontalCombos || 0;
+
+  const getFreeMajor = (ev) =>
+    Math.max(ev?.verticalCombos || 0, ev?.horizontalCombos || 0);
+
+  const getAdaptiveMajor = (ev) =>
+    hasInitSensitiveSpecial ? getFreeMajor(ev) : getModeMajor(ev);
+
+  const getInitShieldScoreBias = (initInfo, steps) => {
+    let bias = 0;
+
+    if (hasInitClearCountSpecial) {
+      for (const sp of compiledSpecials) {
+        if (
+          !sp ||
+          !(
+            sp.type === "clearCount" ||
+            sp.type === "initClearCount" ||
+            sp.type === "firstClearCount"
+          )
+        ) {
+          continue;
+        }
+
+        const want = toNum(sp.count ?? sp.clearCount, 0);
+        if (want > 0) {
+          const got = initInfo.cleared;
+          const diff = Math.abs(got - want);
+
+          bias += 4000000 - diff * 500000;
+
+          if (got === want) bias += 4500000;
+          else if (got < want) bias += got * 180000;
+          else bias -= (got - want) * 220000;
+        }
+      }
+    }
+
+    if (hasInitEqualSpecial) {
+      if (initInfo.matchSizes.length === 0) {
+        bias -= 1200000;
+      } else {
+        if (initInfo.allEqual) bias += 5200000;
+        bias += initInfo.combos * 260000;
+        bias -= Math.max(0, initInfo.distinctSizeCount - 1) * 1100000;
+
+        const sizes = initInfo.matchSizes;
+        let spread = 0;
+        if (sizes.length > 1) {
+          const mn = Math.min(...sizes);
+          const mx = Math.max(...sizes);
+          spread = mx - mn;
+        }
+        bias -= spread * 260000;
+      }
+    }
+
+    if (hasInitSensitiveSpecial) {
+      bias += initInfo.combos * 220000;
+      bias += initInfo.cleared * 90000;
+      bias -= steps * 2500;
+    }
+
+    return bias;
+  };
+
+  const buildNoSpecialRankTuple = (ev, score, steps, violatesN2, initExact) => {
+    const legal = violatesN2 ? 0 : 1;
+    const initEq = ev.initialAllEqual ? 1 : 0;
+    const initCombos = ev.initialCombos || 0;
+    const initCleared = ev.initialClearedCount || 0;
+    const combos = ev.combos || 0;
+    const cleared = ev.clearedCount || 0;
+    const adaptiveMajor = getAdaptiveMajor(ev);
+
+    if (hasInitSensitiveSpecial) {
+      return [
+        legal,
+        initExact ? 1 : 0,
+        initEq,
+        initCombos,
+        initCleared,
+        combos,
+        cleared,
+        -steps,
+        Math.floor(score),
+        adaptiveMajor,
+      ];
+    }
+
+    return [
+      legal,
+      initExact ? 1 : 0,
+      initEq,
+      initCombos,
+      initCleared,
+      combos,
+      adaptiveMajor,
+      cleared,
+      -steps,
+      Math.floor(score),
+    ];
+  };
+
   let q1Pos = null;
   let q2Pos = null;
+
   for (let r = 0; r < TOTAL_ROWS; r++) {
     if (!useRow0 && r === 0) continue;
     for (let c = 0; c < COLS; c++) {
@@ -2905,91 +3691,11 @@ const beamSolve = (
   const shouldAcceptEnd = (node) =>
     !q2Pos || (node?.r === q2Pos.r && node?.c === q2Pos.c);
 
-  const isSpecialSatisfied = (ev) => {
-    if (!hasSpecial) return true;
-    if (specialPriority.type === "clearCount") {
-      return (ev.initialClearedCount || 0) === (specialPriority.clearCount || 3);
-    }
+  const isSolvedGoal = (ev, extraCtx = {}) => {
+    if (!hasSpecial) return ev.combos >= target;
     return (
-      getSpecialMatchedValue(ev, specialPriority) >= (specialPriority.count || 1)
-    );
-  };
-
-  const isSolvedGoal = (ev) => ev.combos >= target && isSpecialSatisfied(ev);
-
-  const getRectWindowOccupancyScore = (board, baseR, baseC, m, n, orb) => {
-    let inside = 0;
-    let boundary = 0;
-
-    for (let r = baseR; r < baseR + m; r++) {
-      for (let c = baseC; c < baseC + n; c++) {
-        const v = getOrbForMatchPhase(board[r][c], "initial");
-        if (v === orb) inside++;
-      }
-    }
-
-    for (let r = baseR; r < baseR + m; r++) {
-      if (baseC - 1 >= 0) {
-        const v = getOrbForMatchPhase(board[r][baseC - 1], "initial");
-        if (v === orb) boundary++;
-      }
-      if (baseC + n < COLS) {
-        const v = getOrbForMatchPhase(board[r][baseC + n], "initial");
-        if (v === orb) boundary++;
-      }
-    }
-
-    for (let c = baseC; c < baseC + n; c++) {
-      if (baseR - 1 >= PLAY_ROWS_START) {
-        const v = getOrbForMatchPhase(board[baseR - 1][c], "initial");
-        if (v === orb) boundary++;
-      }
-      if (baseR + m < TOTAL_ROWS) {
-        const v = getOrbForMatchPhase(board[baseR + m][c], "initial");
-        if (v === orb) boundary++;
-      }
-    }
-
-    return inside * 1000 - boundary * 120;
-  };
-
-  const chooseBestRectTarget = (board) => {
-    if (!isRectMode) return null;
-
-    const m = Number(specialPriority.rectM) || 3;
-    const n = Number(specialPriority.rectN) || 3;
-    const wantOrb = specialPriority.rectOrb ?? SPECIAL_ORB_ANY;
-
-    let best = null;
-    let bestScore = -Infinity;
-
-    for (let r0 = PLAY_ROWS_START; r0 + m <= TOTAL_ROWS; r0++) {
-      for (let c0 = 0; c0 + n <= COLS; c0++) {
-        const orbs =
-          wantOrb === SPECIAL_ORB_ANY ? RECT_TARGET_ORBS : [wantOrb];
-        for (const orb of orbs) {
-          const s = getRectWindowOccupancyScore(board, r0, c0, m, n, orb);
-          if (s > bestScore) {
-            bestScore = s;
-            best = { r0, c0, orb, score: s };
-          }
-        }
-      }
-    }
-    return best;
-  };
-
-  const getRectTargetOccupancyScore = (board, targetInfo) => {
-    if (!isRectMode || !targetInfo) return 0;
-    const m = Number(specialPriority.rectM) || 3;
-    const n = Number(specialPriority.rectN) || 3;
-    return getRectWindowOccupancyScore(
-      board,
-      targetInfo.r0,
-      targetInfo.c0,
-      m,
-      n,
-      targetInfo.orb
+      ev.combos >= target &&
+      isAllSpecialSatisfiedCompiled(ev, compiledSpecials, extraCtx)
     );
   };
 
@@ -2997,164 +3703,346 @@ const beamSolve = (
     combos: -1,
     skyfallCombos: 0,
     clearedCount: -1,
+    initialCombos: 0,
+    initialClearedCount: 0,
+    initialMatchSizes: [],
     node: null,
     score: -Infinity,
-    specialScore: -Infinity,
+    specialTuple: EMPTY_SPECIAL_TUPLE,
     verticalCombos: 0,
     horizontalCombos: 0,
+    rectGuide: 0,
+    violatesN2: false,
   };
 
   let bestReachedSteps = Infinity;
   let topStepCandidates = [];
   let topComboCandidates = [];
+  const pendingTopStepCandidates = [];
+  const pendingTopComboCandidates = [];
   let beam = [];
   let nodesExpanded = 0;
-
   const visitedBest = new Map();
 
-  const packCandidateFromEv = (ev, node, score) => ({
+  let lastProgressReport = -1;
+  const reportProgress = (force = false) => {
+    if (!onProgress) return;
+
+    const current = Math.min(nodesExpanded, maxNodesEffective);
+    const shouldEmit =
+      force ||
+      lastProgressReport < 0 ||
+      current >= maxNodesEffective ||
+      current - lastProgressReport >= 256;
+
+    if (!shouldEmit) return;
+
+    lastProgressReport = current;
+    onProgress({
+      current,
+      max: Math.max(1, maxNodesEffective),
+    });
+  };
+
+  const packCandidateFromEval = ({
+    ev,
+    node,
+    score,
+    extraCtx,
+    specialTuple,
+  }) => ({
     ...ev,
     path: node ? buildPath(node) : [],
     score,
+    rectGuide: extraCtx.rectGuide || 0,
+    specialTuple,
   });
 
-  const pushTopCandidate = (ev, node, score, violatesN2) => {
+  const pushTopCandidate = (
+    ev,
+    node,
+    score,
+    violatesN2,
+    extraCtx = {},
+    specialTuple = EMPTY_SPECIAL_TUPLE
+  ) => {
     if (!node) return;
     const steps = stepsOf(node);
     if (steps <= 0) return;
     if (!shouldAcceptEnd(node)) return;
 
     const sol = {
-      ...packCandidateFromEv(ev, node, score),
+      ...packCandidateFromEval({
+        ev,
+        node,
+        score,
+        extraCtx,
+        specialTuple,
+      }),
       violatesN2: !!violatesN2,
     };
 
     if (priority === "steps") {
-      topStepCandidates = mergeTopSolutions(
-        topStepCandidates,
-        [sol],
-        "steps",
-        specialPriority,
-        initTargetCombo,
-        10
-      );
+      pendingTopStepCandidates.push(sol);
+      if (pendingTopStepCandidates.length >= 32) {
+        topStepCandidates = flushPendingSolutions(
+          topStepCandidates,
+          pendingTopStepCandidates,
+          "steps",
+          specialPriority,
+          initTargetCombo,
+          10
+        );
+      }
     } else {
-      topComboCandidates = mergeTopSolutions(
-        topComboCandidates,
-        [sol],
-        "combo",
-        specialPriority,
-        initTargetCombo,
-        10
-      );
+      pendingTopComboCandidates.push(sol);
+      if (pendingTopComboCandidates.length >= 32) {
+        topComboCandidates = flushPendingSolutions(
+          topComboCandidates,
+          pendingTopComboCandidates,
+          "combo",
+          specialPriority,
+          initTargetCombo,
+          10
+        );
+      }
     }
   };
 
-  const considerBest = (ev, score, node, violatesN2) => {
+  const dominatesVec = (a, b) => {
+    if (!a || !b || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] < b[i]) return false;
+    }
+    return true;
+  };
+
+  const considerBest = (
+    ev,
+    score,
+    node,
+    violatesN2,
+    extraCtx = {},
+    specialTuple = EMPTY_SPECIAL_TUPLE
+  ) => {
     if (!shouldAcceptEnd(node)) return;
 
     const curSteps = stepsOf(node);
+
+    if (!hasSpecial) {
+      const curInitExact = hitsInitTargetComboExactly(ev);
+      const curTuple = buildNoSpecialRankTuple(
+        ev,
+        score,
+        curSteps,
+        violatesN2,
+        curInitExact
+      );
+
+      const bestSteps = bestGlobal.node ? stepsOf(bestGlobal.node) : Infinity;
+      const bestInitExact =
+        bestGlobal.node && hitsInitTargetComboExactly(bestGlobal);
+
+      const bestTuple = bestGlobal.node
+        ? buildNoSpecialRankTuple(
+            bestGlobal,
+            bestGlobal.score,
+            bestSteps,
+            bestGlobal.violatesN2,
+            bestInitExact
+          )
+        : null;
+
+      let better = false;
+      if (!bestTuple) better = true;
+      else if (lexTupleBetter(curTuple, bestTuple)) better = true;
+
+      if (better) {
+        bestGlobal = {
+          ...ev,
+          node,
+          score,
+          specialTuple,
+          rectGuide: extraCtx.rectGuide || 0,
+          violatesN2: !!violatesN2,
+        };
+      }
+
+      const solved = ev.combos >= target;
+      if (!violatesN2 && solved && curSteps > 0) {
+        if (curSteps < bestReachedSteps) bestReachedSteps = curSteps;
+      }
+      return;
+    }
+
+    const curTuple = [
+      violatesN2 ? 0 : 1,
+      ...specialTuple,
+      ev.initialAllEqual ? 1 : 0,
+      ev.initialCombos || 0,
+      ev.initialClearedCount || 0,
+      ev.combos || 0,
+      ev.clearedCount || 0,
+      hitsInitTargetComboExactly(ev) ? 1 : 0,
+      -curSteps,
+      Math.floor(score),
+    ];
+
     const bestSteps = bestGlobal.node ? stepsOf(bestGlobal.node) : Infinity;
-    const curSpecial = getSpecialScore(ev, specialPriority);
-    const bestSpecial = bestGlobal.specialScore ?? -Infinity;
-    const curInitExact = hitsInitTargetComboExactly(ev);
-    const bestInitExact = hitsInitTargetComboExactly(bestGlobal);
-    const curLegal = violatesN2 ? 0 : 1;
-    const bestLegal = bestGlobal.node ? (bestGlobal.violatesN2 ? 0 : 1) : -1;
+    const bestTuple = bestGlobal.node
+      ? [
+          bestGlobal.violatesN2 ? 0 : 1,
+          ...(bestGlobal.specialTuple || EMPTY_SPECIAL_TUPLE),
+          bestGlobal.initialAllEqual ? 1 : 0,
+          bestGlobal.initialCombos || 0,
+          bestGlobal.initialClearedCount || 0,
+          bestGlobal.combos || 0,
+          bestGlobal.clearedCount || 0,
+          hitsInitTargetComboExactly(bestGlobal) ? 1 : 0,
+          -bestSteps,
+          Math.floor(bestGlobal.score),
+        ]
+      : null;
 
     let better = false;
-
-    if (curLegal !== bestLegal) {
-      better = curLegal > bestLegal;
-    } else if (isRectMode) {
-      const curRectDone = isSpecialSatisfied(ev) ? 1 : 0;
-      const bestRectDone = isSpecialSatisfied(bestGlobal) ? 1 : 0;
-      const curRectOcc = ev.rectOcc || 0;
-      const bestRectOcc = bestGlobal.rectOcc || 0;
-
-      if (isRectBuildPhase(curSteps)) {
-        if (curRectDone !== bestRectDone) better = curRectDone > bestRectDone;
-        else if (curRectOcc !== bestRectOcc) better = curRectOcc > bestRectOcc;
-        else if (curSteps !== bestSteps) better = curSteps < bestSteps;
-        else if (score !== bestGlobal.score) better = score > bestGlobal.score;
-      } else {
-        if (curRectDone !== bestRectDone) better = curRectDone > bestRectDone;
-        else if (curRectOcc !== bestRectOcc) better = curRectOcc > bestRectOcc;
-        else if ((ev.combos || 0) !== (bestGlobal.combos || 0))
-          better = (ev.combos || 0) > (bestGlobal.combos || 0);
-        else if (curSteps !== bestSteps) better = curSteps < bestSteps;
-        else if (score !== bestGlobal.score) better = score > bestGlobal.score;
-      }
-    } else {
-      if (curSpecial !== bestSpecial) better = curSpecial > bestSpecial;
-      else if (curInitExact !== bestInitExact) better = curInitExact > bestInitExact;
-      else if ((ev.combos || 0) !== (bestGlobal.combos || 0))
-        better = (ev.combos || 0) > (bestGlobal.combos || 0);
-      else if ((ev.clearedCount || 0) !== (bestGlobal.clearedCount || 0))
-        better = (ev.clearedCount || 0) > (bestGlobal.clearedCount || 0);
-      else if (curSteps !== bestSteps) better = curSteps < bestSteps;
-      else if (score !== bestGlobal.score) better = score > bestGlobal.score;
-    }
+    if (!bestTuple) better = true;
+    else if (lexTupleBetter(curTuple, bestTuple)) better = true;
 
     if (better) {
       bestGlobal = {
         ...ev,
         node,
         score,
-        specialScore: curSpecial,
+        specialTuple,
+        rectGuide: extraCtx.rectGuide || 0,
         violatesN2: !!violatesN2,
       };
     }
 
-    const solved = hasSpecial ? isSolvedGoal(ev) : ev.combos >= target;
+    const solved = isSolvedGoal(ev, extraCtx);
     if (!violatesN2 && solved && curSteps > 0) {
       if (curSteps < bestReachedSteps) bestReachedSteps = curSteps;
     }
   };
 
-  const betterThanVisited = (key, ev, score, steps, rectOcc = 0) => {
+  const betterThanVisited = (
+    key,
+    ev,
+    score,
+    steps,
+    specialTuple,
+    violatesN2,
+    initExact,
+    visitedTuple
+  ) => {
     const prev = visitedBest.get(key);
-    const major = mode === "vertical" ? ev.verticalCombos : ev.horizontalCombos;
-    const rectDone = isRectMode ? (isSpecialSatisfied(ev) ? 1 : 0) : 0;
 
-    const rec = isRectMode
-      ? isRectBuildPhase(steps)
-        ? [rectDone, rectOcc, -steps]
-        : [rectDone, rectOcc, ev.combos || 0, ev.clearedCount || 0, -steps, score]
-      : [ev.combos || 0, major || 0, ev.clearedCount || 0, -steps, score];
+    if (hasSpecial) {
+      if (!prev) {
+        visitedBest.set(key, visitedTuple);
+        return true;
+      }
 
-    if (!prev) {
-      visitedBest.set(key, rec);
+      const cmp = lexTupleCompareDesc(prev, visitedTuple);
+      if (cmp <= 0) return false;
+
+      visitedBest.set(key, visitedTuple);
       return true;
     }
 
-    const dominates = (a, b) => a.every((v, i) => v >= b[i]);
+    const curVec = buildNoSpecialRankTuple(
+      ev,
+      score,
+      steps,
+      violatesN2,
+      initExact
+    );
 
-    if (prev.length === rec.length && dominates(prev, rec)) return false;
+    if (!prev) {
+      visitedBest.set(key, curVec);
+      return true;
+    }
+
+    if (dominatesVec(prev, curVec)) return false;
 
     let shouldUpdate = false;
-    for (let i = 0; i < rec.length; i++) {
-      if (rec[i] > prev[i]) {
+    for (let i = 0; i < curVec.length; i++) {
+      if (curVec[i] > prev[i]) {
         shouldUpdate = true;
         break;
       }
-      if (rec[i] < prev[i]) break;
+      if (curVec[i] < prev[i]) break;
     }
 
-    if (shouldUpdate || prev.length !== rec.length) visitedBest.set(key, rec);
-    return shouldUpdate || prev.length !== rec.length;
+    if (shouldUpdate || !Array.isArray(prev) || prev.length !== curVec.length) {
+      visitedBest.set(key, curVec);
+    }
+
+    return true;
   };
 
-  const evalState = (evalBoard, node, steps, scoreBias = 0, rectTarget = null) => {
+  const evalState = (
+    evalBoard,
+    node,
+    steps,
+    scoreBias = 0,
+    parentExtraCtx = null
+  ) => {
     const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
-    const ev = evaluateBoard(evalBoard, skyfall, initial);
-    if (exceedsInitialComboCap(ev)) return null;
+    const evRaw = evaluateBoard(evalBoard, skyfall, initial);
+    if (exceedsInitialComboCap(evRaw)) return null;
 
-    const targetInfo = rectTarget || (isRectMode ? chooseBestRectTarget(evalBoard) : null);
-    const rectOcc = isRectMode ? getRectTargetOccupancyScore(evalBoard, targetInfo) : 0;
-    ev.rectOcc = rectOcc;
+    const initInfo = extractInitialInfo(initial, evRaw);
+
+    const ev = {
+      ...evRaw,
+      initialCombos: toNum(
+        evRaw?.initialCombos ?? evRaw?.initCombos ?? initInfo.combos,
+        initInfo.combos
+      ),
+      initialClearedCount: toNum(
+        evRaw?.initialClearedCount ??
+          evRaw?.initClearedCount ??
+          evRaw?.initialCleared ??
+          initInfo.cleared,
+        initInfo.cleared
+      ),
+      initialMatchSizes: initInfo.matchSizes,
+      initialComboSizes: initInfo.matchSizes,
+      initialAllEqual: initInfo.allEqual,
+      initialDistinctSizeCount: initInfo.distinctSizeCount,
+    };
 
     const pot = combinedPotentialScore(evalBoard, mode);
+
+    let rectGuide = 0;
+    if (hasRectSpecial) {
+      const prevRectGuide = parentExtraCtx?.rectGuide;
+      rectGuide = shouldRefreshRectGuide(steps, prevRectGuide, hasRectSpecial)
+        ? getCheapRectGuideScoreFromCompiledSpecialList(
+            evalBoard,
+            compiledSpecials,
+            "initial"
+          )
+        : Number(prevRectGuide || 0);
+    }
+
+    const extraCtx = {
+      rectGuide,
+      initial,
+      initialCombos: ev.initialCombos,
+      initialClearedCount: ev.initialClearedCount,
+      initialMatchSizes: ev.initialMatchSizes,
+      initialComboSizes: ev.initialComboSizes,
+      initialAllEqual: ev.initialAllEqual,
+      initialDistinctSizeCount: ev.initialDistinctSizeCount,
+      initSignature: initInfo.signature,
+    };
+
+    const specialTuple = hasSpecial
+      ? getSpecialPriorityTupleCompiled(ev, compiledSpecials, extraCtx)
+      : EMPTY_SPECIAL_TUPLE;
+
     const rawScore = calcScore(
       ev,
       pot,
@@ -3164,11 +4052,89 @@ const beamSolve = (
       mode,
       priority,
       specialPriority,
-      violatesN2
+      violatesN2,
+      extraCtx
     );
-    const score = rawScore + scoreBias;
 
-    return { ev, pot, score, violatesN2, rectOcc, rectTarget: targetInfo };
+    let score = rawScore + scoreBias;
+
+    score += ev.initialCombos * 220000;
+    score += ev.initialClearedCount * 90000;
+    if (ev.initialAllEqual) score += 1800000;
+    if (hitsInitTargetComboExactly(ev)) score += 1400000;
+
+    score += getInitShieldScoreBias(
+      {
+        combos: ev.initialCombos,
+        cleared: ev.initialClearedCount,
+        matchSizes: ev.initialMatchSizes,
+        distinctSizeCount: ev.initialDistinctSizeCount,
+        allEqual: ev.initialAllEqual,
+      },
+      steps
+    );
+
+    if (hasInitSensitiveSpecial) {
+      score += getFreeMajor(ev) * 120000;
+      score -= Math.abs((ev.verticalCombos || 0) - (ev.horizontalCombos || 0)) * 15000;
+    }
+
+    const initExact = hitsInitTargetComboExactly(ev);
+
+    const visitedTuple = hasSpecial
+      ? [
+          violatesN2 ? 0 : 1,
+          ...specialTuple,
+          ev.initialAllEqual ? 1 : 0,
+          ev.initialCombos || 0,
+          ev.initialClearedCount || 0,
+          ev.combos || 0,
+          ev.clearedCount || 0,
+          initExact ? 1 : 0,
+          -steps,
+          Math.floor(score),
+        ]
+      : buildNoSpecialRankTuple(
+          ev,
+          score,
+          steps,
+          violatesN2,
+          initExact
+        );
+
+    const finalRankTuple = hasSpecial
+      ? [
+          violatesN2 ? 0 : 1,
+          ...specialTuple,
+          ev.initialAllEqual ? 1 : 0,
+          ev.initialCombos || 0,
+          ev.initialClearedCount || 0,
+          ev.combos || 0,
+          ev.clearedCount || 0,
+          initExact ? 1 : 0,
+          -steps,
+          Math.floor(score),
+        ]
+      : buildNoSpecialRankTuple(
+          ev,
+          score,
+          steps,
+          violatesN2,
+          initExact
+        );
+
+    return {
+      ev,
+      score,
+      violatesN2,
+      pot,
+      extraCtx,
+      specialTuple,
+      visitedTuple,
+      finalRankTuple,
+      initExact,
+      initInfo,
+    };
   };
 
   const tryPushState = ({
@@ -3180,26 +4146,52 @@ const beamSolve = (
     node,
     locked,
     scoreBias = 0,
-    rectTarget = null,
     outCandidates,
-    rectLocalChildren,
+    parentExtraCtx = null,
   }) => {
     const steps = stepsOf(node);
     const evalBoard = boardWithHeldFilled(nextBoard, hole, held);
-    const res = evalState(evalBoard, node, steps, scoreBias, rectTarget);
+    const res = evalState(evalBoard, node, steps, scoreBias, parentExtraCtx);
     if (!res) return;
 
-    const { ev, pot, score, violatesN2, rectOcc, rectTarget: nextRectTarget } = res;
-    const key = `${getBoardKey(nextBoard)}|${held}|${r},${c}|${locked ? 1 : 0}`;
-    if (!betterThanVisited(key, ev, score, steps, rectOcc)) return;
+    const {
+      ev,
+      score,
+      violatesN2,
+      extraCtx,
+      specialTuple,
+      visitedTuple,
+      finalRankTuple,
+      initExact,
+      initInfo,
+    } = res;
 
-    pushTopCandidate(ev, node, score, violatesN2);
-    considerBest(ev, score, node, violatesN2);
+    const key = `${getBoardKey(nextBoard)}|${held}|${r},${c}|${
+      locked ? 1 : 0
+    }|${buildVisitedInitPart(initInfo)}`;
 
-    const solved = (!hasSpecial ? ev.combos >= target : isSolvedGoal(ev)) && !violatesN2;
+    if (
+      !betterThanVisited(
+        key,
+        ev,
+        score,
+        steps,
+        specialTuple,
+        violatesN2,
+        initExact,
+        visitedTuple
+      )
+    ) {
+      return;
+    }
+
+    pushTopCandidate(ev, node, score, violatesN2, extraCtx, specialTuple);
+    considerBest(ev, score, node, violatesN2, extraCtx, specialTuple);
+
+    const solved = isSolvedGoal(ev, extraCtx) && !violatesN2;
     if (solved && shouldAcceptEnd(node)) return "solved";
 
-    const child = {
+    outCandidates.push({
       board: nextBoard,
       held,
       hole,
@@ -3209,24 +4201,13 @@ const beamSolve = (
       locked,
       score,
       ev,
-      pot,
       violatesN2,
-      rectOcc,
-      rectTarget: nextRectTarget,
-    };
-
-    if (isRectMode && isRectBuildPhase(steps)) {
-      child.rectLocalKey =
-        (violatesN2 ? 0 : 1) * 1e15 +
-        (isSpecialSatisfied(ev) ? 1 : 0) * 1e12 +
-        rectOcc * 1e5 -
-        steps;
-      rectLocalChildren.push(child);
-      rectLocalChildren.sort((a, b) => b.rectLocalKey - a.rectLocalKey);
-      rectLocalChildren.length = Math.min(rectLocalChildren.length, diagonal ? 3 : 2);
-    } else {
-      outCandidates.push(child);
-    }
+      extraCtx,
+      specialTuple,
+      visitedTuple,
+      finalRankTuple,
+      _poolRankCached: [],
+    });
 
     return "keep";
   };
@@ -3252,9 +4233,8 @@ const beamSolve = (
 
     const node = makeNode(null, r, c);
     const locked = heldMark === 2;
-    const scoreBias = hasSpecial ? -6000000 : 0;
 
-    const res = tryPushState({
+    tryPushState({
       nextBoard: boardCopy,
       held,
       hole,
@@ -3262,12 +4242,10 @@ const beamSolve = (
       c,
       node,
       locked,
-      scoreBias,
+      scoreBias: hasSpecial ? -2500000 : 0,
       outCandidates: beam,
-      rectLocalChildren: [],
+      parentExtraCtx: null,
     });
-
-    if (res === "solved") return;
   };
 
   if (useRow0) {
@@ -3277,76 +4255,72 @@ const beamSolve = (
     for (let c = 0; c < COLS; c++) pushInitState(r, c, false);
   }
 
-  const sortComboCandidates = (candidates, step = 0) => {
+  reportProgress(true);
+
+  const sortCandidatesLexicographic = (candidates) => {
+    for (const st of candidates) {
+      if (!st.finalRankTuple) {
+        const steps = stepsOf(st.node);
+        const initExact = hitsInitTargetComboExactly(st.ev);
+
+        st.finalRankTuple = [
+          st.violatesN2 ? 0 : 1,
+          ...(st.specialTuple || EMPTY_SPECIAL_TUPLE),
+          st.ev.initialAllEqual ? 1 : 0,
+          st.ev.initialCombos || 0,
+          st.ev.initialClearedCount || 0,
+          st.ev.combos || 0,
+          st.ev.clearedCount || 0,
+          initExact ? 1 : 0,
+          -steps,
+          Math.floor(st.score),
+        ];
+      }
+    }
+
+    candidates.sort((a, b) =>
+      lexTupleCompareDesc(a.finalRankTuple, b.finalRankTuple)
+    );
+  };
+
+  const sortCandidatesNoSpecialCombo = (candidates) => {
     candidates.sort((a, b) => {
-      const aLegal = a.violatesN2 ? 0 : 1;
-      const bLegal = b.violatesN2 ? 0 : 1;
-      if (aLegal !== bLegal) return bLegal - aLegal;
+      const aInit = hitsInitTargetComboExactly(a.ev) ? 1 : 0;
+      const bInit = hitsInitTargetComboExactly(b.ev) ? 1 : 0;
 
-      const aReach =
-        (!hasSpecial ? a.ev.combos >= target : isSolvedGoal(a.ev)) && !a.violatesN2;
-      const bReach =
-        (!hasSpecial ? b.ev.combos >= target : isSolvedGoal(b.ev)) && !b.violatesN2;
-      if (aReach !== bReach) return aReach ? -1 : 1;
+      const aSteps = stepsOf(a.node);
+      const bSteps = stepsOf(b.node);
 
-      if (isRectMode) {
-        const aDone = isSpecialSatisfied(a.ev) ? 1 : 0;
-        const bDone = isSpecialSatisfied(b.ev) ? 1 : 0;
-        if (aDone !== bDone) return bDone - aDone;
+      const ta = buildNoSpecialRankTuple(
+        a.ev,
+        a.score,
+        aSteps,
+        a.violatesN2,
+        aInit
+      );
+      const tb = buildNoSpecialRankTuple(
+        b.ev,
+        b.score,
+        bSteps,
+        b.violatesN2,
+        bInit
+      );
 
-        const ao = a.rectOcc || 0;
-        const bo = b.rectOcc || 0;
-        if (ao !== bo) return bo - ao;
-
-        if (!isRectBuildPhase(step) && (a.ev.combos || 0) !== (b.ev.combos || 0)) {
-          return (b.ev.combos || 0) - (a.ev.combos || 0);
-        }
-        return b.score - a.score;
-      }
-
-      if (hasSpecial) {
-        const as = getSpecialScore(a.ev, specialPriority);
-        const bs = getSpecialScore(b.ev, specialPriority);
-        if (as !== bs) return bs - as;
-      }
-
-      if (a.score !== b.score) return b.score - a.score;
-      return (b.ev.clearedCount || 0) - (a.ev.clearedCount || 0);
+      return lexTupleCompareDesc(ta, tb);
     });
   };
 
-  const getMissTier = (st, step) => {
-    if (isRectMode) {
-      if (isSpecialSatisfied(st.ev)) return 0;
-      const occ = st.rectOcc || 0;
-
-      if (isRectBuildPhase(step)) {
-        if (occ >= 8500) return 1;
-        if (occ >= 7500) return 2;
-        if (occ >= 6500) return 3;
-        if (occ >= 5500) return 4;
-        if (occ >= 4500) return 5;
-        if (occ >= 3500) return 6;
-        if (occ >= 2500) return 7;
-        return 8;
-      }
-
-      if (occ >= 8500) return 1;
-      if ((st.ev.combos || 0) >= 5) return 2;
-      if ((st.ev.combos || 0) >= 4) return 3;
-      return 4;
-    }
-
-    return !hasSpecial
-      ? Math.max(0, target - st.ev.combos)
-      : isSolvedGoal(st.ev)
-      ? 0
-      : Math.max(1, target - st.ev.combos);
+  const getMissTier = (st) => {
+    if (!hasSpecial) return Math.max(0, target - (st.ev.combos || 0));
+    if (isSolvedGoal(st.ev, st.extraCtx)) return 0;
+    return Math.max(1, target - (st.ev.combos || 0));
   };
 
   const buildQuota = (counts, remain, quotaW) => {
     let sumW = 0;
-    for (let i = 0; i < counts.length; i++) if (counts[i] > 0) sumW += quotaW[i];
+    for (let i = 0; i < counts.length; i++) {
+      if (counts[i] > 0) sumW += quotaW[i];
+    }
 
     const quota = new Array(counts.length).fill(0);
     if (sumW <= 0) return quota;
@@ -3359,16 +4333,103 @@ const beamSolve = (
     return quota;
   };
 
-  const pickBeamCombo = (candidates, step, explore) => {
-    sortComboCandidates(candidates, step);
+  const pickBeamLexicographicDiverse = (
+    candidates,
+    beamWidth,
+    mode,
+    specialPriorities,
+    initTargetCombo
+  ) => {
+    if (!Array.isArray(candidates) || candidates.length === 0) return [];
+
+    sortCandidatesLexicographic(candidates);
+
+    const eliteN = Math.min(candidates.length, Math.max(6, (beamWidth / 3) | 0));
+    const out = candidates.slice(0, eliteN);
+
+    if (out.length >= beamWidth) return out.slice(0, beamWidth);
+
+    const buckets = new Map();
+
+    for (let i = eliteN; i < candidates.length; i++) {
+      const st = candidates[i];
+      const doneCount = sumSpecialDoneFromTuple(
+        st.specialTuple || EMPTY_SPECIAL_TUPLE
+      );
+      const rectGuideTier = Math.floor(Number(st.extraCtx?.rectGuide || 0) / 1000);
+      const initComboTier = st.ev.initialCombos || 0;
+      const initClearTier = st.ev.initialClearedCount || 0;
+      const comboTier = st.ev.combos || 0;
+      const clearTier = st.ev.clearedCount || 0;
+
+      const key = [
+        st.violatesN2 ? 0 : 1,
+        doneCount,
+        st.ev.initialAllEqual ? 1 : 0,
+        initComboTier,
+        initClearTier,
+        comboTier,
+        clearTier,
+        rectGuideTier,
+      ].join("|");
+
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(st);
+    }
+
+    for (const arr of buckets.values()) {
+      precomputeCandidateRanks(arr, mode, specialPriorities, initTargetCombo);
+      arr.sort((a, b) => {
+        const t = lexCompareDesc(a._poolRankCached, b._poolRankCached);
+        if (t !== 0) return t;
+
+        if ((a.ev.initialAllEqual ? 1 : 0) !== (b.ev.initialAllEqual ? 1 : 0)) {
+          return (b.ev.initialAllEqual ? 1 : 0) - (a.ev.initialAllEqual ? 1 : 0);
+        }
+
+        if ((a.ev.initialCombos || 0) !== (b.ev.initialCombos || 0)) {
+          return (b.ev.initialCombos || 0) - (a.ev.initialCombos || 0);
+        }
+
+        if (
+          (a.ev.initialClearedCount || 0) !== (b.ev.initialClearedCount || 0)
+        ) {
+          return (
+            (b.ev.initialClearedCount || 0) - (a.ev.initialClearedCount || 0)
+          );
+        }
+
+        return b.score - a.score;
+      });
+    }
+
+    const bucketKeys = Array.from(buckets.keys());
+    let idx = 0;
+
+    while (out.length < beamWidth && bucketKeys.length > 0) {
+      const k = bucketKeys[idx % bucketKeys.length];
+      const arr = buckets.get(k);
+
+      if (arr && arr.length) {
+        out.push(arr.shift());
+        idx++;
+      } else {
+        buckets.delete(k);
+        const removeIdx = idx % bucketKeys.length;
+        bucketKeys.splice(removeIdx, 1);
+      }
+    }
+
+    return out.slice(0, beamWidth);
+  };
+
+  const pickBeamCombo = (candidates, explore) => {
+    if (hasSpecial) sortCandidatesLexicographic(candidates);
+    else sortCandidatesNoSpecialCombo(candidates);
 
     const BW = cfg.beamWidth;
     const out = [];
-    const eliteN = isRectMode
-      ? isRectBuildPhase(step)
-        ? Math.min(candidates.length, Math.max(2, (BW / 8) | 0))
-        : Math.min(candidates.length, Math.max(3, (BW / 6) | 0))
-      : Math.min(candidates.length, Math.max(6, (BW / 3) | 0));
+    const eliteN = Math.min(candidates.length, Math.max(6, (BW / 3) | 0));
 
     for (let i = 0; i < eliteN && out.length < BW; i++) out.push(candidates[i]);
     if (out.length >= BW) return out;
@@ -3378,7 +4439,7 @@ const beamSolve = (
     const counts = new Array(maxTier + 1).fill(0);
 
     for (let i = eliteN; i < candidates.length; i++) {
-      const miss = getMissTier(candidates[i], step);
+      const miss = getMissTier(candidates[i]);
       if (miss <= maxTier) counts[miss]++;
     }
 
@@ -3397,7 +4458,7 @@ const beamSolve = (
     for (let pass = 0; pass < 3 && out.length < BW; pass++) {
       for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
         const st = candidates[i];
-        const miss = getMissTier(st, step);
+        const miss = getMissTier(st);
         if (miss > maxTier) continue;
         if (pass < 2 && took[miss] >= quota[miss]) continue;
 
@@ -3406,7 +4467,9 @@ const beamSolve = (
 
         if (pass === 0) {
           if (usedPos.has(pc)) continue;
-          if (explore && usedRegion.has(rg) && Math.random() < regionSkipProb) continue;
+          if (explore && usedRegion.has(rg) && Math.random() < regionSkipProb) {
+            continue;
+          }
         } else if (pass === 1) {
           if (usedPos.has(pc)) continue;
         }
@@ -3421,34 +4484,115 @@ const beamSolve = (
     return out.slice(0, BW);
   };
 
-  const getRectBuildScore = (ev, score, step, rectOcc = 0) => {
-    const rectDone = isSpecialSatisfied(ev) ? 1 : 0;
-    if (isRectBuildPhase(step)) {
-      return rectDone * 1e12 + rectOcc * 1e5 - step;
+  const pickBeamStepsNoSpecial = (candidates) => {
+    if (!Array.isArray(candidates) || candidates.length === 0) return [];
+
+    const BW = cfg.beamWidth;
+    sortCandidatesNoSpecialCombo(candidates);
+
+    const eliteN = Math.min(candidates.length, Math.max(8, (BW / 4) | 0));
+    const out = candidates.slice(0, eliteN);
+    if (out.length >= BW) return out.slice(0, BW);
+
+    const buckets = new Map();
+
+    for (let i = eliteN; i < candidates.length; i++) {
+      const st = candidates[i];
+      const legal = st.violatesN2 ? 0 : 1;
+      const initCombos = st.ev.initialCombos || 0;
+      const initCleared = st.ev.initialClearedCount || 0;
+      const combos = st.ev.combos || 0;
+      const cleared = st.ev.clearedCount || 0;
+      const initExact = hitsInitTargetComboExactly(st.ev) ? 1 : 0;
+      const initEq = st.ev.initialAllEqual ? 1 : 0;
+      const miss = Math.min(8, Math.max(0, target - combos));
+      const adaptiveMajor = getAdaptiveMajor(st.ev);
+
+      const key = hasInitSensitiveSpecial
+        ? [
+            legal,
+            initExact,
+            initEq,
+            initCombos,
+            initCleared,
+            miss,
+            combos,
+            cleared,
+          ].join("|")
+        : [
+            legal,
+            initExact,
+            initEq,
+            initCombos,
+            initCleared,
+            miss,
+            adaptiveMajor,
+            combos,
+            cleared,
+          ].join("|");
+
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(st);
     }
-    return (
-      rectDone * 1e12 +
-      rectOcc * 1e4 +
-      (ev.combos || 0) * 1000 +
-      (ev.clearedCount || 0) * 10 +
-      Math.floor(score)
-    );
+
+    for (const arr of buckets.values()) {
+      arr.sort((a, b) => {
+        const aInit = hitsInitTargetComboExactly(a.ev) ? 1 : 0;
+        const bInit = hitsInitTargetComboExactly(b.ev) ? 1 : 0;
+        const aSteps = stepsOf(a.node);
+        const bSteps = stepsOf(b.node);
+
+        const ta = buildNoSpecialRankTuple(
+          a.ev,
+          a.score,
+          aSteps,
+          a.violatesN2,
+          aInit
+        );
+        const tb = buildNoSpecialRankTuple(
+          b.ev,
+          b.score,
+          bSteps,
+          b.violatesN2,
+          bInit
+        );
+
+        return lexTupleCompareDesc(ta, tb);
+      });
+    }
+
+    const bucketKeys = Array.from(buckets.keys());
+    let idx = 0;
+
+    while (out.length < BW && bucketKeys.length > 0) {
+      const k = bucketKeys[idx % bucketKeys.length];
+      const arr = buckets.get(k);
+
+      if (arr && arr.length) {
+        out.push(arr.shift());
+        idx++;
+      } else {
+        buckets.delete(k);
+        const removeIdx = idx % bucketKeys.length;
+        bucketKeys.splice(removeIdx, 1);
+      }
+    }
+
+    return out.slice(0, BW);
   };
 
   for (let step = 0; step < cfg.maxSteps; step++) {
-    if (bestReachedSteps !== Infinity && step >= bestReachedSteps) break;
-
     let candidates = [];
+    if (bestReachedSteps !== Infinity && step >= bestReachedSteps) break;
 
     for (const state of beam) {
       if (nodesExpanded > maxNodesEffective) break;
       if (state.locked) continue;
 
-      const rectLocalChildren = [];
-
       for (const [dr, dc] of dirsPlay) {
         const nr = state.r + dr;
         const nc = state.c + dc;
+
         if (nr < 0 || nr >= TOTAL_ROWS || nc < 0 || nc >= COLS) continue;
         if (!useRow0 && nr === 0) continue;
         if (
@@ -3460,11 +4604,10 @@ const beamSolve = (
         }
 
         const newNode = makeNode(state.node, nr, nc);
-        const newSteps = stepsOf(newNode);
 
-        // row0 -> play
         if (useRow0 && state.r === 0) {
           if (nr !== 1) continue;
+
           const destVal = state.board[nr][nc];
           const chk = stepConstraint(destVal);
           if (!chk.ok) continue;
@@ -3482,16 +4625,16 @@ const beamSolve = (
             c: nc,
             node: newNode,
             locked: nextLocked,
-            rectTarget: state.rectTarget,
+            scoreBias: 0,
             outCandidates: candidates,
-            rectLocalChildren,
+            parentExtraCtx: state.extraCtx,
           });
 
           nodesExpanded++;
+          reportProgress();
           continue;
         }
 
-        // play -> row0
         if (useRow0 && state.r >= PLAY_ROWS_START && nr === 0) {
           const destVal = state.board[0][nc];
           const chk = stepConstraint(destVal);
@@ -3500,17 +4643,37 @@ const beamSolve = (
           const evalBoard = clone2D(state.board);
           if (state.hole) evalBoard[state.hole.r][state.hole.c] = destVal;
 
-          const res = evalState(evalBoard, newNode, newSteps, 0, state.rectTarget);
+          const res = evalState(
+            evalBoard,
+            newNode,
+            stepsOf(newNode),
+            0,
+            state.extraCtx
+          );
           if (!res) continue;
 
-          const { ev, score, violatesN2 } = res;
-          pushTopCandidate(ev, newNode, score, violatesN2);
-          considerBest(ev, score, newNode, violatesN2);
+          pushTopCandidate(
+            res.ev,
+            newNode,
+            res.score,
+            res.violatesN2,
+            res.extraCtx,
+            res.specialTuple
+          );
+          considerBest(
+            res.ev,
+            res.score,
+            newNode,
+            res.violatesN2,
+            res.extraCtx,
+            res.specialTuple
+          );
+
           nodesExpanded++;
+          reportProgress();
           continue;
         }
 
-        // play -> play
         if (nr < PLAY_ROWS_START || !state.hole) continue;
 
         const destVal = state.board[nr][nc];
@@ -3529,55 +4692,57 @@ const beamSolve = (
           c: nc,
           node: newNode,
           locked: nextLocked,
-          rectTarget: state.rectTarget,
+          scoreBias: 0,
           outCandidates: candidates,
-          rectLocalChildren,
+          parentExtraCtx: state.extraCtx,
         });
 
         nodesExpanded++;
+        reportProgress();
       }
-
-      if (rectLocalChildren.length) candidates.push(...rectLocalChildren);
     }
 
     if (!candidates.length || nodesExpanded > maxNodesEffective) break;
 
-    if (priority === "combo") {
-      beam = pickBeamCombo(candidates, step, diagonal && skyfall);
+    if (!hasSpecial) {
+      if (priority === "combo") {
+        beam = pickBeamCombo(candidates, diagonal && skyfall);
+      } else {
+        beam = pickBeamStepsNoSpecial(candidates);
+      }
     } else {
-      const buckets = new Map();
-
-      for (const st of candidates) {
-        const legalBonus = st.violatesN2 ? 0 : 1000000000;
-        const key = isRectMode
-          ? legalBonus + getRectBuildScore(st.ev, st.score, step, st.rectOcc || 0)
-          : legalBonus +
-            (mode === "vertical" ? st.ev.verticalCombos : st.ev.horizontalCombos) *
-              1000000 +
-            st.ev.combos * 1000 +
-            st.ev.clearedCount;
-
-        if (!buckets.has(key)) buckets.set(key, []);
-        buckets.get(key).push(st);
-      }
-
-      for (const arr of buckets.values()) arr.sort((a, b) => b.score - a.score);
-
-      const bucketKeys = Array.from(buckets.keys()).sort((a, b) => b - a);
-      const newBeam = [];
-      let i = 0;
-
-      while (newBeam.length < cfg.beamWidth && bucketKeys.length > 0) {
-        const idx = i % bucketKeys.length;
-        const arr = buckets.get(bucketKeys[idx]);
-        if (arr.length) newBeam.push(arr.shift());
-        else bucketKeys.splice(idx, 1);
-        i++;
-      }
-
-      beam = newBeam;
+      beam = pickBeamLexicographicDiverse(
+        candidates,
+        cfg.beamWidth,
+        mode,
+        specialPriority,
+        initTargetCombo
+      );
     }
+
+    reportProgress(true);
+    await yieldToBrowser();
   }
+
+  topStepCandidates = flushPendingSolutions(
+    topStepCandidates,
+    pendingTopStepCandidates,
+    "steps",
+    specialPriority,
+    initTargetCombo,
+    10
+  );
+
+  topComboCandidates = flushPendingSolutions(
+    topComboCandidates,
+    pendingTopComboCandidates,
+    "combo",
+    specialPriority,
+    initTargetCombo,
+    10
+  );
+
+  reportProgress(true);
 
   bestGlobal.path = bestGlobal.node ? buildPath(bestGlobal.node) : [];
   bestGlobal.nodesExpanded = nodesExpanded;
@@ -3587,10 +4752,22 @@ const beamSolve = (
     ...bestGlobal,
     topSteps: topStepCandidates,
     topCombos: topComboCandidates,
+    success: hasSpecial
+      ? isAllSpecialSatisfiedCompiled(bestGlobal, compiledSpecials, {
+          rectGuide: bestGlobal.rectGuide || 0,
+          initialCombos: bestGlobal.initialCombos || 0,
+          initialClearedCount: bestGlobal.initialClearedCount || 0,
+          initialMatchSizes: bestGlobal.initialMatchSizes || [],
+          initialComboSizes: bestGlobal.initialComboSizes || [],
+          initialAllEqual: !!bestGlobal.initialAllEqual,
+          initialDistinctSizeCount: bestGlobal.initialDistinctSizeCount || 0,
+        })
+      : undefined,
   };
 };
- 
-  const stopToBase = useCallback((clearStep = true) => {
+
+//536244441114
+const stopToBase = useCallback((clearStep = true) => {
 	  // 1) 停動畫
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
 	  replayAnimRef.current.raf = 0;
@@ -3615,71 +4792,103 @@ const [solutionPools, setSolutionPools] = useState({
   combo: [],
 });
 const [selectedPoolIndex, setSelectedPoolIndex] = useState(0);
+
 const solutionPoolsRef = useRef({
   steps: [],
   combo: [],
 });
+
 const solutionPoolContextRef = useRef({
   resetKey: "",
 });
+
 useEffect(() => {
   solutionPoolsRef.current = solutionPools;
 }, [solutionPools]);
+
 const getPathSteps = (path) => Math.max(0, (path?.length || 0) - 1);
+
+const getNormalizedSpecialSlots = (specialPriorities) => {
+  const src = Array.isArray(specialPriorities) ? specialPriorities : [];
+  const out = src.slice(0, 3);
+
+  while (out.length < 3) out.push({ type: "none" });
+
+  return out.map((sp) =>
+    sp && sp.type ? sp : { type: "none" }
+  );
+};
+
+const getSolutionSpecialSlotStatus = (sol, specialPriorities) => {
+  const slots = getNormalizedSpecialSlots(specialPriorities);
+  const extraCtx = {
+    rectGuide: Number(sol?.rectGuide || 0),
+  };
+
+  return slots.map((sp) => {
+    if (!sp || sp.type === "none") {
+      return {
+        type: "none",
+        done: true,
+        guide: 0,
+        label: "無",
+      };
+    }
+
+    const progress = getSingleSpecialProgress(sol, sp, extraCtx);
+
+    return {
+      type: sp.type,
+      done: !!progress.done,
+      guide: Number(progress.guide || 0),
+      label: getSpecialPriorityLabel(sp),
+    };
+  });
+};
+
+const isSolutionAllSpecialSatisfied = (sol, specialPriorities) => {
+  const normalized = normalizeSpecialPriorityList(specialPriorities);
+  const extraCtx = {
+    rectGuide: Number(sol?.rectGuide || 0),
+  };
+  return isAllSpecialSatisfied(sol, normalized, extraCtx);
+};
+
+const hasAnyShapeSpecial = (specialPriorities) => {
+  return normalizeSpecialPriorityList(specialPriorities).some(
+    (sp) => sp.type === "cross" || sp.type === "l" || sp.type === "t"
+  );
+};
+
+const hasAnyRectSpecial = (specialPriorities) => {
+  return normalizeSpecialPriorityList(specialPriorities).some(
+    (sp) => sp.type === "rect"
+  );
+};
+
+const getRectTotalCount = (sol) => {
+  return (
+    Object.values(sol?.initialPatternCounts?.rect || {}).reduce(
+      (acc, g) => acc + (g?.total || 0),
+      0
+    ) || 0
+  );
+};
+
 const filterSolutionsByMaxSteps = (list, maxSteps) => {
   return (list || []).filter((sol) => getPathSteps(sol.path) <= maxSteps);
 };
+
 const getSolutionGroupKey = (sol) => {
   const initCombo = sol.initialCombos || 0;
   const skyfallCombo = sol.skyfallCombos || 0;
   return `${initCombo}|${skyfallCombo}`;
 };
+
 const getSolutionMergeSignature = (sol) => {
   return `${sol.initialCombos || 0}|${sol.skyfallCombos || 0}`;
 };
-const shouldReplaceSameComboSignature = (
-  prev,
-  cur,
-  mode,
-  specialPriorities,
-  initTargetCombo
-) => {
-  const prevSteps = getPathSteps(prev.path);
-  const curSteps = getPathSteps(cur.path);
 
-  // 同首消+疊消，只留步數最小
-  if (curSteps < prevSteps) return true;
-  if (curSteps > prevSteps) return false;
-
-  // 步數相同時，再用 rank 比高低
-  const prevRank = makePoolRank(prev, mode, specialPriorities, initTargetCombo);
-  const curRank = makePoolRank(cur, mode, specialPriorities, initTargetCombo);
-
-  return isLexBetter(curRank, prevRank);
-};
-const makePoolRank = (sol, mode, specialPriorities, initTargetCombo) => {
-  const initialCombos = sol.initialCombos || 0;
-  const totalCombos = sol.combos || 0;
-  const cleared = sol.clearedCount || 0;
-  const steps = getPathSteps(sol.path);
-
-  const legal = sol.violatesN2 ? 0 : 1;
-  const specialSatTuple = (specialPriorities || []).map((sp) =>
-    isSpecialSatisfiedBy(sol, sp) ? 1 : 0
-  );
-  const initExact = initialCombos === initTargetCombo ? 1 : 0;
-  const score = sol.score || 0;
-
-  return [
-    legal,
-    ...specialSatTuple,
-    initExact,
-    totalCombos,
-    -steps,
-    score,
-    cleared,
-  ];
-};
 const lexCompareDesc = (a, b) => {
   const len = Math.max(a.length, b.length);
   for (let i = 0; i < len; i++) {
@@ -3689,6 +4898,108 @@ const lexCompareDesc = (a, b) => {
   }
   return 0;
 };
+
+const EMPTY_SPECIAL_TUPLE = Object.freeze([]);
+
+const shouldRefreshRectGuide = (steps, prevRectGuide, hasRectSpecial) => {
+  if (!hasRectSpecial) return false;
+  if (prevRectGuide == null) return true;
+  if (steps <= 6) return true;
+  return steps % 2 === 0;
+};
+
+const buildVisitedTupleFast = ({
+  ev,
+  steps,
+  score,
+  mode,
+  hasSpecial,
+  specialTuple,
+  violatesN2,
+  initExact,
+}) => {
+  if (!hasSpecial) {
+    return [
+      violatesN2 ? 0 : 1,
+      ev.combos || 0,
+      mode === "vertical"
+        ? ev.verticalCombos || 0
+        : mode === "horizontal"
+        ? ev.horizontalCombos || 0
+        : 0,
+      ev.clearedCount || 0,
+      initExact ? 1 : 0,
+      -steps,
+      Math.floor(score),
+    ];
+  }
+
+  return [
+    violatesN2 ? 0 : 1,
+    sumSpecialDoneFromTuple(specialTuple),
+    sumSpecialGuideFromTuple(specialTuple),
+    ev.combos || 0,
+    ev.clearedCount || 0,
+    initExact ? 1 : 0,
+    -steps,
+    Math.floor(score),
+  ];
+};
+
+const buildFinalRankTupleFast = ({
+  ev,
+  steps,
+  score,
+  specialTuple,
+  violatesN2,
+  initExact,
+}) => {
+  return [
+    violatesN2 ? 0 : 1,
+    ...(specialTuple || EMPTY_SPECIAL_TUPLE),
+    initExact ? 1 : 0,
+    ev.combos || 0,
+    ev.clearedCount || 0,
+    -steps,
+    Math.floor(score),
+  ];
+};
+
+const precomputeCandidateRanks = (
+  candidates,
+  mode,
+  specialPriorities,
+  initTargetCombo
+) => {
+  for (const st of candidates) {
+    if (!st._poolRank) {
+      st._poolRank = makePoolRank(st, mode, specialPriorities, initTargetCombo);
+    }
+  }
+  return candidates;
+};
+
+const flushPendingSolutions = (
+  currentList,
+  pendingList,
+  mode,
+  specialPriorities,
+  initTargetCombo,
+  limit = 10
+) => {
+  if (!pendingList.length) return currentList;
+  const merged = mergeTopSolutions(
+    currentList,
+    pendingList,
+    mode,
+    specialPriorities,
+    initTargetCombo,
+    limit
+  );
+  pendingList.length = 0;
+  return merged;
+};
+
 const isLexBetter = (a, b) => {
   const len = Math.max(a.length, b.length);
   for (let i = 0; i < len; i++) {
@@ -3699,6 +5010,111 @@ const isLexBetter = (a, b) => {
   }
   return false;
 };
+
+const makePoolExtraCtx = (sol, specialPriorities) => {
+  const normalized = normalizeSpecialPriorityList(specialPriorities);
+  const hasRectSpecial = normalized.some((sp) => sp.type === "rect");
+
+  return {
+    rectGuide: hasRectSpecial ? Number(sol.rectGuide || 0) : 0,
+  };
+};
+
+const makePoolRank = (sol, mode, specialPriorities, initTargetCombo) => {
+  const cacheKey = JSON.stringify({
+    mode,
+    initTargetCombo: Number(initTargetCombo) || 0,
+    specialPriorities: Array.isArray(specialPriorities)
+      ? specialPriorities
+      : specialPriorities
+      ? [specialPriorities]
+      : [],
+  });
+
+  if (
+    sol?._poolRankCached &&
+    sol?._poolRankCacheKey === cacheKey
+  ) {
+    return sol._poolRankCached;
+  }
+
+  const initialCombos = sol.initialCombos || 0;
+  const totalCombos = sol.combos || 0;
+  const cleared = sol.clearedCount || 0;
+  const steps = getPathSteps(sol.path);
+  const legal = sol.violatesN2 ? 0 : 1;
+
+  const initExact =
+    Number.isFinite(Number(initTargetCombo)) &&
+    Number(initTargetCombo) > 0 &&
+    initialCombos === Number(initTargetCombo)
+      ? 1
+      : 0;
+
+  const extraCtx = {
+    rectGuide: Number(sol.rectGuide || 0),
+  };
+
+  const specialTuple =
+    Array.isArray(sol.specialTuple) && sol._specialTupleSource === JSON.stringify(specialPriorities)
+      ? sol.specialTuple
+      : getSpecialPriorityTuple(sol, specialPriorities, extraCtx);
+
+  // 這裡是你真正的候選排序主軸
+  const rank = [
+    legal,
+
+    // 特優先組合先決
+    ...specialTuple,
+
+    // 再看首消是否剛好達標
+    initExact,
+
+    // 再看總 combo（首消+疊消）
+    totalCombos,
+
+    // 再看步數（越少越好）
+    -steps,
+
+    // 再看總消珠數
+    cleared,
+
+    // 最後才看方向偏好與原始 score
+    mode === "vertical"
+      ? sol.verticalCombos || 0
+      : mode === "horizontal"
+      ? sol.horizontalCombos || 0
+      : 0,
+
+    Math.floor(sol.score || 0),
+  ];
+
+  sol._poolRankCached = rank;
+  sol._poolRankCacheKey = cacheKey;
+  return rank;
+};
+
+const shouldReplaceSameComboSignature = (
+  prev,
+  cur,
+  mode,
+  specialPriorities,
+  initTargetCombo
+) => {
+  const prevSteps = getPathSteps(prev.path);
+  const curSteps = getPathSteps(cur.path);
+
+  // ✅ 同【首消+疊消】時，永遠先保留最短路徑
+  if (curSteps < prevSteps) return true;
+  if (curSteps > prevSteps) return false;
+
+  // ✅ 只有步數相同時，才用原本排序規則決定
+  const prevRank = makePoolRank(prev, mode, specialPriorities, initTargetCombo);
+  const curRank = makePoolRank(cur, mode, specialPriorities, initTargetCombo);
+
+  return isLexBetter(curRank, prevRank);
+};
+
 const mergeTopSolutions = (
   oldList,
   newList,
@@ -3709,7 +5125,7 @@ const mergeTopSolutions = (
 ) => {
   const bestBySig = new Map();
 
-  for (const sol of [...oldList, ...newList]) {
+  for (const sol of [...(oldList || []), ...(newList || [])]) {
     if (!sol || !sol.path || sol.path.length === 0) continue;
 
     const sig = getSolutionMergeSignature(sol);
@@ -3721,12 +5137,12 @@ const mergeTopSolutions = (
     }
 
     const replace = shouldReplaceSameComboSignature(
-  prev,
-  sol,
-  mode,
-  specialPriorities,
-  initTargetCombo
-);
+      prev,
+      sol,
+      mode,
+      specialPriorities,
+      initTargetCombo
+    );
 
     if (replace) {
       bestBySig.set(sig, sol);
@@ -3735,15 +5151,12 @@ const mergeTopSolutions = (
 
   const arr = Array.from(bestBySig.values());
 
-  arr.sort((a, b) =>
-  lexCompareDesc(
-    makePoolRank(a, mode, specialPriorities, initTargetCombo),
-    makePoolRank(b, mode, specialPriorities, initTargetCombo)
-  )
-);
+  precomputeCandidateRanks(arr, mode, specialPriorities, initTargetCombo);
+  arr.sort((a, b) => lexCompareDesc(a._poolRankCached, b._poolRankCached));
 
   return arr.slice(0, limit);
 };
+
 const makeSolutionResetKey = (
   baseBoard,
   diagonalEnabled,
@@ -3757,11 +5170,13 @@ const makeSolutionResetKey = (
     autoRow0Expanded: !!autoRow0Expanded,
   });
 };
+
 const clearSolutionPools = useCallback(() => {
   setSolutionPools({ steps: [], combo: [] });
   setSelectedPoolIndex(0);
   solutionPoolContextRef.current.resetKey = "";
 }, []);
+
 const toggleAutoRow0Expanded = useCallback(() => {
   setAutoRow0Expanded((v) => !v);
   clearSolutionPools();
@@ -3769,6 +5184,7 @@ const toggleAutoRow0Expanded = useCallback(() => {
   setPath([]);
   setCurrentStep(-1);
 }, [clearSolutionPools]);
+
 const applySolvedCandidate = useCallback((sol) => {
   if (!sol) return;
 
@@ -3789,12 +5205,18 @@ const applySolvedCandidate = useCallback((sol) => {
     crossCount: sol.initialPatternCounts?.cross?.total || 0,
     lCount: sol.initialPatternCounts?.l?.total || 0,
     tCount: sol.initialPatternCounts?.t?.total || 0,
+    rectCount:
+      Object.values(sol.initialPatternCounts?.rect || {}).reduce(
+        (acc, g) => acc + (g?.total || 0),
+        0
+      ) || 0,
   };
 
   stopToBase(true);
   setPath(sol.path || []);
   setStats((prev) => ({ ...prev, ...finalStats }));
 }, [stopToBase]);
+
 useEffect(() => {
   const activeList =
     priorityMode === "steps" ? solutionPools.steps : solutionPools.combo;
@@ -3983,8 +5405,50 @@ const stopReplay = useCallback((clearPath = false) => {
 		setCurrentStep(-1);   // 只有真的要清掉才清
 	  }
 	}, []);
+
+const startSolveProgressTicker = useCallback(() => {
+  if (solveProgressTimerRef.current) {
+    clearInterval(solveProgressTimerRef.current);
+  }
+
+  solveStartTimeRef.current = Date.now();
+
+  solveProgressTimerRef.current = setInterval(() => {
+    const raw = solveProgressRawRef.current;
+    const elapsedSec = Math.max(
+      0,
+      Math.floor((Date.now() - solveStartTimeRef.current) / 1000)
+    );
+
+    setSolveProgress({
+      current: raw.current,
+      max: raw.max,
+      elapsedSec,
+    });
+  }, 1000);
+}, []);
+
+const stopSolveProgressTicker = useCallback((forceComplete = false) => {
+  if (solveProgressTimerRef.current) {
+    clearInterval(solveProgressTimerRef.current);
+    solveProgressTimerRef.current = null;
+  }
+
+  const raw = solveProgressRawRef.current;
+  const elapsedSec = Math.max(
+    0,
+    Math.floor((Date.now() - solveStartTimeRef.current) / 1000)
+  );
+
+  setSolveProgress({
+    current: forceComplete ? raw.max : raw.current,
+    max: raw.max,
+    elapsedSec,
+  });
+}, []);
+
 const solve = () => {
-	  solverCache.current.clear();
+  solverCache.current.clear();
   stopToBase(true);
   setNeedsSolve(false);
 
@@ -4004,135 +5468,212 @@ const solve = () => {
 
   const boardKey = getBoardKey(base) + `|cfg:${configHash}`;
   const resetKey = makeSolutionResetKey(
-  base,
-  diagonalEnabled,
-  skyfallEnabled,
-  autoRow0Expanded
-);
+    base,
+    diagonalEnabled,
+    skyfallEnabled,
+    autoRow0Expanded
+  );
+
+  const maxProgressNodes = Math.max(1, solverConfig?.maxNodes || 1);
+
+  // 先重置進度
+  solveProgressRawRef.current = {
+    current: 0,
+    max: maxProgressNodes,
+  };
+
+  setSolveProgress({
+    current: 0,
+    max: maxProgressNodes,
+    elapsedSec: 0,
+  });
+
+  // ✅ 這行是關鍵：啟動每秒 UI 同步
+  startSolveProgressTicker();
 
   if (solverCache.current.has(boardKey)) {
-  const cached = solverCache.current.get(boardKey);
+    const cached = solverCache.current.get(boardKey);
 
-  if (cached?.pools) {
-    const hasCachedPools =
-      (cached.pools.steps && cached.pools.steps.length > 0) ||
-      (cached.pools.combo && cached.pools.combo.length > 0);
+    if (cached?.pools) {
+      const hasCachedPools =
+        (cached.pools.steps && cached.pools.steps.length > 0) ||
+        (cached.pools.combo && cached.pools.combo.length > 0);
 
-    if (hasCachedPools) {
-      setSolutionPools(cached.pools);
+      if (hasCachedPools) {
+        setSolutionPools(cached.pools);
 
-      const activeList =
-        priorityMode === "steps" ? cached.pools.steps : cached.pools.combo;
+        const activeList =
+          priorityMode === "steps" ? cached.pools.steps : cached.pools.combo;
 
-      const picked = activeList[selectedPoolIndex] || activeList[0];
-      if (picked) applySolvedCandidate(picked);
+        const picked = activeList[selectedPoolIndex] || activeList[0];
+
+        solveProgressRawRef.current = {
+          current: maxProgressNodes,
+          max: maxProgressNodes,
+        };
+
+        setSolveProgress({
+          current: maxProgressNodes,
+          max: maxProgressNodes,
+          elapsedSec: 0,
+        });
+
+        stopSolveProgressTicker(true);
+
+        if (picked) applySolvedCandidate(picked);
+        return;
+      }
+    }
+
+    if (cached?.path) {
+      setPath(cached.path);
+      const steps = cached.path ? cached.path.length - 1 : 0;
+      setStats((prev) => ({ ...prev, ...cached.stats, steps }));
+
+      solveProgressRawRef.current = {
+        current: maxProgressNodes,
+        max: maxProgressNodes,
+      };
+
+      setSolveProgress({
+        current: maxProgressNodes,
+        max: maxProgressNodes,
+        elapsedSec: 0,
+      });
+
+      stopSolveProgressTicker(true);
       return;
     }
   }
 
-  if (cached?.path) {
-    setPath(cached.path);
-    const steps = cached.path ? cached.path.length - 1 : 0;
-    setStats((prev) => ({ ...prev, ...cached.stats, steps }));
-    return;
-  }
-}
-
   setSolving(true);
 
-  setTimeout(() => {
-    const result = beamSolve(
-      base,
-      solverConfig,
-      targetCombos,
-      solverMode,
-      priorityMode,
-      skyfallEnabled,
-      diagonalEnabled,
-      specialPriorities,
-      initTargetCombo,
-      autoRow0Expanded
-    );
+  setTimeout(async () => {
+    try {
+      const result = await beamSolve(
+        base,
+        solverConfig,
+        targetCombos,
+        solverMode,
+        priorityMode,
+        skyfallEnabled,
+        diagonalEnabled,
+        specialPriorities,
+        initTargetCombo,
+        autoRow0Expanded,
+        ({ current, max }) => {
+          // 只更新 raw ref，UI 每秒同步一次
+          solveProgressRawRef.current = {
+            current,
+            max,
+          };
+        }
+      );
 
-    const rawOldPools =
-  solutionPoolContextRef.current.resetKey === resetKey
-    ? solutionPoolsRef.current
-    : { steps: [], combo: [] };
+      const rawOldPools =
+        solutionPoolContextRef.current.resetKey === resetKey
+          ? solutionPoolsRef.current
+          : { steps: [], combo: [] };
 
-const oldPools = {
-  steps: rawOldPools.steps || [],
-  combo: rawOldPools.combo || [],
+      const oldPools = {
+        steps: rawOldPools.steps || [],
+        combo: rawOldPools.combo || [],
+      };
+
+      const mergedPools =
+        priorityMode === "steps"
+          ? {
+              steps: mergeTopSolutions(
+                oldPools.steps,
+                result.topSteps || [],
+                "steps",
+                specialPriorities,
+                initTargetCombo,
+                10
+              ),
+              combo: oldPools.combo || [],
+            }
+          : {
+              steps: oldPools.steps || [],
+              combo: mergeTopSolutions(
+                oldPools.combo,
+                result.topCombos || [],
+                "combo",
+                specialPriorities,
+                initTargetCombo,
+                10
+              ),
+            };
+
+      solutionPoolContextRef.current.resetKey = resetKey;
+      setSolutionPools(mergedPools);
+
+      if (mergedPools.steps.length || mergedPools.combo.length) {
+        solverCache.current.set(boardKey, {
+          pools: mergedPools,
+        });
+      }
+
+      const activeList =
+        priorityMode === "steps" ? mergedPools.steps : mergedPools.combo;
+
+      const picked = activeList[selectedPoolIndex] || activeList[0] || null;
+
+      if (picked) {
+        applySolvedCandidate(picked);
+      } else {
+        const steps = result.path ? result.path.length - 1 : 0;
+
+        const finalStats = {
+          combos: result.initialCombos,
+          skyfallCombos: result.skyfallCombos,
+          steps,
+          clearedOrbs: result.clearedCount,
+          initialClearedOrbs: result.initialClearedCount || 0,
+          skyfallClearedOrbs: Math.max(
+            0,
+            (result.clearedCount || 0) - (result.initialClearedCount || 0)
+          ),
+          verticalCombos: result.verticalCombos,
+          horizontalCombos: result.horizontalCombos,
+          crossCount: result.initialPatternCounts?.cross?.total || 0,
+          lCount: result.initialPatternCounts?.l?.total || 0,
+          tCount: result.initialPatternCounts?.t?.total || 0,
+        };
+
+        setPath(result.path || []);
+        setStats((prev) => ({ ...prev, ...finalStats }));
+      }
+
+      // 完成時補滿
+      solveProgressRawRef.current = {
+        current: solveProgressRawRef.current.max || maxProgressNodes,
+        max: solveProgressRawRef.current.max || maxProgressNodes,
+      };
+
+      stopSolveProgressTicker(true);
+    } catch (err) {
+      console.error("[solve] beamSolve failed", err);
+
+      solveProgressRawRef.current = {
+        current: 0,
+        max: maxProgressNodes,
+      };
+
+      setSolveProgress({
+        current: 0,
+        max: maxProgressNodes,
+        elapsedSec: 0,
+      });
+
+      stopSolveProgressTicker(false);
+    } finally {
+      setSolving(false);
+      setNeedsSolve(false);
+    }
+  }, 50);
 };
 
-    const mergedPools =
-  priorityMode === "steps"
-    ? {
-        steps: mergeTopSolutions(
-          oldPools.steps,
-          result.topSteps || [],
-          "steps",
-          specialPriorities,
-          initTargetCombo,
-          10
-        ),
-        combo: oldPools.combo || [],
-      }
-    : {
-        steps: oldPools.steps || [],
-        combo: mergeTopSolutions(
-          oldPools.combo,
-          result.topCombos || [],
-          "combo",
-          specialPriorities,
-          initTargetCombo,
-          10
-        ),
-      };
-	
-    solutionPoolContextRef.current.resetKey = resetKey;
-    setSolutionPools(mergedPools);
-
-    if (mergedPools.steps.length || mergedPools.combo.length) {
-  solverCache.current.set(boardKey, {
-    pools: mergedPools,
-  });
-}
-
-    const activeList =
-      priorityMode === "steps" ? mergedPools.steps : mergedPools.combo;
-
-    const picked = activeList[selectedPoolIndex] || activeList[0] || null;
-
-    if (picked) {
-      applySolvedCandidate(picked);
-    } else {
-      const steps = result.path ? result.path.length - 1 : 0;
-
-      const finalStats = {
-        combos: result.initialCombos,
-        skyfallCombos: result.skyfallCombos,
-        steps,
-        clearedOrbs: result.clearedCount,
-        initialClearedOrbs: result.initialClearedCount || 0,
-        skyfallClearedOrbs: Math.max(
-          0,
-          (result.clearedCount || 0) - (result.initialClearedCount || 0)
-        ),
-        verticalCombos: result.verticalCombos,
-        horizontalCombos: result.horizontalCombos,
-        crossCount: result.initialPatternCounts?.cross?.total || 0,
-        lCount: result.initialPatternCounts?.l?.total || 0,
-        tCount: result.initialPatternCounts?.t?.total || 0,
-      };
-
-      setPath(result.path || []);
-      setStats((prev) => ({ ...prev, ...finalStats }));
-    }
-
-    setSolving(false);
-    setNeedsSolve(false);
-  }, 50);
-}; 
 const activeSolutions = priorityMode === "steps" ? solutionPools.steps : solutionPools.combo;
 
 ///////////////////////////////
@@ -5489,6 +7030,34 @@ const specialPriority1 = specialPriorities[0];
 const specialPriority2 = specialPriorities[1];
 const specialPriority3 = specialPriorities[2];
 
+const renderPriorityHeaderLabel = (title, sp) => {
+  const active = sp?.type && sp.type !== "none";
+
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <span className="shrink-0 text-sm font-black tracking-wide text-pink-200/90">
+        {title}
+      </span>
+
+      {active ? (
+        <span
+          className="
+            inline-flex min-w-0 max-w-full items-center rounded-xl
+            bg-pink-400
+            px-2.5 py-1
+            text-sm font-black leading-none text-black
+            shadow-[0_0_10px_rgba(244,114,182,0.22)]
+          "
+        >
+          <span className="truncate">{getSpecialPriorityLabel(sp)}</span>
+        </span>
+      ) : (
+        <span className="text-sm font-bold text-neutral-500">無</span>
+      )}
+    </div>
+  );
+};
+
 return (
   <div className="min-h-screen bg-neutral-950 text-white font-sans">
     <div className="w-full bg-neutral-900/95 backdrop-blur border-b border-white/10">
@@ -5673,68 +7242,67 @@ return (
           skyfallCleared > 0 ? `${initCleared}+${skyfallCleared}` : `${initCleared}`;
         const isActive = idx === selectedPoolIndex;
 
-const specialSatList = (specialPriorities || []).map((sp) =>
-  isSpecialSatisfiedBy(sol, sp)
+const specialSlotStatus = getSolutionSpecialSlotStatus(sol, specialPriorities);
+const specialSatList = specialSlotStatus.map((x) => x.done);
+const specialSat = isSolutionAllSpecialSatisfied(sol, specialPriorities);
+
+return (
+  <button
+    key={`${priorityMode}-${idx}-${getSolutionGroupKey(sol)}-${steps}`}
+    type="button"
+    onClick={() => {
+      setSelectedPoolIndex(idx);
+      applySolvedCandidate(sol);
+    }}
+    className={`rounded-xl border px-3 py-2 text-left transition-all ${
+      isActive
+        ? specialSat
+          ? "border-emerald-400 bg-emerald-400/15 shadow-[0_0_18px_rgba(74,222,128,0.35)]"
+          : "border-rose-400 bg-rose-400/15 shadow-[0_0_18px_rgba(239,68,68,0.35)]"
+        : specialSat
+        ? "border-emerald-500/50 bg-neutral-900 hover:bg-neutral-800 shadow-[0_0_14px_rgba(74,222,128,0.28)]"
+        : "border-rose-500/50 bg-neutral-900 hover:bg-neutral-800 shadow-[0_0_14px_rgba(239,68,68,0.24)]"
+    }`}
+  >
+    <div className="flex items-center justify-between">
+      <span className="text-sm font-black text-white">
+        #{idx + 1}
+      </span>
+      <span className="text-[11px] font-black text-white/65">
+        總粒 {clearedText}
+      </span>
+    </div>
+
+    <div className="mt-1 text-xs text-white/80">
+      {priorityMode === "steps" ? (
+        <>步數 {steps} ・Combo {comboText}</>
+      ) : (
+        <>Combo {comboText} ・步數 {steps}</>
+      )}
+    </div>
+
+    <div className="mt-1 flex items-center gap-1 text-[11px] font-black flex-wrap">
+      <span className="text-white/70">特優先級</span>
+
+      {specialSlotStatus.map((item, i) => (
+        <span
+          key={i}
+          className={[
+            "px-1.5 py-[1px] rounded-md border",
+            item.type === "none"
+              ? "text-white/35 border-white/10 bg-white/5"
+              : item.done
+              ? "text-emerald-300 border-emerald-400/30 bg-emerald-400/10"
+              : "text-rose-300 border-rose-400/30 bg-rose-400/10",
+          ].join(" ")}
+          title={`${item.label}${item.type !== "none" ? ` / guide: ${item.guide}` : ""}`}
+        >
+          {item.type === "none" ? "—" : item.done ? "✓" : "✕"}
+        </span>
+      ))}
+    </div>
+  </button>
 );
-
-while (specialSatList.length < 3) {
-  specialSatList.push(true);
-}
-
-const specialSat = specialSatList[0] && specialSatList[1] && specialSatList[2];
-
-        return (
-          <button
-            key={`${priorityMode}-${idx}-${getSolutionGroupKey(sol)}-${steps}`}
-            type="button"
-            onClick={() => {
-              setSelectedPoolIndex(idx);
-              applySolvedCandidate(sol);
-            }}
-            className={`rounded-xl border px-3 py-2 text-left transition-all ${
-  isActive
-    ? specialSat
-      ? "border-emerald-400 bg-emerald-400/15 shadow-[0_0_18px_rgba(74,222,128,0.35)]"
-      : "border-rose-400 bg-rose-400/15 shadow-[0_0_18px_rgba(239,68,68,0.35)]"
-    : specialSat
-    ? "border-emerald-500/50 bg-neutral-900 hover:bg-neutral-800 shadow-[0_0_14px_rgba(74,222,128,0.28)]"
-    : "border-rose-500/50 bg-neutral-900 hover:bg-neutral-800 shadow-[0_0_14px_rgba(239,68,68,0.24)]"
-}`}
-			>
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-black text-white">
-                #{idx + 1}
-              </span>
-              <span className="text-[11px] font-black text-white/65">
-                總粒 {clearedText}
-              </span>
-            </div>
-
-            <div className="mt-1 text-xs text-white/80">
-              {priorityMode === "steps" ? (
-                <>步數 {steps} ・Combo {comboText}</>
-              ) : (
-                <>Combo {comboText} ・步數 {steps}</>
-              )}
-            </div>
-
-            <div className="mt-1 flex items-center gap-1 text-[11px] font-black">
-  <span className="text-white/70">特優先級</span>
-
-  <span className={specialSatList[0] ? "text-emerald-400" : "text-rose-400"}>
-    {specialSatList[0] ? "✓" : "✕"}
-  </span>
-
-  <span className={specialSatList[1] ? "text-emerald-400" : "text-rose-400"}>
-    {specialSatList[1] ? "✓" : "✕"}
-  </span>
-
-  <span className={specialSatList[2] ? "text-emerald-400" : "text-rose-400"}>
-    {specialSatList[2] ? "✓" : "✕"}
-  </span>
-</div>
-          </button>
-        );
       })}
 
       {(!activeSolutions || activeSolutions.length === 0) &&
@@ -5956,44 +7524,37 @@ const specialSat = specialSatList[0] && specialSatList[1] && specialSatList[2];
         <div className="flex items-center gap-2">
           <span className="text-sm font-black text-pink-300 flex items-center gap-2">
             {specialPriorityExpanded[0] ? (
-              "第一優先（一次只能選一個）"
+              "第一優先"
             ) : (
               <>
-                <span>第一優先：</span>
-
-                {specialPriority1.type !== "none" ? (
-                  <span
-                    className="px-1.5 py-[1px] rounded bg-pink-400 text-white text-sm font-black leading-none"
-                    style={{
-                      textShadow: `
-                        0 0 1px rgba(0,0,0,0.9),
-                        0 0 2px rgba(0,0,0,0.6)
-                      `,
-                    }}
-                  >
-                    {getSpecialPriorityLabel(specialPriority1)}
-                  </span>
-                ) : (
-                  <span className="text-neutral-400">
-                    {getSpecialPriorityLabel(specialPriority1)}
-                  </span>
-                )}
+                {renderPriorityHeaderLabel("第一優先：", specialPriority1)}
               </>
             )}
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={() => toggleSpecialPriorityExpanded(0)}
-          className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
-            specialPriorityExpanded[0]
-              ? "bg-pink-400 text-black hover:bg-pink-300"
-              : "bg-neutral-800 text-white hover:bg-neutral-700"
-          }`}
-        >
-          {specialPriorityExpanded[0] ? "收起" : "展開"}
-        </button>
+
+        <div className="flex items-center gap-2">
+  <button
+    type="button"
+    onClick={() => updateSpecialPriorityAt(0, { type: "none" })}
+    className="rounded-xl px-3 py-1.5 text-xs font-black transition-all bg-neutral-800 text-white hover:bg-neutral-700"
+  >
+    清空
+  </button>
+
+  <button
+    type="button"
+    onClick={() => toggleSpecialPriorityExpanded(0)}
+    className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+      specialPriorityExpanded[0]
+        ? "bg-pink-400 text-black hover:bg-pink-300"
+        : "bg-neutral-800 text-white hover:bg-neutral-700"
+    }`}
+  >
+    {specialPriorityExpanded[0] ? "收起" : "展開"}
+  </button>
+</div>
       </div>
 
       {specialPriorityExpanded[0] && (
@@ -6206,44 +7767,36 @@ const specialSat = specialSatList[0] && specialSatList[1] && specialSatList[2];
         <div className="flex items-center gap-2">
           <span className="text-sm font-black text-pink-300 flex items-center gap-2">
             {specialPriorityExpanded[1] ? (
-              "第二優先（一次只能選一個）"
+              "第二優先"
             ) : (
               <>
-                <span>第二優先：</span>
-
-                {specialPriority2.type !== "none" ? (
-                  <span
-                    className="px-1.5 py-[1px] rounded bg-pink-400 text-white text-sm font-black leading-none"
-                    style={{
-                      textShadow: `
-                        0 0 1px rgba(0,0,0,0.9),
-                        0 0 2px rgba(0,0,0,0.6)
-                      `,
-                    }}
-                  >
-                    {getSpecialPriorityLabel(specialPriority2)}
-                  </span>
-                ) : (
-                  <span className="text-neutral-400">
-                    {getSpecialPriorityLabel(specialPriority2)}
-                  </span>
-                )}
+                {renderPriorityHeaderLabel("第二優先：", specialPriority2)}
               </>
             )}
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={() => toggleSpecialPriorityExpanded(1)}
-          className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
-            specialPriorityExpanded[1]
-              ? "bg-pink-400 text-black hover:bg-pink-300"
-              : "bg-neutral-800 text-white hover:bg-neutral-700"
-          }`}
-        >
-          {specialPriorityExpanded[1] ? "收起" : "展開"}
-        </button>
+        <div className="flex items-center gap-2">
+  <button
+    type="button"
+    onClick={() => updateSpecialPriorityAt(1, { type: "none" })}
+    className="rounded-xl px-3 py-1.5 text-xs font-black transition-all bg-neutral-800 text-white hover:bg-neutral-700"
+  >
+    清空
+  </button>
+
+  <button
+    type="button"
+    onClick={() => toggleSpecialPriorityExpanded(1)}
+    className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+      specialPriorityExpanded[1]
+        ? "bg-pink-400 text-black hover:bg-pink-300"
+        : "bg-neutral-800 text-white hover:bg-neutral-700"
+    }`}
+  >
+    {specialPriorityExpanded[1] ? "收起" : "展開"}
+  </button>
+</div>
       </div>
 
       {specialPriorityExpanded[1] && (
@@ -6456,44 +8009,36 @@ const specialSat = specialSatList[0] && specialSatList[1] && specialSatList[2];
         <div className="flex items-center gap-2">
           <span className="text-sm font-black text-pink-300 flex items-center gap-2">
             {specialPriorityExpanded[2] ? (
-              "第三優先（一次只能選一個）"
+              "第三優先"
             ) : (
               <>
-                <span>第三優先：</span>
-
-                {specialPriority3.type !== "none" ? (
-                  <span
-                    className="px-1.5 py-[1px] rounded bg-pink-400 text-white text-sm font-black leading-none"
-                    style={{
-                      textShadow: `
-                        0 0 1px rgba(0,0,0,0.9),
-                        0 0 2px rgba(0,0,0,0.6)
-                      `,
-                    }}
-                  >
-                    {getSpecialPriorityLabel(specialPriority3)}
-                  </span>
-                ) : (
-                  <span className="text-neutral-400">
-                    {getSpecialPriorityLabel(specialPriority3)}
-                  </span>
-                )}
+                {renderPriorityHeaderLabel("第三優先：", specialPriority3)}
               </>
             )}
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={() => toggleSpecialPriorityExpanded(2)}
-          className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
-            specialPriorityExpanded[2]
-              ? "bg-pink-400 text-black hover:bg-pink-300"
-              : "bg-neutral-800 text-white hover:bg-neutral-700"
-          }`}
-        >
-          {specialPriorityExpanded[2] ? "收起" : "展開"}
-        </button>
+        <div className="flex items-center gap-2">
+  <button
+    type="button"
+    onClick={() => updateSpecialPriorityAt(2, { type: "none" })}
+    className="rounded-xl px-3 py-1.5 text-xs font-black transition-all bg-neutral-800 text-white hover:bg-neutral-700"
+  >
+    清空
+  </button>
+
+  <button
+    type="button"
+    onClick={() => toggleSpecialPriorityExpanded(2)}
+    className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+      specialPriorityExpanded[2]
+        ? "bg-pink-400 text-black hover:bg-pink-300"
+        : "bg-neutral-800 text-white hover:bg-neutral-700"
+    }`}
+  >
+    {specialPriorityExpanded[2] ? "收起" : "展開"}
+  </button>
+</div>
       </div>
 
       {specialPriorityExpanded[2] && (
@@ -6733,7 +8278,7 @@ const specialSat = specialSatList[0] && specialSatList[1] && specialSatList[2];
 
         <div
           ref={boardWrapRef}
-          className="relative bg-neutral-900 p-0.5 sm:p-1 rounded-3xl shadow-2xl border-2 border-neutral-800 mb-6 mx-auto w-full max-w-none sm:max-w-[500px] overflow-visible"
+          className="relative bg-neutral-700 rounded-3xl shadow-2xl border-2 border-neutral-600 mb-6 mx-auto w-full max-w-none sm:max-w-[500px] overflow-visible"
           style={{
   contain: "layout paint",
   touchAction: isManual ? "none" : "auto",
@@ -6805,136 +8350,155 @@ const specialSat = specialSatList[0] && specialSatList[1] && specialSatList[2];
   )}
 
   <div className="grid grid-cols-6 gap-0">
-    {displayBoard.map((row, r) => {
-  if (!isManual && !autoRow0Expanded && r === 0) {
-    return null;
-  }
+  {displayBoard.map((row, r) => {
+    if (!isManual && !autoRow0Expanded && r === 0) {
+      return null;
+    }
 
-      return (
-        <React.Fragment key={r}>
-          {!solving && autoRow0Expanded && r === 1 && (
-            <div className="overflow-visible col-span-6 h-2 bg-white z-50 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
-          )}
+    return (
+      <React.Fragment key={r}>
+        {!solving && autoRow0Expanded && r === 1 && (
+          <div className="overflow-visible col-span-6 h-2 bg-white z-50 shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
+        )}
 
-          {row.map((orb, c) => {
-            const isMoving =
-              !solving &&
-              isReplaying &&
-              currentStep >= 0 &&
-              path[currentStep]?.r === r &&
-              path[currentStep]?.c === c;
+        {row.map((orb, c) => {
+          const isMoving =
+            !solving &&
+            isReplaying &&
+            currentStep >= 0 &&
+            path[currentStep]?.r === r &&
+            path[currentStep]?.c === c;
 
-            const isManualHidden =
-              manualHiddenCell &&
-              manualHiddenCell.r === r &&
-              manualHiddenCell.c === c;
+          const isManualHidden =
+            manualHiddenCell &&
+            manualHiddenCell.r === r &&
+            manualHiddenCell.c === c;
 
-            return (
-              <div
-                key={`${r}-${c}`}
-                data-cell={`${r}-${c}`}
-                onMouseDown={(e) => {
-                  if (isManual && !manualLocked) {
-                    handleManualStart(r, c, e);
-                  }
-                }}
-                onTouchStart={(e) => {
-                  if (isManual && !manualLocked) {
-                    handleManualStart(r, c, e);
-                  }
-                }}
-                onMouseUp={() => {
-                  if (isManual) {
-                    lastPosRef.current = { r: -1, c: -1 };
-                    handleManualEnd();
-                  }
-                }}
-                onTouchEnd={() => {
-                  if (isManual) {
-                    lastPosRef.current = { r: -1, c: -1 };
-                    handleManualEnd();
-                  }
-                }}
-                className={`relative w-full aspect-square flex items-center justify-center transition-all duration-75 ${
-                  r === 0 && autoRow0Expanded
-                    ? "ring-2 ring-yellow-400 z-10 rounded-2xl"
-                    : "rounded-2xl"
-                } ${isMoving ? "opacity-20 z-40" : "opacity-100"}`}
-                style={{ backgroundColor: "#171717" }}
-              >
-                {orb === -1 || isManualHidden ? (
-                  <div className="w-[96%] h-[96%] rounded-2xl bg-black/40 border border-white/10" />
-                ) : (
-                  <>
+const cellBgClass = (r + c) % 2 === 0 ? "bg-neutral-700" : "bg-neutral-900";
+
+          const row0Type =
+  r === 0
+    ? Object.keys(ORB_TYPES).find(
+        (k) => ORB_TYPES[k].id === orbOf(orb)
+      )
+    : null;
+
+const row0BoxImg =
+  r === 0 ? ROW0_BOX_IMG_MAP[row0Type] || null : null;
+          return (
+            <div
+              key={`${r}-${c}`}
+              data-cell={`${r}-${c}`}
+              onMouseDown={(e) => {
+                if (isManual && !manualLocked) {
+                  handleManualStart(r, c, e);
+                }
+              }}
+              onTouchStart={(e) => {
+                if (isManual && !manualLocked) {
+                  handleManualStart(r, c, e);
+                }
+              }}
+              onMouseUp={() => {
+                if (isManual) {
+                  lastPosRef.current = { r: -1, c: -1 };
+                  handleManualEnd();
+                }
+              }}
+              onTouchEnd={() => {
+                if (isManual) {
+                  lastPosRef.current = { r: -1, c: -1 };
+                  handleManualEnd();
+                }
+              }}
+              className={`relative w-full aspect-square flex items-center justify-center transition-all duration-75 ${cellBgClass} ${
+  isMoving ? "opacity-20 z-40" : "opacity-100"
+}`}
+            >
+              {orb === -1 ? (
+                <div className="w-full h-full bg-black/20 border border-white/10" />
+              ) : (
+                <>
+                  {r === 0 && row0BoxImg && (
                     <img
-                      src={
-                        Object.values(ORB_TYPES).find(
-                          (t) => t.id === orbOf(orb)
-                        )?.img
-                      }
-                      className="w-[100%] h-[100%] object-contain pointer-events-none select-none"
+                      src={row0BoxImg}
+                      className="absolute inset-0 z-[3] w-full h-full object-contain pointer-events-none select-none scale-[1.02]"
                       draggable={false}
                       alt=""
                     />
+                  )}
 
-                    {xMarkOf(orb) === 1 && !isManual && (
-                      <img
-                        src={x1Img}
-                        className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-                        draggable={false}
-                        alt=""
-                      />
-                    )}
+                  <img
+                    src={
+                      Object.values(ORB_TYPES).find(
+                        (t) => t.id === orbOf(orb)
+                      )?.img
+                    }
+                    className={`relative z-[1] w-[100%] h-[100%] object-contain pointer-events-none select-none transition-all duration-75
+                      ${isManualHidden ? "brightness-[0.35] saturate-[0.6]" : ""}
+                    `}
+                    draggable={false}
+                    alt=""
+                  />
 
-                    {xMarkOf(orb) === 2 && (
-                      <img
-                        src={x2Img}
-                        className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-                        draggable={false}
-                        alt=""
-                      />
-                    )}
+                  {xMarkOf(orb) === 1 && !isManual && (
+                    <img
+                      src={x1Img}
+                      className="absolute z-[3] inset-0 w-full h-full object-contain pointer-events-none select-none"
+                      draggable={false}
+                      alt=""
+                    />
+                  )}
 
-                    {qMarkOf(orb) === 1 &&
-                      !isManual &&
-                      !(r === 0 && replayDone) && (
-                        <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
-                          Start
-                        </div>
-                      )}
+                  {xMarkOf(orb) === 2 && (
+                    <img
+                      src={x2Img}
+                      className="absolute z-[3] inset-0 w-full h-full object-contain pointer-events-none select-none"
+                      draggable={false}
+                      alt=""
+                    />
+                  )}
 
-                    {qMarkOf(orb) === 2 && !isManual && (
-                      <div className="absolute top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
-                        End
+                  {qMarkOf(orb) === 1 &&
+                    !isManual &&
+                    !(r === 0 && replayDone) && (
+                      <div className="absolute z-[4] top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
+                        Start
                       </div>
                     )}
 
-                    {nMarkOf(orb) === 1 && (
-                      <img
-                        src={n1Img}
-                        className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-                        draggable={false}
-                        alt=""
-                      />
-                    )}
+                  {qMarkOf(orb) === 2 && !isManual && (
+                    <div className="absolute z-[4] top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
+                      End
+                    </div>
+                  )}
 
-                    {nMarkOf(orb) === 2 && (
-                      <img
-                        src={n2Img}
-                        className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-                        draggable={false}
-                        alt=""
-                      />
-                    )}
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </React.Fragment>
-      );
-    })}
-  </div>
+                  {nMarkOf(orb) === 1 && (
+                    <img
+                      src={n1Img}
+                      className="absolute inset-0 z-[2] w-full h-full object-contain pointer-events-none select-none"
+                      draggable={false}
+                      alt=""
+                    />
+                  )}
+
+                  {nMarkOf(orb) === 2 && (
+                    <img
+                      src={n2Img}
+                      className="absolute inset-0 z-[2] w-full h-full object-contain pointer-events-none select-none"
+                      draggable={false}
+                      alt=""
+                    />
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
+      </React.Fragment>
+    );
+  })}
+</div>
 
   <svg
     ref={overlayRef}
@@ -7222,33 +8786,76 @@ const specialSat = specialSatList[0] && specialSatList[1] && specialSatList[2];
   </div>
 
   {solving && (
-    <div className="absolute inset-0 bg-neutral-950/90 rounded-3xl flex flex-col items-center justify-center z-20 backdrop-blur-xl">
-      <div className="relative w-24 h-24 mb-6">
-        <div className="absolute inset-0 border-4 border-indigo-500/10 rounded-full"></div>
-        <div className="absolute inset-0 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-        {priorityMode === "steps" ? (
-          <Footprints
-            className="absolute inset-0 m-auto text-amber-400 animate-pulse"
-            size={32}
-          />
-        ) : (
-          <Trophy
-            className="absolute inset-0 m-auto text-emerald-400 animate-pulse"
-            size={32}
-          />
-        )}
-      </div>
-
-      <p className="font-black text-xl text-indigo-500 tracking-[0.2em] animate-pulse uppercase">
-        {skyfallEnabled
-          ? "Combo Analysis"
-          : priorityMode === "steps"
-          ? "Optimizing Time"
-          : "Deep Searching"}
-      </p>
+  <div className="absolute inset-0 bg-neutral-950/90 rounded-3xl flex flex-col items-center justify-center z-20 backdrop-blur-xl">
+    <div className="relative w-24 h-24 mb-6">
+      <div className="absolute inset-0 border-4 border-indigo-500/10 rounded-full"></div>
+      <div className="absolute inset-0 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+      {priorityMode === "steps" ? (
+        <Footprints
+          className="absolute inset-0 m-auto text-amber-400 animate-pulse"
+          size={32}
+        />
+      ) : (
+        <Trophy
+          className="absolute inset-0 m-auto text-emerald-400 animate-pulse"
+          size={32}
+        />
+      )}
     </div>
-  )}
 
+    <p className="font-black text-xl text-indigo-500 tracking-[0.2em] animate-pulse uppercase">
+      {skyfallEnabled
+        ? "Combo Analysis"
+        : priorityMode === "steps"
+        ? "Optimizing Time"
+        : "Deep Searching"}
+    </p>
+
+    <div className="mt-4 w-64 max-w-[78%]">
+      <div className="mb-2">
+  {(() => {
+    const current = Math.min(solveProgress.current || 0, solveProgress.max || 1);
+    const max = solveProgress.max || 1;
+    const percent = Math.max(0, Math.min(100, Math.round((current / max) * 100)));
+
+    return (
+      <>
+        {/* Header */}
+        <div className="mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="h-2.5 w-2.5 rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.95)]" />
+            <span className="text-[11px] font-black uppercase tracking-[0.18em] text-white/55">
+              Progress
+            </span>
+          </div>
+
+          {/* % Badge */}
+          <div className="rounded-full border border-fuchsia-400/25 bg-fuchsia-500/10 px-3 py-1 text-[11px] font-black tabular-nums text-fuchsia-300 shadow-[inset_0_0_12px_rgba(217,70,239,0.15),0_0_12px_rgba(217,70,239,0.12)]">
+            {percent}%
+          </div>
+        </div>
+
+        {/* Single Progress Bar */}
+        <div className="relative h-3.5 overflow-hidden rounded-full border border-white/10 bg-white/[0.05] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),inset_0_0_18px_rgba(0,0,0,0.5)]">
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-fuchsia-500 shadow-[0_0_16px_rgba(56,189,248,0.45)] transition-[width] duration-500 ease-out"
+            style={{ width: `${percent}%` }}
+          >
+            {/* 掃光 */}
+            <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent_0%,rgba(255,255,255,0.2)_35%,transparent_70%)] opacity-70" />
+          </div>
+
+          {/* 微內框 */}
+          <div className="absolute inset-0 rounded-full ring-1 ring-inset ring-cyan-300/10" />
+        </div>
+      </>
+    );
+  })()}
+</div>
+    </div>
+  </div>
+)}
+  
   {showMoveEnded && (
     <div className="absolute inset-0 bg-neutral-950/85 rounded-3xl flex flex-col items-center justify-center z-[9999] pointer-events-none">
       <Clock className="text-orange-400 mb-4" size={40} />
@@ -7525,7 +9132,7 @@ const specialSat = specialSatList[0] && specialSatList[1] && specialSatList[2];
                 }}
               >
                 <div className="flex flex-col items-center">
-                  <div className="relative bg-neutral-900 p-3 rounded-3xl shadow-2xl border-2 border-neutral-800 mb-6 mx-auto w-full max-w-[540px] overflow-visible mt-6">
+                  <div className="relative bg-neutral-900 rounded-3xl shadow-2xl border-2 border-neutral-800 mb-6 mx-auto w-full max-w-[540px] overflow-visible mt-6">
                     <div className="grid grid-cols-6 gap-0">
                       {editingBoard.map((row, r) => (
                         <React.Fragment key={r}>
