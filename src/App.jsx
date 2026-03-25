@@ -3439,6 +3439,47 @@ const beamSolve = async (
   const dirsPlay = diagonal ? DIRS_8 : DIRS_4;
   const maxNodesEffective = cfg.maxNodes;
 
+  const IS_STEP_MODE = priority === "steps";
+  const IS_COMBO_MODE = priority !== "steps";
+
+  const SEARCH_PROFILE = IS_STEP_MODE
+    ? {
+        initComboBonus: 320000,
+        initClearedBonus: 125000,
+        initAllEqualBonus: 2000000,
+        initExactBonus: 1800000,
+        freeMajorBonus: hasInitSensitiveSpecial ? 150000 : 0,
+        hvDiffPenalty: hasInitSensitiveSpecial ? 18000 : 0,
+        extraPotentialWeight: 0.05,
+        extraStepPenalty: 9000,
+        bestStepSlack: 0,
+        comboVisitedPrefixLen: 0,
+        stepsVisitedSlack: 0,
+        comboExploreRegionSkipProb:
+          cfg.beamWidth >= 300 ? 0.82 : 0.74,
+        comboMaxTier: 8,
+        comboQuotaW: [3.2, 2.3, 1.7, 1.15, 0.8, 0.55, 0.36, 0.24, 0.15],
+        stepMaxTier: 8,
+      }
+    : {
+        initComboBonus: 170000,
+        initClearedBonus: 70000,
+        initAllEqualBonus: 1300000,
+        initExactBonus: 900000,
+        freeMajorBonus: hasInitSensitiveSpecial ? 90000 : 0,
+        hvDiffPenalty: hasInitSensitiveSpecial ? 10000 : 0,
+        extraPotentialWeight: 0.3,
+        extraStepPenalty: 2200,
+        bestStepSlack: 2,
+        comboVisitedPrefixLen: hasInitSensitiveSpecial ? 7 : 6,
+        stepsVisitedSlack: 2,
+        comboExploreRegionSkipProb:
+          cfg.beamWidth >= 300 ? 0.6 : 0.5,
+        comboMaxTier: 10,
+        comboQuotaW: [2.5, 2.0, 1.6, 1.25, 1.0, 0.8, 0.65, 0.5, 0.38, 0.28, 0.18],
+        stepMaxTier: 8,
+      };
+
   const makeNode = (parent, r, c) => ({
     parent,
     r,
@@ -3457,7 +3498,7 @@ const beamSolve = async (
 
   const exceedsInitialComboCap = (ev) => {
     const cap = Number(initTargetCombo);
-    if (!Number.isFinite(cap) || cap <= 0) return false;
+    if (!Number.isFinite(cap) || cap < 0) return false;
     const initialCombos = Number(
       ev?.initialCombos ?? ev?.initCombos ?? ev?.combos ?? 0
     );
@@ -3646,6 +3687,36 @@ const beamSolve = async (
     const cleared = ev.clearedCount || 0;
     const adaptiveMajor = getAdaptiveMajor(ev);
 
+    if (IS_STEP_MODE) {
+      if (hasInitSensitiveSpecial) {
+        return [
+          legal,
+          initExact ? 1 : 0,
+          initEq,
+          initCombos,
+          initCleared,
+          -steps,
+          combos,
+          cleared,
+          adaptiveMajor,
+          Math.floor(score),
+        ];
+      }
+
+      return [
+        legal,
+        initExact ? 1 : 0,
+        initEq,
+        initCombos,
+        initCleared,
+        -steps,
+        adaptiveMajor,
+        combos,
+        cleared,
+        Math.floor(score),
+      ];
+    }
+
     if (hasInitSensitiveSpecial) {
       return [
         legal,
@@ -3655,9 +3726,9 @@ const beamSolve = async (
         initCleared,
         combos,
         cleared,
+        adaptiveMajor,
         -steps,
         Math.floor(score),
-        adaptiveMajor,
       ];
     }
 
@@ -3673,6 +3744,23 @@ const beamSolve = async (
       -steps,
       Math.floor(score),
     ];
+  };
+
+  const softDominatesPrefix = (a, b, prefixLen) => {
+    if (!a || !b || a.length !== b.length) return false;
+    const len = Math.max(1, Math.min(prefixLen, a.length));
+    for (let i = 0; i < len; i++) {
+      if (a[i] < b[i]) return false;
+    }
+    return true;
+  };
+
+  const dominatesVec = (a, b) => {
+    if (!a || !b || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] < b[i]) return false;
+    }
+    return true;
   };
 
   let q1Pos = null;
@@ -3807,14 +3895,6 @@ const beamSolve = async (
         );
       }
     }
-  };
-
-  const dominatesVec = (a, b) => {
-    if (!a || !b || a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (a[i] < b[i]) return false;
-    }
-    return true;
   };
 
   const considerBest = (
@@ -3963,7 +4043,24 @@ const beamSolve = async (
       return true;
     }
 
-    if (dominatesVec(prev, curVec)) return false;
+    if (IS_STEP_MODE) {
+      if (dominatesVec(prev, curVec)) return false;
+    } else {
+      const prefixLen = SEARCH_PROFILE.comboVisitedPrefixLen;
+      if (
+        prefixLen > 0 &&
+        softDominatesPrefix(prev, curVec, prefixLen)
+      ) {
+        const prevStepsMetric =
+          prev[prev.length - 2] || 0;
+        const curStepsMetric =
+          curVec[curVec.length - 2] || 0;
+
+        if (prevStepsMetric >= curStepsMetric - SEARCH_PROFILE.stepsVisitedSlack) {
+          return false;
+        }
+      }
+    }
 
     let shouldUpdate = false;
     for (let i = 0; i < curVec.length; i++) {
@@ -4058,10 +4155,10 @@ const beamSolve = async (
 
     let score = rawScore + scoreBias;
 
-    score += ev.initialCombos * 220000;
-    score += ev.initialClearedCount * 90000;
-    if (ev.initialAllEqual) score += 1800000;
-    if (hitsInitTargetComboExactly(ev)) score += 1400000;
+    score += ev.initialCombos * SEARCH_PROFILE.initComboBonus;
+    score += ev.initialClearedCount * SEARCH_PROFILE.initClearedBonus;
+    if (ev.initialAllEqual) score += SEARCH_PROFILE.initAllEqualBonus;
+    if (hitsInitTargetComboExactly(ev)) score += SEARCH_PROFILE.initExactBonus;
 
     score += getInitShieldScoreBias(
       {
@@ -4075,8 +4172,20 @@ const beamSolve = async (
     );
 
     if (hasInitSensitiveSpecial) {
-      score += getFreeMajor(ev) * 120000;
-      score -= Math.abs((ev.verticalCombos || 0) - (ev.horizontalCombos || 0)) * 15000;
+      score += getFreeMajor(ev) * SEARCH_PROFILE.freeMajorBonus;
+      score -=
+        Math.abs((ev.verticalCombos || 0) - (ev.horizontalCombos || 0)) *
+        SEARCH_PROFILE.hvDiffPenalty;
+    }
+
+    if (!hasSpecial) {
+      if (IS_COMBO_MODE) {
+        score += Math.floor((pot || 0) * SEARCH_PROFILE.extraPotentialWeight);
+        score -= steps * SEARCH_PROFILE.extraStepPenalty;
+      } else {
+        score -= steps * SEARCH_PROFILE.extraStepPenalty;
+        score += getAdaptiveMajor(ev) * 30000;
+      }
     }
 
     const initExact = hitsInitTargetComboExactly(ev);
@@ -4429,17 +4538,20 @@ const beamSolve = async (
 
     const BW = cfg.beamWidth;
     const out = [];
-    const eliteN = Math.min(candidates.length, Math.max(6, (BW / 3) | 0));
+    const eliteN = Math.min(
+      candidates.length,
+      Math.max(6, ((BW * 0.28) | 0))
+    );
 
     for (let i = 0; i < eliteN && out.length < BW; i++) out.push(candidates[i]);
     if (out.length >= BW) return out;
 
-    const maxTier = 8;
-    const quotaW = [3.0, 2.2, 1.6, 1.1, 0.8, 0.55, 0.4, 0.3, 0.2];
+    const maxTier = SEARCH_PROFILE.comboMaxTier;
+    const quotaW = SEARCH_PROFILE.comboQuotaW;
     const counts = new Array(maxTier + 1).fill(0);
 
     for (let i = eliteN; i < candidates.length; i++) {
-      const miss = getMissTier(candidates[i]);
+      const miss = Math.min(maxTier, getMissTier(candidates[i]));
       if (miss <= maxTier) counts[miss]++;
     }
 
@@ -4453,12 +4565,12 @@ const beamSolve = async (
       if (explore) usedRegion.add(regionOf(st.r, st.c));
     }
 
-    const regionSkipProb = cfg.beamWidth >= 300 ? 0.8 : 0.7;
+    const regionSkipProb = SEARCH_PROFILE.comboExploreRegionSkipProb;
 
-    for (let pass = 0; pass < 3 && out.length < BW; pass++) {
+    for (let pass = 0; pass < 4 && out.length < BW; pass++) {
       for (let i = eliteN; i < candidates.length && out.length < BW; i++) {
         const st = candidates[i];
-        const miss = getMissTier(st);
+        const miss = Math.min(maxTier, getMissTier(st));
         if (miss > maxTier) continue;
         if (pass < 2 && took[miss] >= quota[miss]) continue;
 
@@ -4472,6 +4584,14 @@ const beamSolve = async (
           }
         } else if (pass === 1) {
           if (usedPos.has(pc)) continue;
+        } else if (pass === 2) {
+          if (
+            explore &&
+            usedRegion.has(rg) &&
+            Math.random() < regionSkipProb * 0.6
+          ) {
+            continue;
+          }
         }
 
         out.push(st);
@@ -4490,7 +4610,7 @@ const beamSolve = async (
     const BW = cfg.beamWidth;
     sortCandidatesNoSpecialCombo(candidates);
 
-    const eliteN = Math.min(candidates.length, Math.max(8, (BW / 4) | 0));
+    const eliteN = Math.min(candidates.length, Math.max(10, (BW / 3) | 0));
     const out = candidates.slice(0, eliteN);
     if (out.length >= BW) return out.slice(0, BW);
 
@@ -4505,8 +4625,12 @@ const beamSolve = async (
       const cleared = st.ev.clearedCount || 0;
       const initExact = hitsInitTargetComboExactly(st.ev) ? 1 : 0;
       const initEq = st.ev.initialAllEqual ? 1 : 0;
-      const miss = Math.min(8, Math.max(0, target - combos));
+      const miss = Math.min(
+        SEARCH_PROFILE.stepMaxTier,
+        Math.max(0, target - combos)
+      );
       const adaptiveMajor = getAdaptiveMajor(st.ev);
+      const steps = stepsOf(st.node);
 
       const key = hasInitSensitiveSpecial
         ? [
@@ -4516,6 +4640,7 @@ const beamSolve = async (
             initCombos,
             initCleared,
             miss,
+            steps,
             combos,
             cleared,
           ].join("|")
@@ -4526,6 +4651,7 @@ const beamSolve = async (
             initCombos,
             initCleared,
             miss,
+            steps,
             adaptiveMajor,
             combos,
             cleared,
@@ -4583,7 +4709,13 @@ const beamSolve = async (
 
   for (let step = 0; step < cfg.maxSteps; step++) {
     let candidates = [];
-    if (bestReachedSteps !== Infinity && step >= bestReachedSteps) break;
+
+    if (
+      bestReachedSteps !== Infinity &&
+      step >= bestReachedSteps + (hasSpecial ? 0 : SEARCH_PROFILE.bestStepSlack)
+    ) {
+      break;
+    }
 
     for (const state of beam) {
       if (nodesExpanded > maxNodesEffective) break;
@@ -4706,7 +4838,7 @@ const beamSolve = async (
 
     if (!hasSpecial) {
       if (priority === "combo") {
-        beam = pickBeamCombo(candidates, diagonal && skyfall);
+        beam = pickBeamCombo(candidates, true);
       } else {
         beam = pickBeamStepsNoSpecial(candidates);
       }
@@ -4886,7 +5018,12 @@ const getSolutionGroupKey = (sol) => {
 };
 
 const getSolutionMergeSignature = (sol) => {
-  return `${sol.initialCombos || 0}|${sol.skyfallCombos || 0}`;
+  const initialCombos = Number(sol?.initialCombos || 0);
+  const totalCombos = Number(sol?.combos || 0);
+  const skyfallCombos = Math.max(0, totalCombos - initialCombos);
+
+  // 只用「首批 + 疊消組合」做 merge signature
+  return `${initialCombos}|${skyfallCombos}`;
 };
 
 const lexCompareDesc = (a, b) => {
@@ -4972,9 +5109,7 @@ const precomputeCandidateRanks = (
   initTargetCombo
 ) => {
   for (const st of candidates) {
-    if (!st._poolRank) {
-      st._poolRank = makePoolRank(st, mode, specialPriorities, initTargetCombo);
-    }
+    st._poolRank = makePoolRank(st, mode, specialPriorities, initTargetCombo);
   }
   return candidates;
 };
@@ -5020,73 +5155,176 @@ const makePoolExtraCtx = (sol, specialPriorities) => {
   };
 };
 
+const normalizeSpecialPriorityListKeepSlots = (specialPriority) => {
+  if (Array.isArray(specialPriority)) {
+    return [
+      specialPriority[0] && specialPriority[0].type
+        ? specialPriority[0]
+        : { type: "none" },
+      specialPriority[1] && specialPriority[1].type
+        ? specialPriority[1]
+        : { type: "none" },
+      specialPriority[2] && specialPriority[2].type
+        ? specialPriority[2]
+        : { type: "none" },
+    ];
+  }
+
+  if (specialPriority && specialPriority.type) {
+    return [specialPriority, { type: "none" }, { type: "none" }];
+  }
+
+  return [{ type: "none" }, { type: "none" }, { type: "none" }];
+};
+
+const compileSpecialPriorityListKeepSlots = (specialPriority) => {
+  const raw = normalizeSpecialPriorityListKeepSlots(specialPriority);
+
+  return raw.map((sp) => {
+    const type = sp?.type || "none";
+
+    if (type === "none") {
+      return { type: "none" };
+    }
+
+    if (type === "rect") {
+      const m = Number(sp.rectM) || 3;
+      const n = Number(sp.rectN) || 3;
+      const rectOrb = sp.rectOrb ?? SPECIAL_ORB_ANY;
+
+      return {
+        ...sp,
+        type,
+        m,
+        n,
+        rectKey: `${m}x${n}`,
+        rectOrb,
+      };
+    }
+
+    if (type === "equalFirst") {
+      return {
+        ...sp,
+        type,
+        selectedOrbs: normalizeSelectedEqualOrbs(sp.equalOrbs),
+      };
+    }
+
+    if (type === "clearCount") {
+      return {
+        ...sp,
+        type,
+        clearCountValue: Number(sp.clearCount) || 0,
+      };
+    }
+
+    return {
+      ...sp,
+      type,
+      countValue: Number(sp.count) || 1,
+      orbValue: sp.orb ?? SPECIAL_ORB_ANY,
+    };
+  });
+};
+
+const getSpecialPriorityDoneTupleKeepSlots = (
+  ev,
+  compiledSpecials = [],
+  extraCtx = {}
+) => {
+  const fixed = [
+    compiledSpecials[0] || { type: "none" },
+    compiledSpecials[1] || { type: "none" },
+    compiledSpecials[2] || { type: "none" },
+  ];
+
+  return fixed.map((sp) => {
+    if (!sp || sp.type === "none") return 0;
+    return isSingleSpecialSatisfiedCompiled(ev, sp, extraCtx) ? 1 : 0;
+  });
+};
+
+const getSpecialComboRank = (d1, d2, d3) => {
+  if (d1 && d2 && d3) return 7; // 123
+  if (d1 && d2) return 6;       // 12
+  if (d1 && d3) return 5;       // 13
+  if (d2 && d3) return 4;       // 23
+  if (d1) return 3;             // 1
+  if (d2) return 2;             // 2
+  if (d3) return 1;             // 3
+  return 0;                     // none
+};
+
 const makePoolRank = (sol, mode, specialPriorities, initTargetCombo) => {
   const cacheKey = JSON.stringify({
     mode,
     initTargetCombo: Number(initTargetCombo) || 0,
-    specialPriorities: Array.isArray(specialPriorities)
-      ? specialPriorities
-      : specialPriorities
-      ? [specialPriorities]
-      : [],
+    specialPriorities: normalizeSpecialPriorityListKeepSlots(specialPriorities),
   });
 
-  if (
-    sol?._poolRankCached &&
-    sol?._poolRankCacheKey === cacheKey
-  ) {
+  if (sol?._poolRankCached && sol?._poolRankCacheKey === cacheKey) {
     return sol._poolRankCached;
   }
 
-  const initialCombos = sol.initialCombos || 0;
-  const totalCombos = sol.combos || 0;
-  const cleared = sol.clearedCount || 0;
-  const steps = getPathSteps(sol.path);
-  const legal = sol.violatesN2 ? 0 : 1;
+  const initialCombos = Number(sol?.initialCombos || 0);
+  const totalCombos = Number(sol?.combos || 0);
+  const skyfallCombos = Math.max(0, totalCombos - initialCombos);
+  const steps = getPathSteps(sol?.path || []);
+  const legal = sol?.violatesN2 ? 0 : 1;
 
+  const initTarget = Number(initTargetCombo);
   const initExact =
-    Number.isFinite(Number(initTargetCombo)) &&
-    Number(initTargetCombo) > 0 &&
-    initialCombos === Number(initTargetCombo)
+    Number.isFinite(initTarget) &&
+    initTarget > 0 &&
+    initialCombos === initTarget
       ? 1
       : 0;
 
+  const compiledKeepSlots =
+    sol?._compiledKeepSlotsCache &&
+    sol?._compiledKeepSlotsCacheKey === JSON.stringify(normalizeSpecialPriorityListKeepSlots(specialPriorities))
+      ? sol._compiledKeepSlotsCache
+      : compileSpecialPriorityListKeepSlots(specialPriorities);
+
   const extraCtx = {
-    rectGuide: Number(sol.rectGuide || 0),
+    rectGuide: Number(sol?.rectGuide || 0),
   };
 
-  const specialTuple =
-    Array.isArray(sol.specialTuple) && sol._specialTupleSource === JSON.stringify(specialPriorities)
-      ? sol.specialTuple
-      : getSpecialPriorityTuple(sol, specialPriorities, extraCtx);
+  const doneTuple = getSpecialPriorityDoneTupleKeepSlots(
+    sol,
+    compiledKeepSlots,
+    extraCtx
+  );
 
-  // 這裡是你真正的候選排序主軸
+  const d1 = Number(doneTuple[0] || 0);
+  const d2 = Number(doneTuple[1] || 0);
+  const d3 = Number(doneTuple[2] || 0);
+
+  const specialComboRank = getSpecialComboRank(d1, d2, d3);
+
+  sol._compiledKeepSlotsCache = compiledKeepSlots;
+  sol._compiledKeepSlotsCacheKey = JSON.stringify(
+    normalizeSpecialPriorityListKeepSlots(specialPriorities)
+  );
+
   const rank = [
     legal,
 
-    // 特優先組合先決
-    ...specialTuple,
+    // 先比：123 > 12 > 13 > 23 > 1 > 2 > 3 > 0
+    specialComboRank,
 
-    // 再看首消是否剛好達標
+    // 再比：首批期望 Combo 是否命中
     initExact,
 
-    // 再看總 combo（首消+疊消）
-    totalCombos,
+    // 再比：首批 + 疊消組合
+    initialCombos,
+    skyfallCombos,
 
-    // 再看步數（越少越好）
+    // 再比：首批大（保險再放一次，讓語意更明確）
+    initialCombos,
+
+    // 最後：步數少
     -steps,
-
-    // 再看總消珠數
-    cleared,
-
-    // 最後才看方向偏好與原始 score
-    mode === "vertical"
-      ? sol.verticalCombos || 0
-      : mode === "horizontal"
-      ? sol.horizontalCombos || 0
-      : 0,
-
-    Math.floor(sol.score || 0),
   ];
 
   sol._poolRankCached = rank;
@@ -5101,18 +5339,18 @@ const shouldReplaceSameComboSignature = (
   specialPriorities,
   initTargetCombo
 ) => {
-  const prevSteps = getPathSteps(prev.path);
-  const curSteps = getPathSteps(cur.path);
-
-  // ✅ 同【首消+疊消】時，永遠先保留最短路徑
-  if (curSteps < prevSteps) return true;
-  if (curSteps > prevSteps) return false;
-
-  // ✅ 只有步數相同時，才用原本排序規則決定
   const prevRank = makePoolRank(prev, mode, specialPriorities, initTargetCombo);
   const curRank = makePoolRank(cur, mode, specialPriorities, initTargetCombo);
 
-  return isLexBetter(curRank, prevRank);
+  const cmp = lexCompareDesc(curRank, prevRank);
+
+  if (cmp < 0) return true;
+  if (cmp > 0) return false;
+
+  // 完全同 rank 才用步數當最後補刀
+  const prevSteps = getPathSteps(prev?.path || []);
+  const curSteps = getPathSteps(cur?.path || []);
+  return curSteps < prevSteps;
 };
 
 const mergeTopSolutions = (
@@ -5126,7 +5364,7 @@ const mergeTopSolutions = (
   const bestBySig = new Map();
 
   for (const sol of [...(oldList || []), ...(newList || [])]) {
-    if (!sol || !sol.path || sol.path.length === 0) continue;
+    if (!sol || !Array.isArray(sol.path) || sol.path.length === 0) continue;
 
     const sig = getSolutionMergeSignature(sol);
     const prev = bestBySig.get(sig);
@@ -5136,15 +5374,15 @@ const mergeTopSolutions = (
       continue;
     }
 
-    const replace = shouldReplaceSameComboSignature(
-      prev,
-      sol,
-      mode,
-      specialPriorities,
-      initTargetCombo
-    );
-
-    if (replace) {
+    if (
+      shouldReplaceSameComboSignature(
+        prev,
+        sol,
+        mode,
+        specialPriorities,
+        initTargetCombo
+      )
+    ) {
       bestBySig.set(sig, sol);
     }
   }
@@ -5152,6 +5390,7 @@ const mergeTopSolutions = (
   const arr = Array.from(bestBySig.values());
 
   precomputeCandidateRanks(arr, mode, specialPriorities, initTargetCombo);
+
   arr.sort((a, b) => lexCompareDesc(a._poolRankCached, b._poolRankCached));
 
   return arr.slice(0, limit);
@@ -7435,7 +7674,7 @@ return (
         <ParamSlider
   label="🎯 期望首消 Combo"
   value={initTargetCombo}
-  min={1}
+  min={0}
   max={stats.theoreticalMax || 1}
   step={1}
   inputMode="numeric"
@@ -8317,27 +8556,28 @@ return (
           }}
         >
           <div ref={boardInnerRef} className="relative overflow-visible">
+  <div className={isManual ? "pt-3" : ""}>
   {!isManual && (
     <div className="mb-2 flex items-center justify-between rounded-2xl border border-white/10 bg-neutral-900/70 px-3 py-2">
       <div className="flex items-center gap-2">
-  <div className="flex h-5 w-5 items-center justify-center rounded-xl bg-yellow-400/15 text-yellow-300 ring-1 ring-yellow-300/20">
-    <Sparkles size={14} />
-  </div>
+        <div className="flex h-5 w-5 items-center justify-center rounded-xl bg-yellow-400/15 text-yellow-300 ring-1 ring-yellow-300/20">
+          <Sparkles size={14} />
+        </div>
 
-  <div className="flex items-center gap-2">
-  <span className="text-sm font-black text-yellow-300">
-    角色符石
-  </span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-black text-yellow-300">
+            角色符石
+          </span>
 
-  <span className="text-xs text-white/50">
-    {autoRow0Expanded ? "已展開" : "已收起"}
-  </span>
-</div>
-</div>
+          <span className="text-xs text-white/50">
+            {autoRow0Expanded ? "已展開" : "已收起"}
+          </span>
+        </div>
+      </div>
 
       <button
         type="button"
-		onClick={toggleAutoRow0Expanded}
+        onClick={toggleAutoRow0Expanded}
         className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
           autoRow0Expanded
             ? "bg-yellow-400 text-black hover:bg-yellow-300"
@@ -8348,6 +8588,7 @@ return (
       </button>
     </div>
   )}
+</div>
 
   <div className="grid grid-cols-6 gap-0">
   {displayBoard.map((row, r) => {
