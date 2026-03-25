@@ -94,6 +94,27 @@ const COLS = 6;
 const PLAY_ROWS_START = 1; // 0 是暫存列
 const PLAY_ROWS = TOTAL_ROWS - PLAY_ROWS_START; // 5
 
+const PLAY_COLS = COLS;
+
+const makeGhostSlot = () => ({
+  active: false,
+  orbId: -1,
+
+  fromX: 0,
+  fromY: 0,
+  toX: 0,
+  toY: 0,
+
+  x: 0,
+  y: 0,
+  startAt: 0,
+  duration: 120,
+
+  alpha: 1,
+  scale: 1,
+  onDone: null,
+});
+
 // 定義移動方向
 const DIRS_4 = [[0, 1], [0, -1], [1, 0], [-1, 0]];
 const DIRS_8 = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -185,6 +206,44 @@ function topKByScore(items, K, getScore) {
 }
 
 const App = () => {
+
+const ghostIdRef = useRef(0);
+
+const [hiddenBCell, setHiddenBCell] = useState(null);
+// { r, c }：目前要隱藏的 B 格
+
+const [ghostArrived, setGhostArrived] = useState(null);
+// { showAt: { r, c }, orbId }：ghost 到位後，要在 A 顯示哪顆珠
+
+const isHiddenBCell = useCallback((r, c) => {
+  return !!hiddenBCell && hiddenBCell.r === r && hiddenBCell.c === c;
+}, [hiddenBCell]);
+
+const getVisualOrbId = useCallback((r, c, orb) => {
+  if (
+    ghostArrived &&
+    ghostArrived.showAt.r === r &&
+    ghostArrived.showAt.c === c
+  ) {
+
+    return ghostArrived.orbId;
+  }
+
+  if (isHiddenBCell(r, c)) {
+    return -1;
+  }
+
+  return orbOf(orb);
+}, [ghostArrived, isHiddenBCell]);
+
+const ghostMatrixRef = useRef(
+  Array.from({ length: PLAY_ROWS }, () =>
+    Array.from({ length: PLAY_COLS }, () => makeGhostSlot())
+  )
+);
+
+const ghostRafRef = useRef(0);
+const [ghostVersion, setGhostVersion] = useState(0);
 
 const [solveProgress, setSolveProgress] = useState({
   current: 0,
@@ -603,7 +662,8 @@ const endEditorPaint = useCallback(() => {
     verticalCombos: 0, 
     horizontalCombos: 0
   });
-  const GIF_FOOTER_H = 30;
+  const GIF_FOOTER_H = 140;
+  const FLY_SPEED = 50;
   const [isReplaying, setIsReplaying] = useState(false);
   
   const [showConfig, setShowConfig] = useState(false);
@@ -920,12 +980,12 @@ const scheduleManualVisualFlush = useCallback(() => {
 
 const getCellFromClientPoint = useCallback(
   (clientX, clientY) => {
-    const wrap = boardWrapRef.current;
+    const wrap = boardInnerRef.current;
     if (!wrap) return null;
 
     const rect = wrap.getBoundingClientRect();
     const localX = clientX - rect.left;
-    const localY = clientY - rect.top;
+    const localY = clientY - rect.top - 20;
 
     const cellSize = stableCellSize || 0;
     if (!cellSize) return null;
@@ -941,6 +1001,207 @@ const getCellFromClientPoint = useCallback(
   },
   [stableCellSize]
 );
+
+const getCellCenterPx = useCallback((r, c) => {
+	  const rc = cellRectsRef.current?.[r]?.[c];
+	  const svgRect = svgRectRef.current || overlayRef.current?.getBoundingClientRect();
+	  if (!rc || !svgRect) return { x: 0, y: 0 };
+
+	  // ✅ 轉成 SVG 內座標
+	  const x = (rc.left + rc.right) / 2 - svgRect.left;
+	  const y = (rc.top + rc.bottom) / 2 - svgRect.top;
+
+	  // ✅ 像素對齊：直接消滅 subpixel 抖動
+	  return { x: Math.round(x), y: Math.round(y) };
+	}, []);
+
+const bumpGhostRender = useCallback(() => {
+  setGhostVersion((v) => (v + 1) % 1000000);
+}, []);
+
+const clearAllGhosts = useCallback(() => {
+  const mat = ghostMatrixRef.current;
+
+  for (let r = 0; r < mat.length; r++) {
+    for (let c = 0; c < mat[r].length; c++) {
+      const g = mat[r][c];
+      g.active = false;
+      g.orbId = -1;
+      g.onDone = null;
+      g.x = 0;
+      g.y = 0;
+      g.fromX = 0;
+      g.fromY = 0;
+      g.toX = 0;
+      g.toY = 0;
+      g.alpha = 1;
+    }
+  }
+
+  if (ghostRafRef.current) {
+    cancelAnimationFrame(ghostRafRef.current);
+    ghostRafRef.current = 0;
+  }
+
+  setGhostArrived(null);
+  setHiddenBCell(null);
+
+  bumpGhostRender();
+}, [bumpGhostRender]);
+
+const wakeGhostAtCell = useCallback(
+  (cellR, cellC, orbId, fromPt, toPt, duration = 120, onDone = null) => {
+    if (cellR < 0 || cellR >= PLAY_ROWS || cellC < 0 || cellC >= PLAY_COLS) return;
+    if (orbId == null || orbId < 0) return;
+
+    const slot = ghostMatrixRef.current[cellR][cellC];
+    const now = performance.now();
+
+    slot.active = true;
+    slot.orbId = orbId;
+
+    slot.fromX = fromPt.x;
+    slot.fromY = fromPt.y;
+    slot.toX = toPt.x;
+    slot.toY = toPt.y;
+
+    slot.x = fromPt.x;
+    slot.y = fromPt.y;
+    slot.startAt = now;
+    slot.duration = duration;
+
+    slot.alpha = 1;
+    slot.scale = 1;
+    slot.onDone = onDone;
+
+    bumpGhostRender();
+  },
+  [bumpGhostRender]
+);
+
+const stepGhosts = useCallback((ts) => {
+  const mat = ghostMatrixRef.current;
+  let anyActive = false;
+  let changed = false;
+
+  for (let r = 0; r < PLAY_ROWS; r++) {
+    for (let c = 0; c < PLAY_COLS; c++) {
+      const g = mat[r][c];
+      if (!g.active) continue;
+
+      const t = Math.min(1, (ts - g.startAt) / Math.max(1, g.duration));
+      const ease = 1 - Math.pow(1 - t, 3); // easeOutCubic
+
+      const nx = g.fromX + (g.toX - g.fromX) * ease;
+      const ny = g.fromY + (g.toY - g.fromY) * ease;
+
+      if (nx !== g.x || ny !== g.y) {
+        g.x = nx;
+        g.y = ny;
+        changed = true;
+      }
+
+      g.alpha = 1;
+
+      if (t >= 1) {
+  const done = g.onDone;
+
+  g.active = false;
+  g.orbId = -1;
+  g.onDone = null;
+  changed = true;
+
+  if (typeof done === "function") {
+    done();
+  }
+} else {
+  anyActive = true;
+}
+    }
+  }
+
+  if (changed) bumpGhostRender();
+
+  if (anyActive) {
+    ghostRafRef.current = requestAnimationFrame(stepGhosts);
+  } else {
+    ghostRafRef.current = 0;
+  }
+}, [bumpGhostRender]);
+
+const ensureGhostLoop = useCallback(() => {
+  if (ghostRafRef.current) return;
+  ghostRafRef.current = requestAnimationFrame(stepGhosts);
+}, [stepGhosts]);
+
+const spawnManualGhostWithPt = useCallback(
+  (orbId, fromPt, toPt, slotR, slotC, toR, toC) => {
+    if (orbId == null || orbId < 0) return;
+    if (slotR < PLAY_ROWS_START || slotR >= TOTAL_ROWS || slotC < 0 || slotC >= COLS) return;
+
+    if (
+      !Number.isFinite(fromPt?.x) ||
+      !Number.isFinite(fromPt?.y) ||
+      !Number.isFinite(toPt?.x) ||
+      !Number.isFinite(toPt?.y)
+    ) {
+      return;
+    }
+
+    ghostIdRef.current++;
+    const myId = ghostIdRef.current;
+
+    wakeGhostAtCell(
+      slotR - PLAY_ROWS_START,
+      slotC,
+      orbId,
+      fromPt,
+      toPt,
+      110,
+      () => {
+        if (myId !== ghostIdRef.current) return;
+
+        setGhostArrived({
+          showAt: { r: toR, c: toC },
+          orbId,
+        });
+
+        setHiddenBCell(null);
+      }
+    );
+
+    ensureGhostLoop();
+  },
+  [wakeGhostAtCell, ensureGhostLoop]
+);
+
+useEffect(() => {
+  return () => {
+    if (ghostRafRef.current) cancelAnimationFrame(ghostRafRef.current);
+  };
+}, []);
+
+const spawnSwapGhost = useCallback((boardNow, fromR, fromC, toR, toC) => {
+  // row0 不進 5x6 ghost matrix
+  if (fromR <= 0 || toR <= 0) return;
+
+  const pushedOrb = boardNow?.[toR]?.[toC];
+  if (pushedOrb == null || pushedOrb === -1) return;
+
+  const fromPt = getCellCenterPx(toR, toC); // ghost 起點：B
+  const toPt = getCellCenterPx(fromR, fromC); // ghost 終點：A
+
+  wakeGhostAtCell(
+    toR - 1, // 映射到 5x6 playable matrix
+    toC,
+    orbOf(pushedOrb),
+    fromPt,
+    toPt,
+    FLY_SPEED
+  );
+
+  ensureGhostLoop();
+}, [getCellCenterPx, wakeGhostAtCell, ensureGhostLoop]);
 
 const tryMoveToCell = useCallback(
   (r, c) => {
@@ -961,11 +1222,11 @@ const tryMoveToCell = useCallback(
 
     const allowDiagonal = isManual || diagonalEnabled;
 
-if (allowDiagonal) {
-  if (!isOrthogonal && !isDiagonal) return false;
-} else {
-  if (!isOrthogonal) return false;
-}
+    if (allowDiagonal) {
+      if (!isOrthogonal && !isDiagonal) return false;
+    } else {
+      if (!isOrthogonal) return false;
+    }
 
     const currentBoard = boardRef.current;
     if (currentBoard?.[r]?.[c] === undefined) return false;
@@ -998,28 +1259,49 @@ if (allowDiagonal) {
     pendingStepsRef.current = newPath.length - 1;
     lastPosRef.current = { r, c };
 
+    // 每一步開始前：清前一次到位訊號，並隱藏新的 B 格
+    setGhostArrived(null);
+	setHiddenBCell({ r: last.r, c: last.c });
+
     // case B: row0 -> row1~5
-	// ✅ 第一次拉下來時，row1~5 該格直接顯示 row0 那顆
-	// ✅ 但 row0 本身不變
-	if (lastIsRow0 && !nextIsRow0) {
-	  const nextBoard = clone2D(currentBoard);
+    if (lastIsRow0 && !nextIsRow0) {
+      const pushedOrbId = orbOf(currentBoard[r][c]);
+const fromPt = getCellCenterPx(r, c);
+const toPt = getCellCenterPx(last.r, last.c);
 
-	  // 把目前要進入的格子，覆蓋成 row0 那顆的樣式
-	  nextBoard[r][c] = currentBoard[last.r][last.c];
+spawnManualGhostWithPt(
+  pushedOrbId,
+  fromPt,
+  toPt,
+  r, c,
+  last.r, last.c
+);
 
-	  boardRef.current = nextBoard;
-	  pendingBoardRef.current = nextBoard;
+      const nextBoard = clone2D(currentBoard);
+      nextBoard[r][c] = currentBoard[last.r][last.c];
 
-	  scheduleManualVisualFlush();
-	  return true;
-	}
+      boardRef.current = nextBoard;
+      pendingBoardRef.current = nextBoard;
+
+      scheduleManualVisualFlush();
+      return true;
+    }
 
     // case C: row1~5 -> row0
-    // 前一步變成 row0 的樣式，但 row0 不變
     if (!lastIsRow0 && nextIsRow0) {
-      const nextBoard = clone2D(currentBoard);
+      const pushedOrbId = orbOf(currentBoard[last.r][last.c]);
+const fromPt = getCellCenterPx(last.r, last.c);
+const toPt = getCellCenterPx(r, c);
 
-      // 把前一步覆蓋成 row0 的珠
+spawnManualGhostWithPt(
+  pushedOrbId,
+  fromPt,
+  toPt,
+  last.r, last.c,
+  r, c
+);
+
+      const nextBoard = clone2D(currentBoard);
       nextBoard[last.r][last.c] = currentBoard[r][c];
 
       boardRef.current = nextBoard;
@@ -1031,6 +1313,18 @@ if (allowDiagonal) {
     }
 
     // case E: row1~5 之間正常交換
+    const pushedOrbId = orbOf(currentBoard[r][c]);
+const fromPt = getCellCenterPx(r, c);
+const toPt = getCellCenterPx(last.r, last.c);
+
+spawnManualGhostWithPt(
+  pushedOrbId,
+  fromPt,
+  toPt,
+  r, c,             // slot 掛在 B
+  last.r, last.c    // 顯示回 A
+);
+
     const nextBoard = clone2D(currentBoard);
     const temp = nextBoard[last.r][last.c];
     nextBoard[last.r][last.c] = nextBoard[r][c];
@@ -1047,7 +1341,13 @@ if (allowDiagonal) {
 
     return true;
   },
-  [manualLocked, scheduleManualVisualFlush, diagonalEnabled, isManual]
+  [
+    manualLocked,
+    scheduleManualVisualFlush,
+    diagonalEnabled,
+    isManual,
+    spawnManualGhostWithPt,
+  ]
 );
 
 const tryResolveDiagonalAssist = useCallback((hitR, hitC) => {
@@ -1419,6 +1719,7 @@ const handleManualEnd = useCallback(() => {
   setIsDragging(false);
   setManualActive(false);
   setFloating(null);
+  clearAllGhosts();
 
   stopManualTimer();
 
@@ -5533,6 +5834,7 @@ const resumeReplay = useCallback(() => {
     const dist = (s.dist0 || 0) + elapsed * s.pxPerSec;
 
     const clamped = Math.min(dist, s.total);
+
     let acc = 0;
     let i = 0;
     while (i < s.segLen.length && acc + s.segLen[i] < clamped) {
@@ -5556,13 +5858,42 @@ const resumeReplay = useCallback(() => {
     );
 
     // =========================
-    // 洞模型推進
+    // 🔥 STEP 推進（修正版）
     // =========================
     while (s.lastNode < i) {
       const nextStep = s.lastNode + 1;
+
+      const prevRC = s.targetPath[s.lastNode];   // ✅ 補上
       const currRC = s.targetPath[nextStep];
 
-      // 回到 row0 終止
+      // ✅ 先清掉舊顯示
+      setGhostArrived(null);
+
+      // ✅ 隱藏 B（同時你可以擴充 A 也一起隱藏）
+      setHiddenBCell({ r: prevRC.r, c: prevRC.c });
+
+      // ✅ spawn ghost（用 snapshot 避免同步問題）
+      const boardSnap = s.b.map(r => [...r]);
+
+      const pushedOrbId =
+  st.b?.[currRC.r]?.[currRC.c] == null || st.b[currRC.r][currRC.c] === -1
+    ? -1
+    : orbOf(st.b[currRC.r][currRC.c]);
+
+const fromPt = getCellCenterPx(currRC.r, currRC.c);
+const toPt = getCellCenterPx(prevRC.r, prevRC.c);
+
+spawnManualGhostWithPt(
+  pushedOrbId,
+  fromPt,
+  toPt,
+  currRC.r, currRC.c,
+  prevRC.r, prevRC.c
+);
+
+      // =========================
+      // 回到 row0 → 結束
+      // =========================
       if (currRC.r === 0) {
         if (s.hole) {
           const bb = s.b.map(r => [...r]);
@@ -5572,6 +5903,9 @@ const resumeReplay = useCallback(() => {
           setReplayBoard(s.b.map(r => [...r]));
         }
 
+        setHiddenBCell(null);
+        setGhostArrived(null);
+
         setFloating(null);
         setIsReplaying(false);
         setIsPaused(false);
@@ -5580,17 +5914,15 @@ const resumeReplay = useCallback(() => {
         return;
       }
 
-      // 第一次踏入 row1~5
+      // =========================
+      // 洞模型
+      // =========================
       if (!s.hole) {
         s.hole = { r: currRC.r, c: currRC.c };
         s.b[currRC.r][currRC.c] = -1;
         setHolePos({ ...s.hole });
       } else {
-        s.hole = holeStepInPlace(
-          s.b,
-          s.hole,
-          currRC
-        );
+        s.hole = holeStepInPlace(s.b, s.hole, currRC);
         setHolePos({ ...s.hole });
       }
 
@@ -5600,36 +5932,44 @@ const resumeReplay = useCallback(() => {
       setCurrentStep(nextStep);
     }
 
+    // =========================
+    // 結束處理
+    // =========================
     if (dist >= s.total - EPS) {
-		const lastIdx = st.targetPath.length - 1;
+      const lastIdx = s.targetPath.length - 1;
 
-  // 🔥 只補「最後一個 step」
-  if (st.lastNode < lastIdx) {
-    const currRC = st.targetPath[lastIdx];
+      if (s.lastNode < lastIdx) {
+        const currRC = s.targetPath[lastIdx];
 
-    if (currRC.r !== 0) {
-      if (!st.hole) {
-        st.hole = { r: currRC.r, c: currRC.c };
-        st.b[currRC.r][currRC.c] = -1;
-      } else {
-        st.hole = holeStepInPlace(st.b, st.hole, currRC);
+        if (currRC.r !== 0) {
+          if (!s.hole) {
+            s.hole = { r: currRC.r, c: currRC.c };
+            s.b[currRC.r][currRC.c] = -1;
+          } else {
+            s.hole = holeStepInPlace(s.b, s.hole, currRC);
+          }
+        }
+
+        s.lastNode = lastIdx;
       }
-    }
 
-    st.lastNode = lastIdx;
-  }
       const bb = s.b.map(r => [...r]);
-		if (s.hole) {
-		  const lastRC = s.targetPath[lastIdx];
-		  if (lastRC.r === 0) {
-			// ✅ 結束在 row0，用 row0 該欄的珠補洞
-			bb[s.hole.r][s.hole.c] = s.b[0][lastRC.c];
-		  } else {
-			bb[s.hole.r][s.hole.c] = s.held;
-		  }
-		}
+
+      if (s.hole) {
+        const lastRC = s.targetPath[lastIdx];
+
+        if (lastRC.r === 0) {
+          bb[s.hole.r][s.hole.c] = s.b[0][lastRC.c];
+        } else {
+          bb[s.hole.r][s.hole.c] = s.held;
+        }
+      }
 
       setReplayBoard(bb);
+
+      setHiddenBCell(null);
+      setGhostArrived(null);
+
       setFloating(null);
       setIsReplaying(false);
       setIsPaused(false);
@@ -5645,20 +5985,22 @@ const resumeReplay = useCallback(() => {
   st.raf = requestAnimationFrame(tick);
 }, [isPaused]);
 const stopReplay = useCallback((clearPath = false) => {
-	  if (replayAnimRef.current.raf) {
-		cancelAnimationFrame(replayAnimRef.current.raf);
-	  }
-	  replayAnimRef.current.raf = 0;
+  if (replayAnimRef.current.raf) {
+    cancelAnimationFrame(replayAnimRef.current.raf);
+  }
+  replayAnimRef.current.raf = 0;
 
-	  setIsReplaying(false);
-	  setFloating(null);
-	  setReplayBoard(null);
-	  setHolePos(null);
+  setIsReplaying(false);
+  setFloating(null);
+  setReplayBoard(null);
+  setHolePos(null);
 
-	  if (clearPath) {
-		setCurrentStep(-1);   // 只有真的要清掉才清
-	  }
-	}, []);
+  clearAllGhosts();
+
+  if (clearPath) {
+    setCurrentStep(-1);
+  }
+}, []);
 
 const startSolveProgressTicker = useCallback(() => {
   if (solveProgressTimerRef.current) {
@@ -5932,18 +6274,6 @@ const activeSolutions = priorityMode === "steps" ? solutionPools.steps : solutio
 
 ///////////////////////////////
 
-const getCellCenterPx = useCallback((r, c) => {
-	  const rc = cellRectsRef.current?.[r]?.[c];
-	  const svgRect = svgRectRef.current || overlayRef.current?.getBoundingClientRect();
-	  if (!rc || !svgRect) return { x: 0, y: 0 };
-
-	  // ✅ 轉成 SVG 內座標
-	  const x = (rc.left + rc.right) / 2 - svgRect.left;
-	  const y = (rc.top + rc.bottom) / 2 - svgRect.top;
-
-	  // ✅ 像素對齊：直接消滅 subpixel 抖動
-	  return { x: Math.round(x), y: Math.round(y) };
-	}, []);
 const [gifFooter, setGifFooter] = useState({
 	  segment: 1,
 	  segmentTotal: 1,
@@ -6332,6 +6662,7 @@ const replayPathContinuous = (targetPath = path, startPx = null) => {
 	  setIsReplaying(true);
 	  setIsPaused(false);
 	  setCurrentStep(0);
+	  clearAllGhosts();
 
 	  const start = targetPath[0];
 	  const base = baseBoardRef.current;
@@ -6412,43 +6743,63 @@ const replayPathContinuous = (targetPath = path, startPx = null) => {
 
 		// ✅ 走過節點就提交「洞滑動」
 		while (st.lastNode < i) {
-		  const nextStep = st.lastNode + 1;
-		  const currRC = st.targetPath[nextStep];
+  const nextStep = st.lastNode + 1;
+  const prevRC = st.targetPath[st.lastNode];
+  const currRC = st.targetPath[nextStep];
 
-		  // 踏回 row0：終止（先把 held 放回洞）
-		  if (currRC.r === 0) {
-			if (st.hole) {
-			  const bb = st.b.map(r => [...r]);
-			  bb[st.hole.r][st.hole.c] = st.b[0][currRC.c];
-			  setReplayBoard(bb);
-			} else {
-			  setReplayBoard(st.b.map(r => [...r]));
-			}
-			setFloating(null);
-			setIsReplaying(false);
-			setIsPaused(false);
-			setCurrentStep(st.targetPath.length - 1);
-			st.raf = 0;
-			return;
-		  }
+  setGhostArrived(null);
+  setHiddenBCell({ r: prevRC.r, c: prevRC.c });
 
-		  // 第一次踏入 row1~5：在那格挖洞（把那顆「抽走」不顯示，洞開始移動）
-		  if (!st.hole) {
-			st.hole = { r: currRC.r, c: currRC.c };
-			st.b[currRC.r][currRC.c] = -1;
-			setHolePos({ ...st.hole });
-		  } else {
-			st.hole = holeStepInPlace(st.b, st.hole, currRC);
-			setHolePos({ ...st.hole });
-		  }
+  const pushedOrbId =
+  st.b?.[currRC.r]?.[currRC.c] == null || st.b[currRC.r][currRC.c] === -1
+    ? -1
+    : orbOf(st.b[currRC.r][currRC.c]);
 
-		  st.lastNode = nextStep;
-		  setReplayBoard(st.b.map(r => [...r]));
-		  setCurrentStep(nextStep);
+const fromPt = getCellCenterPx(currRC.r, currRC.c);
+const toPt = getCellCenterPx(prevRC.r, prevRC.c);
 
-		  // ✅ 浮珠永遠不換 orbId（保持 startOrb）
-		}
+spawnManualGhostWithPt(
+  pushedOrbId,
+  fromPt,
+  toPt,
+  currRC.r, currRC.c,
+  prevRC.r, prevRC.c
+);
 
+  // 踏回 row0：終止（先把 held 放回洞）
+  if (currRC.r === 0) {
+    if (st.hole) {
+      const bb = st.b.map(r => [...r]);
+      bb[st.hole.r][st.hole.c] = st.b[0][currRC.c];
+      setReplayBoard(bb);
+    } else {
+      setReplayBoard(st.b.map(r => [...r]));
+    }
+
+    setFloating(null);
+    setIsReplaying(false);
+    setIsPaused(false);
+    setCurrentStep(st.targetPath.length - 1);
+	clearAllGhosts();
+    st.raf = 0;
+    return;
+  }
+
+  // 第一次踏入 row1~5：在那格挖洞（把那顆「抽走」不顯示，洞開始移動）
+  if (!st.hole) {
+    st.hole = { r: currRC.r, c: currRC.c };
+    st.b[currRC.r][currRC.c] = -1;
+    setHolePos({ ...st.hole });
+  } else {
+    st.hole = holeStepInPlace(st.b, st.hole, currRC);
+    setHolePos({ ...st.hole });
+  }
+
+  st.lastNode = nextStep;
+  setReplayBoard(st.b.map(r => [...r]));
+  setCurrentStep(nextStep);
+}
+		
 		// 結束：把 held 放到洞，浮珠消失
 		if (dist >= st.total - EPS) {
 			const lastIdx = st.targetPath.length - 1;
@@ -6486,6 +6837,7 @@ const replayPathContinuous = (targetPath = path, startPx = null) => {
 		  setIsReplaying(false);
 		  setIsPaused(false);
 		  setCurrentStep(st.targetPath.length - 1);
+		  clearAllGhosts();
 		  st.raf = 0;
 		  return;
 		}
@@ -8641,6 +8993,11 @@ const cellBgClass = (r + c) % 2 === 0 ? "bg-neutral-700" : "bg-neutral-900";
 
 const row0BoxImg =
   r === 0 ? ROW0_BOX_IMG_MAP[row0Type] || null : null;
+
+const visualOrbId = getVisualOrbId(r, c, orb);
+const visualImg = Object.values(ORB_TYPES).find(
+  (t) => t.id === visualOrbId
+)?.img;
           return (
             <div
               key={`${r}-${c}`}
@@ -8671,84 +9028,80 @@ const row0BoxImg =
   isMoving ? "opacity-20 z-40" : "opacity-100"
 }`}
             >
-              {orb === -1 ? (
-                <div className="w-full h-full bg-black/20 border border-white/10" />
-              ) : (
-                <>
-                  {r === 0 && row0BoxImg && (
-                    <img
-                      src={row0BoxImg}
-                      className="absolute inset-0 z-[3] w-full h-full object-contain pointer-events-none select-none scale-[1.02]"
-                      draggable={false}
-                      alt=""
-                    />
-                  )}
+				{orb === -1 || visualOrbId === -1 ? (
+  <div className="w-full h-full bg-black/20 border border-white/10" />
+) : (
+  <>
+    {r === 0 && row0BoxImg && (
+      <img
+        src={row0BoxImg}
+        className="absolute inset-0 z-[3] w-full h-full object-contain pointer-events-none select-none scale-[1.02]"
+        draggable={false}
+        alt=""
+      />
+    )}
 
-                  <img
-                    src={
-                      Object.values(ORB_TYPES).find(
-                        (t) => t.id === orbOf(orb)
-                      )?.img
-                    }
-                    className={`relative z-[1] w-[100%] h-[100%] object-contain pointer-events-none select-none transition-all duration-75
-                      ${isManualHidden ? "brightness-[0.35] saturate-[0.6]" : ""}
-                    `}
-                    draggable={false}
-                    alt=""
-                  />
+    <img
+      src={visualImg}
+      className={`relative z-[1] w-[100%] h-[100%] object-contain pointer-events-none select-none transition-all duration-75
+        ${isManualHidden ? "brightness-[0.35] saturate-[0.6]" : ""}
+      `}
+      draggable={false}
+      alt=""
+    />
 
-                  {xMarkOf(orb) === 1 && !isManual && (
-                    <img
-                      src={x1Img}
-                      className="absolute z-[3] inset-0 w-full h-full object-contain pointer-events-none select-none"
-                      draggable={false}
-                      alt=""
-                    />
-                  )}
+    {xMarkOf(orb) === 1 && !isManual && (
+      <img
+        src={x1Img}
+        className="absolute z-[3] inset-0 w-full h-full object-contain pointer-events-none select-none"
+        draggable={false}
+        alt=""
+      />
+    )}
 
-                  {xMarkOf(orb) === 2 && (
-                    <img
-                      src={x2Img}
-                      className="absolute z-[3] inset-0 w-full h-full object-contain pointer-events-none select-none"
-                      draggable={false}
-                      alt=""
-                    />
-                  )}
+    {xMarkOf(orb) === 2 && (
+      <img
+        src={x2Img}
+        className="absolute z-[3] inset-0 w-full h-full object-contain pointer-events-none select-none"
+        draggable={false}
+        alt=""
+      />
+    )}
 
-                  {qMarkOf(orb) === 1 &&
-                    !isManual &&
-                    !(r === 0 && replayDone) && (
-                      <div className="absolute z-[4] top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
-                        Start
-                      </div>
-                    )}
+    {qMarkOf(orb) === 1 &&
+      !isManual &&
+      !(r === 0 && replayDone) && (
+        <div className="absolute z-[4] top-1 left-1 px-2 py-0.5 rounded-lg bg-cyan-500/90 text-black text-xs font-black border border-black/30">
+          Start
+        </div>
+      )}
 
-                  {qMarkOf(orb) === 2 && !isManual && (
-                    <div className="absolute z-[4] top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
-                      End
-                    </div>
-                  )}
+    {qMarkOf(orb) === 2 && !isManual && (
+      <div className="absolute z-[4] top-1 left-1 px-2 py-0.5 rounded-lg bg-fuchsia-500/90 text-black text-xs font-black border border-black/30">
+        End
+      </div>
+    )}
 
-                  {nMarkOf(orb) === 1 && (
-                    <img
-                      src={n1Img}
-                      className="absolute inset-0 z-[2] w-full h-full object-contain pointer-events-none select-none"
-                      draggable={false}
-                      alt=""
-                    />
-                  )}
+    {nMarkOf(orb) === 1 && (
+      <img
+        src={n1Img}
+        className="absolute inset-0 z-[2] w-full h-full object-contain pointer-events-none select-none"
+        draggable={false}
+        alt=""
+      />
+    )}
 
-                  {nMarkOf(orb) === 2 && (
-                    <img
-                      src={n2Img}
-                      className="absolute inset-0 z-[2] w-full h-full object-contain pointer-events-none select-none"
-                      draggable={false}
-                      alt=""
-                    />
-                  )}
-                </>
-              )}
-            </div>
+    {nMarkOf(orb) === 2 && (
+      <img
+        src={n2Img}
+        className="absolute inset-0 z-[2] w-full h-full object-contain pointer-events-none select-none"
+        draggable={false}
+        alt=""
+      />
+    )}
+  </>
+)}
+			</div>
           );
         })}
       </React.Fragment>
@@ -8993,6 +9346,43 @@ const row0BoxImg =
       );
     })()}
   </svg>
+
+<div className="absolute inset-0 pointer-events-none z-[9998]">
+  {ghostMatrixRef.current.map((row, gr) =>
+    row.map((g, gc) => {
+      if (!g.active || g.orbId < 0) return null;
+
+      const imgSrc = Object.values(ORB_TYPES).find((t) => t.id === g.orbId)?.img;
+      if (!imgSrc) return null;
+
+      return (
+        <div
+          key={`ghost-${gr}-${gc}-${ghostVersion}`}
+          className="absolute pointer-events-none flex items-center justify-center"
+          style={{
+            left: g.x,
+            top: g.y,
+            transform: "translate(-50%, -50%)",
+            opacity: g.alpha,
+            width: stableCellSize,     // ✅ 改這裡
+            height: stableCellSize,    // ✅ 改這裡
+            willChange: "transform",
+          }}
+        >
+          {/* ❌ 建議先拿掉，避免視覺膨脹 */}
+          {/* <div className="absolute inset-0 rounded-full blur-md bg-white/25" /> */}
+
+          <img
+            src={imgSrc}
+            alt=""
+            draggable={false}
+            className="w-full h-full object-contain"
+          />
+        </div>
+      );
+    })
+  )}
+</div>
 
   <div className="absolute inset-0 pointer-events-none z-[9999]">
     {floating?.visible && (
