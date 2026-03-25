@@ -484,6 +484,8 @@ const applyEditAtCell = useCallback((r, c) => {
 }, [selectedMark, selectedBrush, isManual]);
 
 const startEditorPaint = useCallback((r, c) => {
+	if (r === 0 && selectedBrush === ORB_TYPES.HEART.id) return;
+
   editorDraggingRef.current = true;
   editorLastPaintRef.current = { r: r, c: c };
 
@@ -496,6 +498,8 @@ const moveEditorPaint = useCallback((r, c) => {
 
   const last = editorLastPaintRef.current;
   if (last.r === r && last.c === c) return;
+
+	if (r === 0 && selectedBrush === ORB_TYPES.HEART.id) return;
 
   editorLastPaintRef.current = { r, c };
   applyEditAtCell(r, c);
@@ -805,7 +809,18 @@ const refreshTarget = useCallback((newBoard, row0Expanded = autoRow0Expanded) =>
 		for (let r = 0; r < TOTAL_ROWS; r++) {
 		  let row = [];
 		  for (let c = 0; c < COLS; c++) {
-			row.push(withMarks(Math.floor(Math.random() * 6), 0, 0, 0)); // ✅ 永遠 mark=0
+
+			let orb;
+
+			if (r === 0) {
+			  // 🚫 row0 禁止心珠
+			  const pool = [0, 1, 2, 3, 4]; 
+			  orb = pool[Math.floor(Math.random() * pool.length)];
+			} else {
+			  orb = Math.floor(Math.random() * 6);
+			}
+
+			row.push(withMarks(orb, 0, 0, 0));
 		  }
 		  newBoard.push(row);
 		}
