@@ -253,7 +253,7 @@ const makeDefaultPriority = () => ({
   orb: SPECIAL_ORB_ANY,
   clearCount: 3,
 
-  // 首消相等盾
+  // 連擊相等盾
   equalOrbs: [],
 
   // 靈罩
@@ -7218,7 +7218,7 @@ const getSpecialPriorityLabel = (sp) => {
 
   if (sp.type === "equalFirst") {
     const selected = normalizeSelectedEqualOrbs(sp.equalOrbs);
-    if (selected.length === 0) return "首消相等盾";
+    if (selected.length === 0) return "連擊相等盾";
     const map = {
       [ORB_TYPES.WATER.id]: "水",
       [ORB_TYPES.FIRE.id]: "火",
@@ -7227,7 +7227,7 @@ const getSpecialPriorityLabel = (sp) => {
       [ORB_TYPES.DARK.id]: "暗",
       [ORB_TYPES.HEART.id]: "心",
     };
-    return `首消相等盾（${selected.map((x) => map[x]).join(" / ")}）`;
+    return `連擊相等盾（${selected.map((x) => map[x]).join(" / ")}）`;
   }
 
   if (sp.type === "rect") {
@@ -7802,7 +7802,7 @@ return (
             {[
   { key: "none", label: "無" },
   { key: "clearCount", label: "首消 n 粒盾" },
-  { key: "equalFirst", label: "首消相等盾" },
+  { key: "equalFirst", label: "連擊相等盾" },
   { key: "rect", label: "靈罩" },
   { key: "cross", label: "十字盾" },
   { key: "l", label: "L字盾" },
@@ -8044,7 +8044,7 @@ return (
             {[
   { key: "none", label: "無" },
   { key: "clearCount", label: "首消 n 粒盾" },
-  { key: "equalFirst", label: "首消相等盾" },
+  { key: "equalFirst", label: "連擊相等盾" },
   { key: "rect", label: "靈罩" },
   { key: "cross", label: "十字盾" },
   { key: "l", label: "L字盾" },
@@ -8286,7 +8286,7 @@ return (
             {[
   { key: "none", label: "無" },
   { key: "clearCount", label: "首消 n 粒盾" },
-  { key: "equalFirst", label: "首消相等盾" },
+  { key: "equalFirst", label: "連擊相等盾" },
   { key: "rect", label: "靈罩" },
   { key: "cross", label: "十字盾" },
   { key: "l", label: "L字盾" },
