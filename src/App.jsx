@@ -3814,7 +3814,7 @@ const beamSolve = async (
 
   const exceedsInitialComboCap = (ev) => {
     const cap = Number(initTargetCombo);
-    if (!Number.isFinite(cap) || cap < 0) return false;
+    if (!Number.isFinite(cap) || cap <= 0) return false;
     const initialCombos = Number(
       ev?.initialCombos ?? ev?.initCombos ?? ev?.combos ?? 0
     );
@@ -3823,7 +3823,7 @@ const beamSolve = async (
 
   const hitsInitTargetComboExactly = (ev) => {
     const t = Number(initTargetCombo);
-    if (!Number.isFinite(t) || t <= 0) return false;
+    if (!Number.isFinite(t) || t < 0) return false;
     return Number(ev?.initialCombos || 0) === t;
   };
 
@@ -5591,7 +5591,7 @@ const makePoolRank = (sol, mode, specialPriorities, initTargetCombo) => {
   const initTarget = Number(initTargetCombo);
   const initExact =
     Number.isFinite(initTarget) &&
-    initTarget > 0 &&
+    initTarget >= 0 &&
     initialCombos === initTarget
       ? 1
       : 0;
