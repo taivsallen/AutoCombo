@@ -27,6 +27,7 @@ const ATTRIBUTE_PICKER_OPTIONS = [
   { value: "p", label: "木", img: pImg },
   { value: "l", label: "光", img: lImg },
   { value: "d", label: "暗", img: dImg },
+  { value: "h", label: "心", img: hImg }
 ];
 
 const TEMPLATE_ORB_IMG = {
@@ -533,20 +534,20 @@ const handleCloseAttributePicker = () => {
                   : "【選取屬性】"}
               </div>
 
-              <div className="grid grid-cols-5 gap-3">
-                {ATTRIBUTE_PICKER_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => handleResolveXAttribute(opt.value)}
-                    className="p-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 flex flex-col items-center"
-                  >
-                    <img src={opt.img} className="w-10 h-10" />
-                    <span className="text-xs mt-1 text-white font-bold">
-                      {opt.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
+             <div className="grid grid-cols-3 gap-3">
+  {ATTRIBUTE_PICKER_OPTIONS.map((opt) => (
+    <button
+      key={opt.value}
+      onClick={() => handleResolveXAttribute(opt.value)}
+      className="p-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 flex flex-col items-center"
+    >
+      <img src={opt.img} className="w-10 h-10" />
+      <span className="text-xs mt-1 text-white font-bold">
+        {opt.label}
+      </span>
+    </button>
+  ))}
+</div>
 
               <button
                 onClick={handleCloseAttributePicker}

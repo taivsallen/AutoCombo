@@ -1157,7 +1157,7 @@ const spawnManualGhostWithPt = useCallback(
       orbId,
       fromPt,
       toPt,
-      110,
+      FLY_SPEED,
       () => {
         if (myId !== ghostIdRef.current) return;
 
@@ -3764,6 +3764,7 @@ const beamSolve = async (
         initClearedBonus: 125000,
         initAllEqualBonus: 2000000,
         initExactBonus: 1800000,
+        initTargetPenalty: 780000,
         freeMajorBonus: hasInitSensitiveSpecial ? 150000 : 0,
         hvDiffPenalty: hasInitSensitiveSpecial ? 18000 : 0,
         extraPotentialWeight: 0.05,
@@ -3771,8 +3772,7 @@ const beamSolve = async (
         bestStepSlack: 0,
         comboVisitedPrefixLen: 0,
         stepsVisitedSlack: 0,
-        comboExploreRegionSkipProb:
-          cfg.beamWidth >= 300 ? 0.82 : 0.74,
+        comboExploreRegionSkipProb: cfg.beamWidth >= 300 ? 0.82 : 0.74,
         comboMaxTier: 8,
         comboQuotaW: [3.2, 2.3, 1.7, 1.15, 0.8, 0.55, 0.36, 0.24, 0.15],
         stepMaxTier: 8,
@@ -3782,6 +3782,7 @@ const beamSolve = async (
         initClearedBonus: 70000,
         initAllEqualBonus: 1300000,
         initExactBonus: 900000,
+        initTargetPenalty: 260000,
         freeMajorBonus: hasInitSensitiveSpecial ? 90000 : 0,
         hvDiffPenalty: hasInitSensitiveSpecial ? 10000 : 0,
         extraPotentialWeight: 0.3,
@@ -3789,8 +3790,7 @@ const beamSolve = async (
         bestStepSlack: 2,
         comboVisitedPrefixLen: hasInitSensitiveSpecial ? 7 : 6,
         stepsVisitedSlack: 2,
-        comboExploreRegionSkipProb:
-          cfg.beamWidth >= 300 ? 0.6 : 0.5,
+        comboExploreRegionSkipProb: cfg.beamWidth >= 300 ? 0.6 : 0.5,
         comboMaxTier: 10,
         comboQuotaW: [2.5, 2.0, 1.6, 1.25, 1.0, 0.8, 0.65, 0.5, 0.38, 0.28, 0.18],
         stepMaxTier: 8,
@@ -3812,31 +3812,53 @@ const beamSolve = async (
 
   const stepsOf = (node) => Math.max(0, (node?.len || 0) - 1);
 
-  const exceedsInitialComboCap = (ev) => {
-    const cap = Number(initTargetCombo);
-    if (!Number.isFinite(cap) || cap <= 0) return false;
-    const initialCombos = Number(
-      ev?.initialCombos ?? ev?.initCombos ?? ev?.combos ?? 0
-    );
-    return initialCombos > cap;
+  const toNum = (v, d = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : d;
   };
 
-  const hitsInitTargetComboExactly = (ev) => {
-    const t = Number(initTargetCombo);
-    if (!Number.isFinite(t) || t < 0) return false;
-    return Number(ev?.initialCombos || 0) === t;
+  // ✅ 統一版：首消 target 資訊
+  // 不再做 cap / 不再做 0 特判成關閉限制
+  // 只算距離：distance = |initialCombos - target|
+  const getInitialComboInfo = (evLike, targetLike = initTargetCombo) => {
+    const targetNum = Number(targetLike);
+    const initialCombos = toNum(
+      evLike?.initialCombos ?? evLike?.initCombos ?? evLike?.combos,
+      0
+    );
+
+    if (!Number.isFinite(targetNum) || targetNum < 0) {
+      return {
+        enabled: false,
+        target: null,
+        initialCombos,
+        distance: 0,
+        exact: false,
+      };
+    }
+
+    const distance = Math.abs(initialCombos - targetNum);
+
+    return {
+      enabled: true,
+      target: targetNum,
+      initialCombos,
+      distance,
+      exact: initialCombos === targetNum,
+    };
   };
+
+  const hitsInitTargetComboExactly = (ev) =>
+    getInitialComboInfo(ev).exact;
+
+  const getInitComboDistance = (ev) =>
+    getInitialComboInfo(ev).distance;
 
   const stepConstraint = (cellVal) => {
     const m = xMarkOf(cellVal);
     if (m === 1) return { ok: false, locked: false };
     if (m === 2) return { ok: true, locked: true };
     return { ok: true, locked: false };
-  };
-
-  const toNum = (v, d = 0) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : d;
   };
 
   const extractInitialMatchSizes = (initial, ev = null) => {
@@ -3994,7 +4016,14 @@ const beamSolve = async (
     return bias;
   };
 
-  const buildNoSpecialRankTuple = (ev, score, steps, violatesN2, initExact) => {
+  const buildNoSpecialRankTuple = (
+    ev,
+    score,
+    steps,
+    violatesN2,
+    initExact,
+    initDistance = getInitComboDistance(ev)
+  ) => {
     const legal = violatesN2 ? 0 : 1;
     const initEq = ev.initialAllEqual ? 1 : 0;
     const initCombos = ev.initialCombos || 0;
@@ -4008,6 +4037,7 @@ const beamSolve = async (
         return [
           legal,
           initExact ? 1 : 0,
+          -initDistance,
           initEq,
           initCombos,
           initCleared,
@@ -4022,6 +4052,7 @@ const beamSolve = async (
       return [
         legal,
         initExact ? 1 : 0,
+        -initDistance,
         initEq,
         initCombos,
         initCleared,
@@ -4037,6 +4068,7 @@ const beamSolve = async (
       return [
         legal,
         initExact ? 1 : 0,
+        -initDistance,
         initEq,
         initCombos,
         initCleared,
@@ -4051,6 +4083,7 @@ const beamSolve = async (
     return [
       legal,
       initExact ? 1 : 0,
+      -initDistance,
       initEq,
       initCombos,
       initCleared,
@@ -4117,6 +4150,7 @@ const beamSolve = async (
     horizontalCombos: 0,
     rectGuide: 0,
     violatesN2: false,
+    initialComboDistance: Infinity,
   };
 
   let bestReachedSteps = Infinity;
@@ -4224,20 +4258,25 @@ const beamSolve = async (
     if (!shouldAcceptEnd(node)) return;
 
     const curSteps = stepsOf(node);
+    const curInitExact = hitsInitTargetComboExactly(ev);
+    const curInitDistance = getInitComboDistance(ev);
 
     if (!hasSpecial) {
-      const curInitExact = hitsInitTargetComboExactly(ev);
       const curTuple = buildNoSpecialRankTuple(
         ev,
         score,
         curSteps,
         violatesN2,
-        curInitExact
+        curInitExact,
+        curInitDistance
       );
 
       const bestSteps = bestGlobal.node ? stepsOf(bestGlobal.node) : Infinity;
       const bestInitExact =
         bestGlobal.node && hitsInitTargetComboExactly(bestGlobal);
+      const bestInitDistance = bestGlobal.node
+        ? getInitComboDistance(bestGlobal)
+        : Infinity;
 
       const bestTuple = bestGlobal.node
         ? buildNoSpecialRankTuple(
@@ -4245,7 +4284,8 @@ const beamSolve = async (
             bestGlobal.score,
             bestSteps,
             bestGlobal.violatesN2,
-            bestInitExact
+            bestInitExact,
+            bestInitDistance
           )
         : null;
 
@@ -4274,27 +4314,32 @@ const beamSolve = async (
     const curTuple = [
       violatesN2 ? 0 : 1,
       ...specialTuple,
+      curInitExact ? 1 : 0,
+      -curInitDistance,
       ev.initialAllEqual ? 1 : 0,
       ev.initialCombos || 0,
       ev.initialClearedCount || 0,
       ev.combos || 0,
       ev.clearedCount || 0,
-      hitsInitTargetComboExactly(ev) ? 1 : 0,
       -curSteps,
       Math.floor(score),
     ];
 
     const bestSteps = bestGlobal.node ? stepsOf(bestGlobal.node) : Infinity;
+    const bestInitDistance = bestGlobal.node
+      ? getInitComboDistance(bestGlobal)
+      : Infinity;
     const bestTuple = bestGlobal.node
       ? [
           bestGlobal.violatesN2 ? 0 : 1,
           ...(bestGlobal.specialTuple || EMPTY_SPECIAL_TUPLE),
+          hitsInitTargetComboExactly(bestGlobal) ? 1 : 0,
+          -bestInitDistance,
           bestGlobal.initialAllEqual ? 1 : 0,
           bestGlobal.initialCombos || 0,
           bestGlobal.initialClearedCount || 0,
           bestGlobal.combos || 0,
           bestGlobal.clearedCount || 0,
-          hitsInitTargetComboExactly(bestGlobal) ? 1 : 0,
           -bestSteps,
           Math.floor(bestGlobal.score),
         ]
@@ -4351,7 +4396,8 @@ const beamSolve = async (
       score,
       steps,
       violatesN2,
-      initExact
+      initExact,
+      getInitComboDistance(ev)
     );
 
     if (!prev) {
@@ -4367,10 +4413,8 @@ const beamSolve = async (
         prefixLen > 0 &&
         softDominatesPrefix(prev, curVec, prefixLen)
       ) {
-        const prevStepsMetric =
-          prev[prev.length - 2] || 0;
-        const curStepsMetric =
-          curVec[curVec.length - 2] || 0;
+        const prevStepsMetric = prev[prev.length - 2] || 0;
+        const curStepsMetric = curVec[curVec.length - 2] || 0;
 
         if (prevStepsMetric >= curStepsMetric - SEARCH_PROFILE.stepsVisitedSlack) {
           return false;
@@ -4403,7 +4447,6 @@ const beamSolve = async (
   ) => {
     const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
     const evRaw = evaluateBoard(evalBoard, skyfall, initial);
-    if (exceedsInitialComboCap(evRaw)) return null;
 
     const initInfo = extractInitialInfo(initial, evRaw);
 
@@ -4425,6 +4468,12 @@ const beamSolve = async (
       initialAllEqual: initInfo.allEqual,
       initialDistinctSizeCount: initInfo.distinctSizeCount,
     };
+
+    const initComboInfo = getInitialComboInfo(ev);
+
+    ev.initialComboDistance = initComboInfo.distance;
+    ev.initTargetCombo = initComboInfo.target;
+    ev.initialComboExact = initComboInfo.exact;
 
     const pot = combinedPotentialScore(evalBoard, mode);
 
@@ -4450,6 +4499,9 @@ const beamSolve = async (
       initialAllEqual: ev.initialAllEqual,
       initialDistinctSizeCount: ev.initialDistinctSizeCount,
       initSignature: initInfo.signature,
+      initialComboDistance: initComboInfo.distance,
+      initialComboExact: initComboInfo.exact,
+      initTargetCombo: initComboInfo.target,
     };
 
     const specialTuple = hasSpecial
@@ -4474,7 +4526,15 @@ const beamSolve = async (
     score += ev.initialCombos * SEARCH_PROFILE.initComboBonus;
     score += ev.initialClearedCount * SEARCH_PROFILE.initClearedBonus;
     if (ev.initialAllEqual) score += SEARCH_PROFILE.initAllEqualBonus;
-    if (hitsInitTargetComboExactly(ev)) score += SEARCH_PROFILE.initExactBonus;
+
+    // ✅ 統一距離懲罰
+    // target 越接近越好，不再中途硬砍
+    if (initComboInfo.enabled) {
+      score -= initComboInfo.distance * SEARCH_PROFILE.initTargetPenalty;
+      if (initComboInfo.exact) {
+        score += SEARCH_PROFILE.initExactBonus;
+      }
+    }
 
     score += getInitShieldScoreBias(
       {
@@ -4504,18 +4564,20 @@ const beamSolve = async (
       }
     }
 
-    const initExact = hitsInitTargetComboExactly(ev);
+    const initExact = initComboInfo.exact;
+    const initDistance = initComboInfo.distance;
 
     const visitedTuple = hasSpecial
       ? [
           violatesN2 ? 0 : 1,
           ...specialTuple,
+          initExact ? 1 : 0,
+          -initDistance,
           ev.initialAllEqual ? 1 : 0,
           ev.initialCombos || 0,
           ev.initialClearedCount || 0,
           ev.combos || 0,
           ev.clearedCount || 0,
-          initExact ? 1 : 0,
           -steps,
           Math.floor(score),
         ]
@@ -4524,19 +4586,21 @@ const beamSolve = async (
           score,
           steps,
           violatesN2,
-          initExact
+          initExact,
+          initDistance
         );
 
     const finalRankTuple = hasSpecial
       ? [
           violatesN2 ? 0 : 1,
           ...specialTuple,
+          initExact ? 1 : 0,
+          -initDistance,
           ev.initialAllEqual ? 1 : 0,
           ev.initialCombos || 0,
           ev.initialClearedCount || 0,
           ev.combos || 0,
           ev.clearedCount || 0,
-          initExact ? 1 : 0,
           -steps,
           Math.floor(score),
         ]
@@ -4545,7 +4609,8 @@ const beamSolve = async (
           score,
           steps,
           violatesN2,
-          initExact
+          initExact,
+          initDistance
         );
 
     return {
@@ -4687,16 +4752,18 @@ const beamSolve = async (
       if (!st.finalRankTuple) {
         const steps = stepsOf(st.node);
         const initExact = hitsInitTargetComboExactly(st.ev);
+        const initDistance = getInitComboDistance(st.ev);
 
         st.finalRankTuple = [
           st.violatesN2 ? 0 : 1,
           ...(st.specialTuple || EMPTY_SPECIAL_TUPLE),
+          initExact ? 1 : 0,
+          -initDistance,
           st.ev.initialAllEqual ? 1 : 0,
           st.ev.initialCombos || 0,
           st.ev.initialClearedCount || 0,
           st.ev.combos || 0,
           st.ev.clearedCount || 0,
-          initExact ? 1 : 0,
           -steps,
           Math.floor(st.score),
         ];
@@ -4712,6 +4779,8 @@ const beamSolve = async (
     candidates.sort((a, b) => {
       const aInit = hitsInitTargetComboExactly(a.ev) ? 1 : 0;
       const bInit = hitsInitTargetComboExactly(b.ev) ? 1 : 0;
+      const aDist = getInitComboDistance(a.ev);
+      const bDist = getInitComboDistance(b.ev);
 
       const aSteps = stepsOf(a.node);
       const bSteps = stepsOf(b.node);
@@ -4721,14 +4790,16 @@ const beamSolve = async (
         a.score,
         aSteps,
         a.violatesN2,
-        aInit
+        aInit,
+        aDist
       );
       const tb = buildNoSpecialRankTuple(
         b.ev,
         b.score,
         bSteps,
         b.violatesN2,
-        bInit
+        bInit,
+        bDist
       );
 
       return lexTupleCompareDesc(ta, tb);
@@ -4786,10 +4857,12 @@ const beamSolve = async (
       const initClearTier = st.ev.initialClearedCount || 0;
       const comboTier = st.ev.combos || 0;
       const clearTier = st.ev.clearedCount || 0;
+      const initDistTier = Math.min(12, getInitComboDistance(st.ev));
 
       const key = [
         st.violatesN2 ? 0 : 1,
         doneCount,
+        initDistTier,
         st.ev.initialAllEqual ? 1 : 0,
         initComboTier,
         initClearTier,
@@ -4807,6 +4880,10 @@ const beamSolve = async (
       arr.sort((a, b) => {
         const t = lexCompareDesc(a._poolRankCached, b._poolRankCached);
         if (t !== 0) return t;
+
+        const ad = getInitComboDistance(a.ev);
+        const bd = getInitComboDistance(b.ev);
+        if (ad !== bd) return ad - bd;
 
         if ((a.ev.initialAllEqual ? 1 : 0) !== (b.ev.initialAllEqual ? 1 : 0)) {
           return (b.ev.initialAllEqual ? 1 : 0) - (a.ev.initialAllEqual ? 1 : 0);
@@ -4941,6 +5018,7 @@ const beamSolve = async (
       const cleared = st.ev.clearedCount || 0;
       const initExact = hitsInitTargetComboExactly(st.ev) ? 1 : 0;
       const initEq = st.ev.initialAllEqual ? 1 : 0;
+      const initDist = getInitComboDistance(st.ev);
       const miss = Math.min(
         SEARCH_PROFILE.stepMaxTier,
         Math.max(0, target - combos)
@@ -4952,6 +5030,7 @@ const beamSolve = async (
         ? [
             legal,
             initExact,
+            initDist,
             initEq,
             initCombos,
             initCleared,
@@ -4963,6 +5042,7 @@ const beamSolve = async (
         : [
             legal,
             initExact,
+            initDist,
             initEq,
             initCombos,
             initCleared,
@@ -4981,6 +5061,8 @@ const beamSolve = async (
       arr.sort((a, b) => {
         const aInit = hitsInitTargetComboExactly(a.ev) ? 1 : 0;
         const bInit = hitsInitTargetComboExactly(b.ev) ? 1 : 0;
+        const aDist = getInitComboDistance(a.ev);
+        const bDist = getInitComboDistance(b.ev);
         const aSteps = stepsOf(a.node);
         const bSteps = stepsOf(b.node);
 
@@ -4989,14 +5071,16 @@ const beamSolve = async (
           a.score,
           aSteps,
           a.violatesN2,
-          aInit
+          aInit,
+          aDist
         );
         const tb = buildNoSpecialRankTuple(
           b.ev,
           b.score,
           bSteps,
           b.violatesN2,
-          bInit
+          bInit,
+          bDist
         );
 
         return lexTupleCompareDesc(ta, tb);
@@ -5209,6 +5293,13 @@ const beamSolve = async (
           initialComboSizes: bestGlobal.initialComboSizes || [],
           initialAllEqual: !!bestGlobal.initialAllEqual,
           initialDistinctSizeCount: bestGlobal.initialDistinctSizeCount || 0,
+          initialComboDistance: bestGlobal.initialComboDistance,
+          initialComboExact: !!bestGlobal.initialComboExact,
+          initTargetCombo:
+            Number.isFinite(Number(initTargetCombo)) &&
+            Number(initTargetCombo) >= 0
+              ? Number(initTargetCombo)
+              : null,
         })
       : undefined,
   };
@@ -7641,7 +7732,7 @@ const renderPriorityHeaderLabel = (title, sp) => {
 
   return (
     <div className="flex min-w-0 items-center gap-2.5">
-      <span className="shrink-0 text-sm font-black tracking-wide text-pink-200/90">
+      <span className="shrink-0 text-sm font-black tracking-wide text-pink-400">
         {title}
       </span>
 
@@ -8128,7 +8219,7 @@ return (
     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/50 p-4">
       <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-black text-pink-300 flex items-center gap-2">
+          <span className="text-sm font-black text-pink-400 flex items-center gap-2">
             {specialPriorityExpanded[0] ? (
               "第一優先"
             ) : (

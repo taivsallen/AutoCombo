@@ -4,6 +4,7 @@ export const ATTRIBUTES = {
   PLANT: "p",
   LIGHT: "l",
   DARK: "d",
+  HEALTH: "h",
 };
 
 export const RACES = {
@@ -53,6 +54,7 @@ export const ATTRIBUTE_TO_ORB_ID = {
   [ATTRIBUTES.PLANT]: 2,
   [ATTRIBUTES.LIGHT]: 3,
   [ATTRIBUTES.DARK]: 4,
+  [ATTRIBUTES.HEALTH]: 5,
 };
 
 // 檢查模板裡有沒有 x
