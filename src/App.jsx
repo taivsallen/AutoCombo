@@ -356,7 +356,7 @@ useEffect(() => {
 const [clearCountText, setClearCountText] = useState(["3", "3", "3"]);
 
 const diagAssistRef = useRef(null);
-const DIAG_WINDOW_MS = 40;
+const DIAG_WINDOW_MS = 70;
 
 const manualStartFromRow0Ref = useRef(false);
 
@@ -662,7 +662,7 @@ const endEditorPaint = useCallback(() => {
     verticalCombos: 0, 
     horizontalCombos: 0
   });
-  const GIF_FOOTER_H = 140;
+  const GIF_FOOTER_H = 40;
   const FLY_SPEED = 50;
   const [isReplaying, setIsReplaying] = useState(false);
   
@@ -8130,7 +8130,7 @@ return (
     {!isManual && (
       <>
         <ParamSlider
-  label="🎯 期望首消 Combo"
+  label="🎯 首消 Combo"
   value={initTargetCombo}
   min={0}
   max={stats.theoreticalMax || 1}
@@ -8161,7 +8161,7 @@ return (
 
     <div>
       <ParamSlider
-        label="⏱️ 播放速度 (s/步)"
+        label="⏱️ 播放速度"
         value={config.replaySpeed / 1000}
         min={0.08}
         max={0.45}
