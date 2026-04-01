@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { toCanvas } from "html-to-image";
 import ImportCropModal from "./ImportCropModal";
 import { convertTemplateBoardTo2D } from "./activeSkillTemplateData";
@@ -31,7 +31,7 @@ const ROW0_BOX_IMG_MAP = {
   EARTH: boxPImg,
   LIGHT: boxLImg,
   DARK: boxDImg,
-  // HEART 不寫 → 自動不顯示
+  // HEART 銝神 ???芸?銝＊蝷?
 };
 
 const ORB_TYPES = {
@@ -41,6 +41,74 @@ const ORB_TYPES = {
   LIGHT: { id: 3, img: lImg },
   DARK: { id: 4, img: dImg },
   HEART: { id: 5, img: hImg },
+};
+
+const ORB_IDS = [0, 1, 2, 3, 4, 5];
+const ORB_LABELS = ["W", "F", "P", "L", "D", "H"];
+const ORB_ICON_IMGS = [wImg, fImg, pImg, lImg, dImg, hImg];
+const RULE_CLEAR_MODE_LINE = "line";
+const RULE_CLEAR_MODE_CONNECTED = "connected";
+const RULE_CLEAR_MODES = [
+  { value: RULE_CLEAR_MODE_LINE, label: "直橫消" },
+  { value: RULE_CLEAR_MODE_CONNECTED, label: "相連消" },
+];
+const RULE_SIZE_OPTIONS = [
+  { id: 1, text: "一" },
+  { id: 2, text: "二" },
+  { id: 3, text: "三" },
+  { id: 4, text: "四" },
+  { id: 5, text: "五" }
+];
+
+const renderOrbIcon = (orb, className = "h-4 w-4") => {
+  const src = ORB_ICON_IMGS[orb];
+  if (!src) return null;
+  return <img src={src} alt={ORB_LABELS[orb] || ""} className={`${className} object-contain`} />;
+};
+
+const clampIntRange = (v, min, max, fallback) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(n)));
+};
+
+const normalizeOrbRule = (ruleLike) => ({
+  minClear: clampIntRange(ruleLike?.minClear, 1, 5, 3),
+  clearMode:
+    ruleLike?.clearMode === RULE_CLEAR_MODE_CONNECTED
+      ? RULE_CLEAR_MODE_CONNECTED
+      : RULE_CLEAR_MODE_LINE,
+});
+
+const makeDefaultRuleProfile = () => ({
+  orbRules: ORB_IDS.map(() => normalizeOrbRule(null)),
+  requirements: [],
+});
+
+const normalizeRuleRequirement = (reqLike) => {
+  const orb = clampIntRange(reqLike?.orb, 0, 5, 0);
+  const size = clampIntRange(reqLike?.size, 1, 5, 3);
+  const count = Math.max(1, clampIntRange(reqLike?.count, 1, 999, 1));
+  return {
+    orb,
+    size,
+    count,
+    match: reqLike?.match === "atLeast" ? "atLeast" : "exact",
+  };
+};
+
+const normalizeRuleProfile = (profileLike) => {
+  const orbRulesSrc = Array.isArray(profileLike?.orbRules)
+    ? profileLike.orbRules
+    : [];
+  const reqSrc = Array.isArray(profileLike?.requirements)
+    ? profileLike.requirements
+    : [];
+
+  return {
+    orbRules: ORB_IDS.map((orb) => normalizeOrbRule(orbRulesSrc[orb])),
+    requirements: reqSrc.map(normalizeRuleRequirement),
+  };
 };
 
 const orbOf = (v) => (v < 0 ? -1 : v % 10);                    // 0~5
@@ -62,8 +130,8 @@ const setNMark = (cellVal, nMark) =>
   
 const NO_CLEAR_MARK = {
   NONE: 0,
-  N1: 1, // 首批 + 疊珠 都不能消
-  N2: 2, // 首批不能消，疊珠可消
+  N1: 1, // 擐 + 天降 ?賭??賣?
+  N2: 2, // 擐銝瘨?天降?舀?
 };
 
 const getOrbForMatchPhase = (cellVal, phase) => {
@@ -71,12 +139,12 @@ const getOrbForMatchPhase = (cellVal, phase) => {
 
   const n = nMarkOf(cellVal);
 
-  // 首批：n1 / n2 都完全不可參與消除
+  // 擐嚗1 / n2 ?賢??其??臬?????
   if (phase === "initial") {
     if (n === 1 || n === 2) return -1;
   }
 
-  // 疊珠：只有 n1 不可消，n2 可以消
+  // 天降嚗??n1 銝瘨?n2 ?臭誑瘨?
   if (phase === "skyfall") {
     if (n === 1) return -1;
   }
@@ -91,7 +159,7 @@ const stripN2FromBoard = (b) =>
 
 const TOTAL_ROWS = 6;
 const COLS = 6;
-const PLAY_ROWS_START = 1; // 0 是暫存列
+const PLAY_ROWS_START = 1; // 0 ?舀摮?
 const PLAY_ROWS = TOTAL_ROWS - PLAY_ROWS_START; // 5
 
 const PLAY_COLS = COLS;
@@ -115,7 +183,7 @@ const makeGhostSlot = () => ({
   onDone: null,
 });
 
-// 定義移動方向
+// 摰儔蝘餃??孵?
 const DIRS_4 = [[0, 1], [0, -1], [1, 0], [-1, 0]];
 const DIRS_8 = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
@@ -201,19 +269,20 @@ function topKByScore(items, K, getScore) {
     }
   }
 
-  heap.sort((a, b) => b[0] - a[0]); // 由大到小
+  heap.sort((a, b) => b[0] - a[0]); // ?勗之?啣?
   return heap.map(x => x[1]);
 }
 
 const App = () => {
 
+const [specialPriorityGroupExpanded, setSpecialPriorityGroupExpanded] = useState(true);
 const ghostIdRef = useRef(0);
 
 const [hiddenBCell, setHiddenBCell] = useState(null);
-// { r, c }：目前要隱藏的 B 格
+// { r, c }嚗???梯???B ??
 
 const [ghostArrived, setGhostArrived] = useState(null);
-// { showAt: { r, c }, orbId }：ghost 到位後，要在 A 顯示哪顆珠
+// { showAt: { r, c }, orbId }嚗host ?唬?敺?閬 A 憿舐內?芷???
 
 const isHiddenBCell = useCallback((r, c) => {
   return !!hiddenBCell && hiddenBCell.r === r && hiddenBCell.c === c;
@@ -269,18 +338,18 @@ useEffect(() => {
   const onScroll = () => {
     const y = window.scrollY || 0;
 
-    // 頂部附近永遠顯示
+    // ???瘞賊?憿舐內
     if (y <= 20) {
       setShowTopBar(true);
       lastScrollYRef.current = y;
       return;
     }
 
-    // 往下捲：收起
+    // 敺銝嚗韏?
     if (y > lastScrollYRef.current) {
       setShowTopBar(false);
     }
-    // 往上捲：顯示
+    // 敺銝嚗＊蝷?
     else if (y < lastScrollYRef.current) {
       setShowTopBar(true);
     }
@@ -312,10 +381,10 @@ const makeDefaultPriority = () => ({
   orb: SPECIAL_ORB_ANY,
   clearCount: 3,
 
-  // 連擊相等盾
+  // ????貊???
   equalOrbs: [],
 
-  // 靈罩
+  // 矩形
   rectM: 3,
   rectN: 3,
   rectOrb: SPECIAL_ORB_ANY,
@@ -326,6 +395,11 @@ const [specialPriorities, setSpecialPriorities] = useState([
   makeDefaultPriority(),
   makeDefaultPriority(),
 ]);
+
+const [ruleProfile, setRuleProfile] = useState(() =>
+  makeDefaultRuleProfile()
+);
+const [rulePanelExpanded, setRulePanelExpanded] = useState(false);
 
 const [specialPriorityExpanded, setSpecialPriorityExpanded] = useState([
   false,
@@ -345,6 +419,95 @@ const toggleSpecialPriorityExpanded = (idx) => {
   setSpecialPriorityExpanded((prev) =>
     prev.map((v, i) => (i === idx ? !v : v))
   );
+};
+
+const markRuleProfileDirty = () => {
+  setNeedsSolve(true);
+  clearSolutionPools();
+};
+
+const updateRuleOrbSetting = (orb, patch) => {
+  setRuleProfile((prev) => {
+    const next = normalizeRuleProfile(prev);
+    next.orbRules[orb] = normalizeOrbRule({
+      ...next.orbRules[orb],
+      ...patch,
+    });
+    return next;
+  });
+  markRuleProfileDirty();
+};
+
+const addRuleRequirement = (orb, size) => {
+  setRuleProfile((prev) => {
+    const next = normalizeRuleProfile(prev);
+    const incoming = normalizeRuleRequirement({
+      orb,
+      size,
+      count: 1,
+      match: "exact",
+    });
+
+    const existingIdx = next.requirements.findIndex(
+      (req) =>
+        req.orb === incoming.orb &&
+        req.size === incoming.size &&
+        req.match === incoming.match
+    );
+
+    if (existingIdx >= 0) {
+      const stockByOrb = countBoardOrbStock(originalBoard);
+      const maxCount = getRequirementMaxCountAtIndex(
+        next,
+        stockByOrb,
+        existingIdx
+      );
+      if (maxCount > 0) {
+        next.requirements[existingIdx].count = Math.min(
+          maxCount,
+          next.requirements[existingIdx].count + 1
+        );
+      }
+      return next;
+    }
+
+    next.requirements.push(incoming);
+    return next;
+  });
+  markRuleProfileDirty();
+};
+
+const removeRuleRequirement = (idx) => {
+  setRuleProfile((prev) => {
+    const next = normalizeRuleProfile(prev);
+    next.requirements = next.requirements.filter((_, i) => i !== idx);
+    return next;
+  });
+  markRuleProfileDirty();
+};
+
+const updateRuleRequirementAt = (idx, patch) => {
+  setRuleProfile((prev) => {
+    const next = normalizeRuleProfile(prev);
+    if (!next.requirements[idx]) return next;
+    next.requirements[idx] = normalizeRuleRequirement({
+      ...next.requirements[idx],
+      ...patch,
+    });
+
+    const maxCount = getRequirementMaxCountAtIndex(
+      next,
+      ruleValidation.stockByOrb,
+      idx
+    );
+    if (maxCount <= 0) {
+      next.requirements[idx].count = 1;
+    } else if (next.requirements[idx].count > maxCount) {
+      next.requirements[idx].count = maxCount;
+    }
+    return next;
+  });
+  markRuleProfileDirty();
 };
 
 useEffect(() => {
@@ -381,22 +544,22 @@ const timerRAFRef = useRef(0);
 const dragStartTimeRef = useRef(0);
 const manualEndCalledRef = useRef(false);
 
-// 用來記錄上一次「摸到」的格子座標，避免重複計算
+// ?其?閮?銝?甈～?啜??澆?摨扳?嚗??銴?蝞?
 const lastPosRef = useRef({ r: -1, c: -1 });
 
 const handleManualEndRef = useRef(null);
 
-const [isManual, setIsManual] = useState(false); // 模式開關
-const [isDragging, setIsDragging] = useState(false); // 是否正在拖拽
-const [timeLeft, setTimeLeft] = useState(10); // 剩餘時間
-const [maxTime, setMaxTime] = useState(10); // 使用者設定的總時限
-const [manualActive, setManualActive] = useState(false); // 轉珠是否已開始
+const [isManual, setIsManual] = useState(false); // 璅∪???
+const [isDragging, setIsDragging] = useState(false); // ?臬甇??
+const [timeLeft, setTimeLeft] = useState(10); // ?拚???
+const [maxTime, setMaxTime] = useState(10); // 雿輻?身摰?蝮賣???
+const [manualActive, setManualActive] = useState(false); // 頧??臬撌脤?憪?
 	
   const svgRectRef = useRef(null);
   const [stableCellSize, setStableCellSize] = useState(64);
   const exportTokenRef = useRef({ id: 0, cancelled: false });
   const [gifStage, setGifStage] = useState("capture"); // "capture" | "render"
-  const [selectedMark, setSelectedMark] = useState(0); // 0=刷符石, 1=X1, 2=X2, 3=Q1, 4=Q2
+  const [selectedMark, setSelectedMark] = useState(0); // 0=?瑞泵?? 1=X1, 2=X2, 3=Q1, 4=Q2
   const [selectedBrush, setSelectedBrush] = useState(0);
   
   const editorDraggingRef = useRef(false);
@@ -456,7 +619,7 @@ const applyEditAtCell = useCallback((r, c) => {
     const qm = qMarkOf(cur);
     const nm = nMarkOf(cur);
 
-    // 0 = 刷符石
+    // 0 = ?瑞泵??
     if (selectedMark === 0) {
       next[r][c] = withMarks(selectedBrush, xm, qm, nm);
       return next;
@@ -464,17 +627,17 @@ const applyEditAtCell = useCallback((r, c) => {
 
     // X1 / X2
     if (selectedMark === 1 || selectedMark === 2) {
-      if (isManual && selectedMark === 1) return prev; // 手動模式不給 X1
+      if (isManual && selectedMark === 1) return prev; // ??璅∪?銝策 X1
       const want = selectedMark;
       const nx = xm === want ? 0 : want;
-      const nq = nx !== 0 ? 0 : qm; // 有 X 時清 Q
+      const nq = nx !== 0 ? 0 : qm; // ??X ?? Q
       next[r][c] = withMarks(o, nx, nq, nm);
       return next;
     }
 
     // N1 / N2
     if (selectedMark === 5 || selectedMark === 6) {
-      if (isManual && selectedMark === 6) return prev; // 手動模式不給 N2
+      if (isManual && selectedMark === 6) return prev; // ??璅∪?銝策 N2
       const wantN = selectedMark === 5 ? 1 : 2;
       const targetOrb = orbOf(cur);
       if (targetOrb < 0) return prev;
@@ -499,7 +662,7 @@ const applyEditAtCell = useCallback((r, c) => {
 
     // Q1 / Q2
     if (selectedMark === 3 || selectedMark === 4) {
-      if (isManual) return prev; // 手動模式不給 Q
+      if (isManual) return prev; // ??璅∪?銝策 Q
       const wantQ = selectedMark === 3 ? 1 : 2;
 
       if (wantQ === 1 && xm !== 0) return prev;
@@ -510,7 +673,7 @@ const applyEditAtCell = useCallback((r, c) => {
         return next;
       }
 
-      // row0 不允許同時有 START / END 衝突
+      // row0 銝?閮勗??? START / END 銵?
       if (r === 0) {
         for (let cc = 0; cc < COLS; cc++) {
           const v = next[0][cc];
@@ -519,7 +682,7 @@ const applyEditAtCell = useCallback((r, c) => {
         }
       }
 
-      // 全盤唯一
+      // ?函?臭?
       for (let rr = 0; rr < TOTAL_ROWS; rr++) {
         for (let cc = 0; cc < COLS; cc++) {
           const v = next[rr][cc];
@@ -603,7 +766,7 @@ const endEditorPaint = useCallback(() => {
 	  const svg = overlayRef.current;
 	  if (!root) return;
 
-	  // ✅ cache svg rect（不要每次 getCellCenterPx 都拿一次）
+	  // ??cache svg rect嚗?閬?甈?getCellCenterPx ?賣銝甈∴?
 	  if (svg) svgRectRef.current = svg.getBoundingClientRect();
 
 	  const rects = Array.from({ length: TOTAL_ROWS }, () => Array(COLS).fill(null));
@@ -617,7 +780,7 @@ const endEditorPaint = useCallback(() => {
 	  }
 	  cellRectsRef.current = rects;
 
-	  // ✅ 算一次 cellSize（用 row1 col0 最穩）
+	  // ??蝞?甈?cellSize嚗 row1 col0 ?蝛抬?
 	  const r10 = rects?.[1]?.[0];
 	  if (r10) setStableCellSize(r10.width);
 	}, []);
@@ -774,18 +937,18 @@ const updateParam = (key, val) =>
 	  let cancelled = false;
 
 	  const prepare = async () => {
-		// 1) 為每個 type 建一個 Image 物件
+		// 1) ?箸???type 撱箔???Image ?拐辣
 		const types = Object.values(ORB_TYPES);
 		for (const t of types) {
 		  if (!t.imgEl) {
 			const im = new Image();
-			im.crossOrigin = "anonymous"; // 本地 assets 一般不影響，但加著保險
+			im.crossOrigin = "anonymous"; // ?砍 assets 銝?砌?敶梢嚗???靽
 			im.src = t.img;
 			t.imgEl = im;
 		  }
 		}
 
-		// 2) 建模板 DB
+		// 2) 撱箸芋??DB
 		await Promise.all(types.map(t => ensureImageLoaded(t.imgEl)));
 		const built = await buildTemplateDB(ORB_TYPES);
 
@@ -803,24 +966,152 @@ const updateParam = (key, val) =>
 }, []);
 
   const solverConfig = React.useMemo(() => {
-	  const { replaySpeed, ...rest } = config; // ✅ 排除播放速度
+	  const { replaySpeed, ...rest } = config; // ???播放?漲
 	  return rest;
 	}, [config]);
 	
 const orbForTheoreticalMax = (cellVal) => {
   if (cellVal < 0) return -1;
 
-  // n1 永遠不可消，不算進理論上限
+  // n1 瘞賊?銝瘨?銝??脩?隢???
   if (nMarkOf(cellVal) === 1) return -1;
 
-  // n2 可在首批後消除，所以仍算普通珠
+  // n2 ?臬擐敺??歹??隞乩?蝞??
   return orbOf(cellVal);
 };
 
-const refreshTarget = useCallback((newBoard, row0Expanded = autoRow0Expanded) => {
+const countBoardOrbStock = (boardLike) => {
+  const src = Array.isArray(boardLike) ? boardLike : [];
   const counts = Array(6).fill(0);
+  for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+    const row = src[r];
+    if (!Array.isArray(row)) continue;
+    for (let c = 0; c < COLS; c++) {
+      const orb = orbForTheoreticalMax(row[c]);
+      if (orb >= 0 && orb < 6) counts[orb]++;
+    }
+  }
+  return counts;
+};
 
-  // 先只算主盤 row1~5
+const getRuleAllocatedByOrb = (profileLike) => {
+  const profile = normalizeRuleProfile(profileLike);
+  const used = Array(6).fill(0);
+  for (const req of profile.requirements) {
+    if (req.orb < 0 || req.orb > 5) continue;
+    used[req.orb] += req.size * req.count;
+  }
+  return used;
+};
+
+const getRequirementMaxCountAtIndex = (profileLike, stockByOrb, idx) => {
+  const profile = normalizeRuleProfile(profileLike);
+  const req = profile.requirements[idx];
+  if (!req) return 0;
+
+  const usedByOthers = Array(6).fill(0);
+  for (let i = 0; i < profile.requirements.length; i++) {
+    if (i === idx) continue;
+    const r = profile.requirements[i];
+    if (!r || r.orb < 0 || r.orb > 5) continue;
+    usedByOthers[r.orb] += r.size * r.count;
+  }
+
+  const stock = Number(stockByOrb?.[req.orb] || 0);
+  const remain = Math.max(0, stock - usedByOthers[req.orb]);
+  return Math.max(0, Math.floor(remain / Math.max(1, req.size)));
+};
+
+const buildRuleValidation = (profileLike, stockByOrb) => {
+  const profile = normalizeRuleProfile(profileLike);
+  const errors = [];
+  const warnings = [];
+  const stock = Array.isArray(stockByOrb) ? stockByOrb : Array(6).fill(0);
+  const used = getRuleAllocatedByOrb(profile);
+  const remaining = Array(6)
+    .fill(0)
+    .map((_, orb) => Number(stock[orb] || 0) - Number(used[orb] || 0));
+
+  for (let orb = 0; orb < 6; orb++) {
+    if (remaining[orb] < 0) {
+      errors.push(
+        `${ORB_LABELS[orb]} 珠需求超出庫存：版面 ${stock[orb]}、已分配 ${used[orb]}`
+      );
+    }
+  }
+
+  profile.requirements.forEach((req, idx) => {
+    const orbRule = profile.orbRules[req.orb] || normalizeOrbRule(null);
+    if (req.size < orbRule.minClear) {
+      errors.push(
+        `需求 #${idx + 1}（${ORB_LABELS[req.orb]} ${req.size} 消）低於該珠最低消除 ${orbRule.minClear}`
+      );
+    }
+
+    const maxCount = getRequirementMaxCountAtIndex(profile, stock, idx);
+    if (req.count > maxCount) {
+      errors.push(
+        `需求 #${idx + 1}（${ORB_LABELS[req.orb]} ${req.size} 消）最多可設 ${maxCount} 組`
+      );
+    }
+  });
+
+  const addOptions = [];
+  for (let orb = 0; orb < 6; orb++) {
+    const orbRule = profile.orbRules[orb] || normalizeOrbRule(null);
+    const remain = Math.max(0, remaining[orb] || 0);
+    for (let size = orbRule.minClear; size <= 5; size++) {
+      const maxCount = Math.floor(remain / Math.max(1, size));
+      if (maxCount <= 0) continue;
+      addOptions.push({
+        orb,
+        size,
+        maxCount,
+        key: `${orb}-${size}`,
+      });
+    }
+  }
+
+  if (!addOptions.length) {
+    warnings.push("目前沒有可新增的需求選項，已達盤面可分配上限。");
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+    stockByOrb: stock,
+    usedByOrb: used,
+    remainingByOrb: remaining,
+    addOptions,
+    normalizedProfile: profile,
+  };
+};
+
+const ruleValidation = React.useMemo(
+  () => buildRuleValidation(ruleProfile, countBoardOrbStock(originalBoard)),
+  [ruleProfile, originalBoard]
+);
+
+const refreshTarget = useCallback((
+  newBoard,
+  row0Expanded = autoRow0Expanded,
+  profileLike = ruleProfile
+) => {
+  const counts = Array(6).fill(0);
+  const normalizedProfile = normalizeRuleProfile(profileLike);
+
+  const computeTheoretical = (baseCounts, bonusOrb = -1) => {
+    let sum = 0;
+    for (let i = 0; i < 6; i++) {
+      const need = Math.max(1, normalizedProfile.orbRules[i]?.minClear || 3);
+      const stock = baseCounts[i] + (i === bonusOrb ? 1 : 0);
+      sum += Math.floor(stock / need);
+    }
+    return sum;
+  };
+
+  // ?蝞蜓??row1~5
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       const o = orbForTheoreticalMax(newBoard[r][c]);
@@ -828,20 +1119,16 @@ const refreshTarget = useCallback((newBoard, row0Expanded = autoRow0Expanded) =>
     }
   }
 
-  const base = counts.reduce((acc, x) => acc + Math.floor(x / 3), 0);
+  const base = computeTheoretical(counts);
 
   let best = base;
 
-  // ✅ 只有 row0 展開時，才考慮 row0 可補 1 顆的理論上限
   if (!isManual && row0Expanded) {
     for (let c = 0; c < COLS; c++) {
       const t = orbForTheoreticalMax(newBoard[0][c]);
       if (t === -1) continue;
 
-      let s = 0;
-      for (let i = 0; i < 6; i++) {
-        s += Math.floor((counts[i] + (i === t ? 1 : 0)) / 3);
-      }
+      const s = computeTheoretical(counts, t);
 
       if (s > best) best = s;
     }
@@ -850,7 +1137,7 @@ const refreshTarget = useCallback((newBoard, row0Expanded = autoRow0Expanded) =>
   setStats((prev) => ({ ...prev, theoreticalMax: best }));
   setExtremeTargetCombo(best);
   setInitTargetCombo((prev) => Math.min(prev, Math.max(1, best)));
-}, [isManual, setExtremeTargetCombo]);
+}, [autoRow0Expanded, isManual, ruleProfile, setExtremeTargetCombo]);
 
   const initBoard = useCallback((random = true, providedBoard = null) => {
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
@@ -873,7 +1160,7 @@ const refreshTarget = useCallback((newBoard, row0Expanded = autoRow0Expanded) =>
 			let orb;
 
 			if (r === 0) {
-			  // 🚫 row0 禁止心珠
+			  // ? row0 蝳迫敹?
 			  const pool = [0, 1, 2, 3, 4]; 
 			  orb = pool[Math.floor(Math.random() * pool.length)];
 			} else {
@@ -885,7 +1172,7 @@ const refreshTarget = useCallback((newBoard, row0Expanded = autoRow0Expanded) =>
 		  newBoard.push(row);
 		}
 	  } else {
-		// ✅ 固定盤：也統一成 mark=0
+		// ???箏??歹?銋絞銝??mark=0
 		newBoard = [
 		  [0,2,3,4,2,1],
 		  [2,0,0,2,4,1],
@@ -921,11 +1208,16 @@ const refreshTarget = useCallback((newBoard, row0Expanded = autoRow0Expanded) =>
 	  };
 	}, [showEditor]);
 
-  useEffect(() => {
+useEffect(() => {
   if (originalBoard.length === 0) return;
   if (showEditor) return;
   setNeedsSolve(true);
-}, [initTargetCombo, solverConfig, originalBoard, solverMode, priorityMode, skyfallEnabled, diagonalEnabled, showEditor]);
+}, [initTargetCombo, solverConfig, originalBoard, solverMode, priorityMode, skyfallEnabled, diagonalEnabled, showEditor, ruleProfile]);
+
+useEffect(() => {
+  if (!Array.isArray(originalBoard) || originalBoard.length === 0) return;
+  refreshTarget(originalBoard, autoRow0Expanded, ruleProfile);
+}, [originalBoard, autoRow0Expanded, ruleProfile, refreshTarget]);
   
   useEffect(() => {
 	  return () => {
@@ -948,6 +1240,10 @@ const getAxisFromNeighbor = (baseR, baseC, r, c) => {
   return null;
 };
 
+/////////////////
+// 蝚砌??嚗?頧?Manual嚗?蝞?
+/////////////////
+// ?寞活?瑟??銝剔?璉/頝臬?閬死嚗??銝甇仿閫貊?葡??
 const flushManualVisual = useCallback(() => {
   moveFlushRAFRef.current = 0;
 
@@ -973,11 +1269,13 @@ const flushManualVisual = useCallback(() => {
   }));
 }, []);
 
+// ??????RAF ?蔥?瑟嚗????? setState??
 const scheduleManualVisualFlush = useCallback(() => {
   if (moveFlushRAFRef.current) return;
   moveFlushRAFRef.current = requestAnimationFrame(flushManualVisual);
 }, [flushManualVisual]);
 
+// 撠?曌?閫豢摨扳?頧璉?澆漣璅?
 const getCellFromClientPoint = useCallback(
   (clientX, clientY) => {
     const wrap = boardInnerRef.current;
@@ -1002,16 +1300,17 @@ const getCellFromClientPoint = useCallback(
   [stableCellSize]
 );
 
+// ?????潔葉敹???摨扳?嚗策頝臬?/ghost ?梁嚗?
 const getCellCenterPx = useCallback((r, c) => {
 	  const rc = cellRectsRef.current?.[r]?.[c];
 	  const svgRect = svgRectRef.current || overlayRef.current?.getBoundingClientRect();
 	  if (!rc || !svgRect) return { x: 0, y: 0 };
 
-	  // ✅ 轉成 SVG 內座標
+	  // ??頧? SVG ?批漣璅?
 	  const x = (rc.left + rc.right) / 2 - svgRect.left;
 	  const y = (rc.top + rc.bottom) / 2 - svgRect.top;
 
-	  // ✅ 像素對齊：直接消滅 subpixel 抖動
+	  // ????撠?嚗?交?皛?subpixel ??
 	  return { x: Math.round(x), y: Math.round(y) };
 	}, []);
 
@@ -1019,6 +1318,7 @@ const bumpGhostRender = useCallback(() => {
   setGhostVersion((v) => (v + 1) % 1000000);
 }, []);
 
+// 清除???ghost ??蒂?迫?餈游???
 const clearAllGhosts = useCallback(() => {
   const mat = ghostMatrixRef.current;
 
@@ -1134,6 +1434,7 @@ const ensureGhostLoop = useCallback(() => {
   ghostRafRef.current = requestAnimationFrame(stepGhosts);
 }, [stepGhosts]);
 
+// ?Ｙ???鈭斗???ghost ?嚗/B ??蝵株?????
 const spawnManualGhostWithPt = useCallback(
   (orbId, fromPt, toPt, slotR, slotC, toR, toC) => {
     if (orbId == null || orbId < 0) return;
@@ -1182,17 +1483,17 @@ useEffect(() => {
 }, []);
 
 const spawnSwapGhost = useCallback((boardNow, fromR, fromC, toR, toC) => {
-  // row0 不進 5x6 ghost matrix
+  // row0 銝?5x6 ghost matrix
   if (fromR <= 0 || toR <= 0) return;
 
   const pushedOrb = boardNow?.[toR]?.[toC];
   if (pushedOrb == null || pushedOrb === -1) return;
 
-  const fromPt = getCellCenterPx(toR, toC); // ghost 起點：B
-  const toPt = getCellCenterPx(fromR, fromC); // ghost 終點：A
+  const fromPt = getCellCenterPx(toR, toC); // ghost 韏琿?嚗
+  const toPt = getCellCenterPx(fromR, fromC); // ghost 蝯?嚗
 
   wakeGhostAtCell(
-    toR - 1, // 映射到 5x6 playable matrix
+    toR - 1, // ????5x6 playable matrix
     toC,
     orbOf(pushedOrb),
     fromPt,
@@ -1203,6 +1504,7 @@ const spawnSwapGhost = useCallback((boardNow, fromR, fromC, toR, toC) => {
   ensureGhostLoop();
 }, [getCellCenterPx, wakeGhostAtCell, ensureGhostLoop]);
 
+// ?岫??頧虜璅宏?唳?摰嚗???row0 閬?? 璅???host ??path ?湔??
 const tryMoveToCell = useCallback(
   (r, c) => {
     if (!isDraggingRef.current || manualLocked) return false;
@@ -1240,18 +1542,18 @@ const tryMoveToCell = useCallback(
     const nextIsRow0 = r === 0;
     const startedFromRow0 = manualStartFromRow0Ref.current;
 
-    // case A: 從 row0 起手，離開後不可再回 row0
+    // case A: 敺?row0 韏瑟?嚗??銝?? row0
     if (startedFromRow0 && !lastIsRow0 && nextIsRow0) {
       handleManualEndRef.current?.();
       return false;
     }
 
-    // case D: row0 -> row0 不允許
+    // case D: row0 -> row0 銝?閮?
     if (lastIsRow0 && nextIsRow0) {
       return false;
     }
 
-    // 先更新 path
+    // ???path
     const newPath = [...currentPath, { r, c }];
     pathRef.current = newPath;
     pendingPathRef.current = newPath;
@@ -1259,7 +1561,7 @@ const tryMoveToCell = useCallback(
     pendingStepsRef.current = newPath.length - 1;
     lastPosRef.current = { r, c };
 
-    // 每一步開始前：清前一次到位訊號，並隱藏新的 B 格
+    // 瘥?甇仿?憪?嚗???甈∪雿???銝阡???B ??
     setGhostArrived(null);
 	setHiddenBCell({ r: last.r, c: last.c });
 
@@ -1312,7 +1614,7 @@ spawnManualGhostWithPt(
       return true;
     }
 
-    // case E: row1~5 之間正常交換
+    // case E: row1~5 銋?甇?虜鈭斗?
     const pushedOrbId = orbOf(currentBoard[r][c]);
 const fromPt = getCellCenterPx(r, c);
 const toPt = getCellCenterPx(last.r, last.c);
@@ -1321,8 +1623,8 @@ spawnManualGhostWithPt(
   pushedOrbId,
   fromPt,
   toPt,
-  r, c,             // slot 掛在 B
-  last.r, last.c    // 顯示回 A
+  r, c,             // slot ? B
+  last.r, last.c    // 憿舐內??A
 );
 
     const nextBoard = clone2D(currentBoard);
@@ -1350,6 +1652,7 @@ spawnManualGhostWithPt(
   ]
 );
 
+// ?函?斜轉璅∪?銝??拍?剜??甈⊥迤鈭方撓?亙???甈⊥?????
 const tryResolveDiagonalAssist = useCallback((hitR, hitC) => {
   const currentPath = pathRef.current;
   const last = currentPath[currentPath.length - 1];
@@ -1361,7 +1664,7 @@ const tryResolveDiagonalAssist = useCallback((hitR, hitC) => {
   const now = performance.now();
   const pending = diagAssistRef.current;
 
-  // 沒有候選：先存起來
+  // 瘝??嚗?摮絲靘?
   if (
     !pending ||
     pending.baseR !== last.r ||
@@ -1378,10 +1681,10 @@ const tryResolveDiagonalAssist = useCallback((hitR, hitC) => {
       sc: info.sc,
       ts: now,
     };
-    return true; // 先吃掉事件，但先不 move
+    return true; // ????隞塚?雿?銝?move
   }
 
-  // 軸不同 => 嘗試合成斜轉
+  // 頠訾???=> ?岫??斜轉
   if (pending.axis !== info.axis) {
     const diagR = last.r + (pending.sr || info.sr);
     const diagC = last.c + (pending.sc || info.sc);
@@ -1390,7 +1693,7 @@ const tryResolveDiagonalAssist = useCallback((hitR, hitC) => {
     return tryMoveToCell(diagR, diagC);
   }
 
-  // 同軸：把上一個候選當一般移動，然後更新候選
+  // ?遘嚗?銝???嗡??祉宏???嗅??湔?
   const ok = tryMoveToCell(pending.hitR, pending.hitC);
   diagAssistRef.current = {
     baseR: last.r,
@@ -1406,6 +1709,7 @@ const tryResolveDiagonalAssist = useCallback((hitR, hitC) => {
 }, [tryMoveToCell]);
 
 
+// 憿舐內 Move Ended ?桃蔗銝血???啣?閫?????
 const triggerMoveEndedOverlay = useCallback(
   (duration = 800) => {
     if (moveEndedTimerRef.current) {
@@ -1449,6 +1753,7 @@ const scheduleFloatingUpdate = useCallback(
   [flushFloatingPosition]
 );
 
+// ?迫???閮??具?
 const stopManualTimer = useCallback(() => {
   if (timerRAFRef.current) {
     cancelAnimationFrame(timerRAFRef.current);
@@ -1456,6 +1761,7 @@ const stopManualTimer = useCallback(() => {
   }
 }, []);
 
+// ?????嚗???芸?蝯?????
 const startManualTimer = useCallback(() => {
   stopManualTimer();
   dragStartTimeRef.current = performance.now();
@@ -1504,15 +1810,16 @@ const clearMarksForManual = (board) => {
       const xm = xMarkOf(cell);
       const nm = nMarkOf(cell);
 
-      const nextX = xm === 1 ? 0 : xm;   // X1 清掉，X2 保留
-      const nextQ = 0;                   // Start / End 清掉
-      const nextN = nm === 2 ? 0 : nm;   // ✅ 清 N2，保留 N1
+      const nextX = xm === 1 ? 0 : xm;   // X1 皜?嚗2 靽?
+      const nextQ = 0;                   // Start / End 皜?
+      const nextN = nm === 2 ? 0 : nm;   // ??皜?N2嚗???N1
 
       return withMarks(orb, nextX, nextQ, nextN);
     })
   );
 };
 
+// ????/?芸?璅∪?嚗?閮剜?頧?蝔?摮???
 const handleToggleMode = (manual) => {
   if (typeof stopToBase === "function") stopToBase(true);
 
@@ -1563,11 +1870,12 @@ const handleToggleMode = (manual) => {
   }
 };
 
+// ??韏瑟?嚗遣蝡絲暺筑????憪?path ?絞閮?
 const handleManualStart = (r, c, e) => {
   if (!isManual || manualLocked || solving || isReplaying) return;
   if (!originalBoard || originalBoard.length === 0) return;
 
-  // ✅ 每次重新開始手動前，先回到原版面
+  // ??瘥活??????????啣??
   const restoredBoard = clearMarksForManual(clone2D(originalBoard));
   boardRef.current = restoredBoard;
   setBoard(restoredBoard);
@@ -1576,7 +1884,7 @@ const handleManualStart = (r, c, e) => {
   const startOrb = currentBoard?.[r]?.[c];
   if (startOrb === undefined) return;
 
-  // 起手不能是 X1 / X2
+  // 韏瑟?銝??X1 / X2
   if (xMarkOf(startOrb) !== 0) return;
 
   baseBoardRef.current = clone2D(currentBoard);
@@ -1641,6 +1949,7 @@ const handleManualStart = (r, c, e) => {
   startManualTimer();
 };
 
+// ??蝘餃?嚗???hit cell??頧??抵?餈賣鋆郊??
 const handleManualMove = (r, c, e) => {
   if (!isManual || manualLocked || !isDraggingRef.current) return;
 
@@ -1665,10 +1974,10 @@ const handleManualMove = (r, c, e) => {
 
   pointerLastClientRef.current = { x: clientX, y: clientY };
 
-  // 直接看目前指標落在哪一格
+  // ?湔???璅?典銝??
   const hitCell = getCellFromClientPoint(clientX, clientY);
 
-  // 先用真實指標位置
+  // ??祕??雿蔭
   if (hitCell && isDraggingRef.current) {
   const last = pathRef.current[pathRef.current.length - 1];
   const allowDiagonal = isManual || diagonalEnabled;
@@ -1677,7 +1986,7 @@ const handleManualMove = (r, c, e) => {
     const dr = Math.abs(hitCell.r - last.r);
     const dc = Math.abs(hitCell.c - last.c);
 
-    // 只有「不允許直接斜轉」時，才啟用斜轉輔助
+    // ?芣????迂?湔斜轉??嚗??斜轉頛
     if (!allowDiagonal && dr + dc === 1) {
       const consumed = tryResolveDiagonalAssist(hitCell.r, hitCell.c);
       if (consumed) return;
@@ -1693,7 +2002,7 @@ const handleManualMove = (r, c, e) => {
   return;
 }
 
-  // 後備：若事件本身有帶 r,c，就用它
+  // 敺?嚗鈭辣?祈澈?葆 r,c嚗停?典?
   if (
     typeof r === "number" &&
     typeof c === "number" &&
@@ -1710,6 +2019,7 @@ const handleManualMove = (r, c, e) => {
   }
 };
 
+// ???嗅偏嚗?扎??????怨?瘚?????
 const handleManualEnd = useCallback(() => {
   if (!isDraggingRef.current || manualLocked) return;
 
@@ -1745,7 +2055,7 @@ const handleManualEnd = useCallback(() => {
   }
 
   const finalBoard = boardRef.current;
-  const result = evaluateBoard(finalBoard, skyfallEnabled);
+const result = evaluateBoard(finalBoard, skyfallEnabled, null, ruleProfile);
 
   setStats((prev) => ({
     ...prev,
@@ -1792,6 +2102,7 @@ useEffect(() => {
   };
 }, [stopManualTimer]);
 
+// ?交?璅歲?潘?瘝踵??剜?蕭頞?格??潘??郊? tryMoveToCell??
 const chaseToTargetCell = useCallback(
   (targetR, targetC) => {
     if (!isDraggingRef.current || manualLocked) return false;
@@ -1847,7 +2158,7 @@ if (allowDiagonal) {
 	
   const onImportFileChange = (e) => {
 	  const f = e.target.files?.[0];
-	  e.target.value = ""; // 讓同檔可重選
+	  e.target.value = ""; // 霈?瑼?
 	  if (!f) return;
 
 	  if (importImgUrl) URL.revokeObjectURL(importImgUrl);
@@ -1894,7 +2205,7 @@ if (allowDiagonal) {
 
   const swapBoard = (tempBoard, r1, c1, r2, c2) => {
   const nextBoard = tempBoard.map(row => [...row]);
-  if (r1 === 0 || r2 === 0) return nextBoard; // ✅ Row0 永遠不換
+  if (r1 === 0 || r2 === 0) return nextBoard; // ??Row0 瘞賊?銝?
   const val = nextBoard[r1][c1];
   nextBoard[r1][c1] = nextBoard[r2][c2];
   nextBoard[r2][c2] = val;
@@ -1998,7 +2309,7 @@ const applyGravity = (b, toClear1D) => {
   for (let c = 0; c < COLS; c++) {
     let writeRow = TOTAL_ROWS - 1;
     for (let r = TOTAL_ROWS - 1; r >= 1; r--) {
-      // 降維讀取: r * COLS + c
+      // ?雁霈?? r * COLS + c
       if (!toClear1D[r * COLS + c]) {
         next[writeRow][c] = b[r][c];
         writeRow--;
@@ -2013,7 +2324,7 @@ const potentialScore = (b, mode, phase = "initial") => {
   const hWeight = mode === "horizontal" ? 3 : 0.5;
   const vWeight = mode === "vertical" ? 3 : 0.5;
 
-  // 水平
+  // 瘞游像
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
     let a = getOrbForMatchPhase(b[r][0], phase);
     let d = getOrbForMatchPhase(b[r][1], phase);
@@ -2036,7 +2347,7 @@ const potentialScore = (b, mode, phase = "initial") => {
     }
   }
 
-  // 垂直
+  // ?
   for (let c = 0; c < COLS; c++) {
     let a = getOrbForMatchPhase(b[PLAY_ROWS_START][c], phase);
     let d =
@@ -2164,6 +2475,9 @@ const canonicalShapeKey = (cells) => {
   return best;
 };
 
+/////////////////
+// 蝚砌??嚗楝敺圾蝞?Beam/閰?嚗??孵????/////////////////
+// 撠?芸?閮剖?璅?取消?航?蝞??”嚗?瞈?none嚗?// 璅???芸?頛詨嚗???蒂?蕪 none嚗?
 const normalizeSpecialPriorityList = (specialPriority) => {
   if (Array.isArray(specialPriority)) {
     return specialPriority.filter((sp) => sp && sp.type && sp.type !== "none");
@@ -2174,6 +2488,7 @@ const normalizeSpecialPriorityList = (specialPriority) => {
   return [];
 };
 
+// 皜???瘨???貊?蝔殷??駁?銝虫???瘜?蝔柴?
 const normalizeSelectedEqualOrbs = (arr) => {
   if (!Array.isArray(arr)) return [];
   const set = new Set();
@@ -2196,12 +2511,12 @@ const getRectMatchedValueBySpecial = (ev, sp) => {
 
   const wantOrb = sp.rectOrb ?? SPECIAL_ORB_ANY;
 
-  // 沒指定屬性時，接受任何屬性
+  // 瘝?摰惇?扳?嚗?遙雿惇??
   if (wantOrb === SPECIAL_ORB_ANY || wantOrb === -1) {
     return group.total || 0;
   }
 
-  // 有指定屬性時，只接受該屬性
+  // ??摰惇?扳?嚗?亙?閰脣惇??
   return group.byOrb?.[wantOrb] || 0;
 };
 
@@ -2224,6 +2539,7 @@ const getEqualFirstMatchedValueBySpecial = (ev, sp) => {
   return first;
 };
 
+// 求解?桐??孵??祉?Ｙ????詨潦?
 const getSingleSpecialMatchedValue = (ev, sp) => {
   if (!sp || sp.type === "none") return 0;
 
@@ -2246,6 +2562,7 @@ const getSingleSpecialMatchedValue = (ev, sp) => {
   return group.byOrb?.[sp.orb] || 0;
 };
 
+// ?斗?桐??孵??阡?璅?
 const isSingleSpecialSatisfied = (ev, sp, extraCtx = {}) => {
   if (!sp || sp.type === "none") return true;
 
@@ -2269,11 +2586,13 @@ const isSingleSpecialSatisfied = (ev, sp, extraCtx = {}) => {
   return getSingleSpecialMatchedValue(ev, sp) >= (sp.count || 1);
 };
 
+// ?斗?渡??孵??血?券?璅?
 const isAllSpecialSatisfied = (ev, specialPriorities = [], extraCtx = {}) => {
   const list = normalizeSpecialPriorityList(specialPriorities);
   return list.every((sp) => isSingleSpecialSatisfied(ev, sp, extraCtx));
 };
 
+// ?Ｙ??桐?特優先 progress嚗one/guide嚗?潭?摨?
 const getSingleSpecialProgress = (ev, sp, extraCtx = {}) => {
   if (!sp || sp.type === "none") return { done: 1, guide: 0 };
 
@@ -2321,6 +2640,7 @@ const getSingleSpecialProgress = (ev, sp, extraCtx = {}) => {
   };
 };
 
+// 撠?芸???????箏?? tuple嚗? Beam ??瘥???// ???孵??摨?tuple嚗? Beam ?舐?亦摮摨?頛?
 const getSpecialPriorityTuple = (ev, specialPriorities = [], extraCtx = {}) => {
   const slots = Array.isArray(specialPriorities)
     ? specialPriorities.slice(0, 3)
@@ -2347,17 +2667,17 @@ const getSpecialPriorityTuple = (ev, specialPriorities = [], extraCtx = {}) => {
 
   const mask = (p1.done ? 4 : 0) | (p2.done ? 2 : 0) | (p3.done ? 1 : 0);
 
-  // 你指定的順序：
+  // 雿?摰???嚗?
   // 111 > 110 > 101 > 011 > 100 > 010 > 001 > 000
   const SPECIAL_COMBO_SCORE = {
-    7: 7, // 一+二+三
-    6: 6, // 一+二
-    5: 5, // 一+三
-    3: 4, // 二+三
-    4: 3, // 一
-    2: 2, // 二
-    1: 1, // 三
-    0: 0, // 無
+    7: 7, // 銝+鈭?銝?
+    6: 6, // 銝+鈭?
+    5: 5, // 銝+銝?
+    3: 4, // 鈭?銝?
+    4: 3, // 銝
+    2: 2, // 鈭?
+    1: 1, // 銝?
+    0: 0, // ??
   };
 
   return [
@@ -2403,14 +2723,14 @@ const getRectGuideScoreBySpecial = (board, sp, phase = "initial") => {
 
   for (let r0 = PLAY_ROWS_START; r0 + m <= TOTAL_ROWS; r0++) {
     for (let c0 = 0; c0 + n <= COLS; c0++) {
-      // 有指定屬性時：只看那個屬性
+      // ??摰惇?扳?嚗??惇??
       if (wantOrb !== SPECIAL_ORB_ANY && wantOrb !== -1) {
         const s = scoreRectGuideWindow(board, r0, c0, m, n, wantOrb, phase);
         if (s > best) best = s;
         continue;
       }
 
-      // 沒指定屬性時：才枚舉全部屬性
+      // 瘝?摰惇?扳?嚗????券撅祆?
       for (const orb of RECT_ORBS) {
         const s = scoreRectGuideWindow(board, r0, c0, m, n, orb, phase);
         if (s > best) best = s;
@@ -2794,6 +3114,8 @@ const makePatternCounts = () => ({
 });
 
 const makeComboCountsByOrb = () => new Int16Array(8);
+const makeComboSizeCountsByOrb = () =>
+  Array.from({ length: 6 }, () => Object.create(null));
 
 const isPureRectGroup = (cells, expectedRows, expectedCols) => {
   if (!cells || cells.length !== expectedRows * expectedCols) return false;
@@ -2940,21 +3262,18 @@ const hasInitialN2Clear = (board, toClear1D) => {
   }
   return false;
 };
-const getInitialMatchCheck = (board) => {
-  const initial = findMatches(board, "initial");
-
-  const vanillaToClear = getVanillaInitialClearMap(board);
-
+const getInitialMatchCheck = (board, ruleProfile = null) => {
+  const initial = findMatches(board, "initial", ruleProfile);
   return {
     initial,
-    violatesN2: hasInitialN2Clear(board, vanillaToClear),
+    violatesN2: hasInitialN2Clear(board, initial?.toClearMap),
   };
 };
 const getVanillaInitialClearMap = (board) => {
   const totalCells = TOTAL_ROWS * COLS;
   const toClear1D = new Uint8Array(totalCells);
 
-  // 水平
+  // 瘞游像
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
     for (let c = 0; c < COLS - 2; ) {
       const v0 = orbOf(board[r][c]);
@@ -2980,7 +3299,7 @@ const getVanillaInitialClearMap = (board) => {
     }
   }
 
-  // 垂直
+  // ?
   for (let c = 0; c < COLS; c++) {
     for (let r = PLAY_ROWS_START; r < TOTAL_ROWS - 2; ) {
       const v0 = orbOf(board[r][c]);
@@ -3022,11 +3341,19 @@ const hasN2InVanillaInitialPattern = (board) => {
 
   return false;
 };
-const findMatches = (tempBoard, phase = "initial") => {
+const findMatches = (tempBoard, phase = "initial", ruleProfile = null) => {
   let combos = 0,
     clearedCount = 0,
     vC = 0,
     hC = 0;
+
+  const normalizedRules = normalizeRuleProfile(ruleProfile);
+  const minClearByOrb = ORB_IDS.map(
+    (orb) => normalizedRules.orbRules[orb]?.minClear || 3
+  );
+  const clearModeByOrb = ORB_IDS.map(
+    (orb) => normalizedRules.orbRules[orb]?.clearMode || RULE_CLEAR_MODE_LINE
+  );
 
   const totalCells = TOTAL_ROWS * COLS;
   const isH = new Uint8Array(totalCells);
@@ -3034,66 +3361,122 @@ const findMatches = (tempBoard, phase = "initial") => {
   const toClear1D = new Uint8Array(totalCells);
   const patternCounts = makePatternCounts();
   const comboCountsByOrb = makeComboCountsByOrb();
+  const comboSizeCountsByOrb = makeComboSizeCountsByOrb();
 
-  // ===== 水平三連 =====
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
-    for (let c = 0; c < COLS - 2; ) {
-      const v0 = getOrbForMatchPhase(tempBoard[r][c], phase);
-      if (v0 === -1) {
+    for (let c = 0; c < COLS; ) {
+      const orb = getOrbForMatchPhase(tempBoard[r][c], phase);
+      if (orb === -1) {
         c++;
         continue;
       }
 
-      const v1 = getOrbForMatchPhase(tempBoard[r][c + 1], phase);
-      const v2 = getOrbForMatchPhase(tempBoard[r][c + 2], phase);
-      if (v0 !== v1 || v0 !== v2) {
-        c++;
-        continue;
-      }
+      let k = c + 1;
+      while (k < COLS && getOrbForMatchPhase(tempBoard[r][k], phase) === orb) k++;
 
-      let k = c + 3;
-      while (k < COLS && getOrbForMatchPhase(tempBoard[r][k], phase) === v0) k++;
-
-      for (let x = c; x < k; x++) {
-        toClear1D[r * COLS + x] = 1;
-        isH[r * COLS + x] = 1;
+      if (
+        clearModeByOrb[orb] === RULE_CLEAR_MODE_LINE &&
+        k - c >= minClearByOrb[orb]
+      ) {
+        for (let x = c; x < k; x++) {
+          const idx = r * COLS + x;
+          toClear1D[idx] = 1;
+          isH[idx] = 1;
+        }
       }
       c = k;
     }
   }
 
-  // ===== 垂直三連 =====
   for (let c = 0; c < COLS; c++) {
-    for (let r = PLAY_ROWS_START; r < TOTAL_ROWS - 2; ) {
-      const v0 = getOrbForMatchPhase(tempBoard[r][c], phase);
-      if (v0 === -1) {
+    for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; ) {
+      const orb = getOrbForMatchPhase(tempBoard[r][c], phase);
+      if (orb === -1) {
         r++;
         continue;
       }
 
-      const v1 = getOrbForMatchPhase(tempBoard[r + 1][c], phase);
-      const v2 = getOrbForMatchPhase(tempBoard[r + 2][c], phase);
-      if (v0 !== v1 || v0 !== v2) {
-        r++;
-        continue;
+      let k = r + 1;
+      while (k < TOTAL_ROWS && getOrbForMatchPhase(tempBoard[k][c], phase) === orb) {
+        k++;
       }
 
-      let k = r + 3;
-      while (k < TOTAL_ROWS && getOrbForMatchPhase(tempBoard[k][c], phase) === v0) k++;
-
-      for (let y = r; y < k; y++) {
-        toClear1D[y * COLS + c] = 1;
-        isV[y * COLS + c] = 1;
+      if (
+        clearModeByOrb[orb] === RULE_CLEAR_MODE_LINE &&
+        k - r >= minClearByOrb[orb]
+      ) {
+        for (let y = r; y < k; y++) {
+          const idx = y * COLS + c;
+          toClear1D[idx] = 1;
+          isV[idx] = 1;
+        }
       }
       r = k;
     }
   }
 
-  // ===== BFS 合併 =====
-  const visited = new Uint8Array(totalCells);
+  const connVisited = new Uint8Array(totalCells);
+  const bfsQ = new Int16Array(totalCells);
   const drs = [0, 0, 1, -1];
   const dcs = [1, -1, 0, 0];
 
+  for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const idx0 = r * COLS + c;
+      if (connVisited[idx0]) continue;
+
+      const orb = getOrbForMatchPhase(tempBoard[r][c], phase);
+      if (orb < 0 || clearModeByOrb[orb] !== RULE_CLEAR_MODE_CONNECTED) {
+        connVisited[idx0] = 1;
+        continue;
+      }
+
+      let head = 0;
+      let tail = 0;
+      bfsQ[tail++] = idx0;
+      connVisited[idx0] = 1;
+      const component = [];
+      let hasHAdj = false;
+      let hasVAdj = false;
+
+      while (head < tail) {
+        const idx = bfsQ[head++];
+        component.push(idx);
+        const cr = Math.floor(idx / COLS);
+        const cc = idx % COLS;
+
+        for (let i = 0; i < 4; i++) {
+          const nr = cr + drs[i];
+          const nc = cc + dcs[i];
+          if (nr < PLAY_ROWS_START || nr >= TOTAL_ROWS || nc < 0 || nc >= COLS) {
+            continue;
+          }
+
+          const nidx = nr * COLS + nc;
+          const norb = getOrbForMatchPhase(tempBoard[nr][nc], phase);
+          if (norb !== orb) continue;
+
+          if (drs[i] === 0) hasHAdj = true;
+          if (dcs[i] === 0) hasVAdj = true;
+
+          if (!connVisited[nidx]) {
+            connVisited[nidx] = 1;
+            bfsQ[tail++] = nidx;
+          }
+        }
+      }
+
+      if (component.length >= minClearByOrb[orb]) {
+        for (const idx of component) {
+          toClear1D[idx] = 1;
+          if (hasHAdj) isH[idx] = 1;
+          if (hasVAdj) isV[idx] = 1;
+        }
+      }
+    }
+  }
+
+  const visited = new Uint8Array(totalCells);
   const qR = new Int8Array(totalCells);
   const qC = new Int8Array(totalCells);
 
@@ -3159,7 +3542,12 @@ const findMatches = (tempBoard, phase = "initial") => {
       if (hasHM) hC++;
       if (hasVM) vC++;
 
-      // ===== exact 5 圖形 =====
+      if (type >= 0 && type < 6) {
+        const sizeKey = String(groupSize);
+        comboSizeCountsByOrb[type][sizeKey] =
+          (comboSizeCountsByOrb[type][sizeKey] || 0) + 1;
+      }
+
       if (groupSize === 5) {
         const shape = detectExact5Shape(shapeCells);
         if (shape === SHAPE_KIND.CROSS) {
@@ -3174,7 +3562,6 @@ const findMatches = (tempBoard, phase = "initial") => {
         }
       }
 
-      // ===== 純 m*n 矩形（靈罩）=====
       for (const m of RECT_M_OPTIONS) {
         for (const n of RECT_N_OPTIONS) {
           if (isPureRectGroup(groupCells, m, n)) {
@@ -3195,6 +3582,7 @@ const findMatches = (tempBoard, phase = "initial") => {
     toClearMap: toClear1D,
     patternCounts,
     comboCountsByOrb,
+    comboSizeCountsByOrb,
   };
 };
 
@@ -3242,8 +3630,14 @@ const combinedPotentialScore = (b, mode) => {
     compact * 0.05
   );
 };
-const evaluateBoard = (tempBoard, skyfall, initialResult = null) => {
-  const result = initialResult ?? findMatches(tempBoard, "initial");
+const evaluateBoard = (
+  tempBoard,
+  skyfall,
+  initialResult = null,
+  ruleProfile = null
+) => {
+  const result =
+    initialResult ?? findMatches(tempBoard, "initial", ruleProfile);
 
   const initialCombos = result.combos;
   const initialH = result.hC;
@@ -3251,6 +3645,7 @@ const evaluateBoard = (tempBoard, skyfall, initialResult = null) => {
   const initialCleared = result.clearedCount;
   const initialPatternCounts = result.patternCounts;
   const initialComboCountsByOrb = result.comboCountsByOrb;
+  const initialComboSizeCountsByOrb = result.comboSizeCountsByOrb;
 
   if (!skyfall) {
     return {
@@ -3262,13 +3657,15 @@ const evaluateBoard = (tempBoard, skyfall, initialResult = null) => {
       verticalCombos: initialV,
       horizontalCombos: initialH,
 
-      // 新 multi-special helper 主要會吃這兩個
+      // ??multi-special helper 銝餉??????
       initialPatternCounts,
       initialComboCountsByOrb,
+      initialComboSizeCountsByOrb,
 
-      // 保留 alias，避免舊程式其他地方還在吃舊欄位
+      // 靽? alias嚗??蝔??嗡??唳???甈?
       patternCounts: initialPatternCounts,
       comboCountsByOrb: initialComboCountsByOrb,
+      comboSizeCountsByOrb: initialComboSizeCountsByOrb,
     };
   }
 
@@ -3288,7 +3685,7 @@ const evaluateBoard = (tempBoard, skyfall, initialResult = null) => {
       firstCascade = false;
     }
 
-    loopResult = findMatches(currentBoard, "skyfall");
+    loopResult = findMatches(currentBoard, "skyfall", ruleProfile);
 
     if (loopResult.combos > 0) {
       totalCombos += loopResult.combos;
@@ -3307,17 +3704,19 @@ const evaluateBoard = (tempBoard, skyfall, initialResult = null) => {
     verticalCombos: totalV,
     horizontalCombos: totalH,
 
-    // 新 multi-special helper 主要吃初盤圖形資訊
+    // ??multi-special helper 銝餉????文?敶Ｚ?閮?
     initialPatternCounts,
     initialComboCountsByOrb,
+    initialComboSizeCountsByOrb,
 
-    // 保留 alias
+    // 靽? alias
     patternCounts: initialPatternCounts,
     comboCountsByOrb: initialComboCountsByOrb,
+    comboSizeCountsByOrb: initialComboSizeCountsByOrb,
   };
 };
 const getBoardKey = (b) => {
-  // 兩個 32-bit hash 合成 BigInt 字串 key（低碰撞、Map key 短）
+  // ?拙?32-bit hash ?? BigInt 摮葡 key嚗?蝣唳??ap key ?哨?
   let h1 = 2166136261 >>> 0; // FNV-ish
   let h2 = 16777619 >>> 0;
 
@@ -3369,7 +3768,7 @@ const calcScore = (
   const illegalPenalty = violatesN2 ? 2200000 : 0;
 
   // =========================
-  // 無特優先：盡量退回舊版味道
+  // ?∠?芸?嚗??????
   // =========================
   if (!hasSpecial) {
     if (ev.combos >= target) {
@@ -3407,7 +3806,7 @@ const calcScore = (
   }
 
   // =========================
-  // 有特優先：新版 multi-special
+  // ??芸?嚗??multi-special
   // =========================
   const specialTuple = getSpecialPriorityTuple(ev, normalizedSpecials, extraCtx);
   const specialScore = specialPriorityTupleToScore(specialTuple);
@@ -3712,6 +4111,7 @@ const getCheapRectGuideScoreFromCompiledSpecialList = (
   return best;
 };
 
+// ?詨?頝臬?閫??嚗eam Search嚗???combo/步數/?孵???豢??豢?雿唾楝敺?// Beam 銝餅?蝔?展開?????摨??豢?雿唾楝敺?
 const beamSolve = async (
   originalBoard,
   cfg,
@@ -3723,6 +4123,7 @@ const beamSolve = async (
   specialPriority,
   initTargetCombo,
   autoRow0Expanded,
+  ruleProfile,
   onProgress = null
 ) => {
   const useRow0 = !!autoRow0Expanded;
@@ -3752,11 +4153,191 @@ const beamSolve = async (
   const hasInitSensitiveSpecial =
     hasInitClearCountSpecial || hasInitEqualSpecial;
 
+  const normalizedRuleProfile = normalizeRuleProfile(ruleProfile);
+  const compiledRuleRequirements = normalizedRuleProfile.requirements.map(
+    (req) => ({
+      orb: clampIntRange(req.orb, 0, 5, 0),
+      size: clampIntRange(req.size, 1, 5, 3),
+      count: Math.max(1, clampIntRange(req.count, 1, 999, 1)),
+      match: req.match === "atLeast" ? "atLeast" : "exact",
+    })
+  );
+  const hasRuleRequirements = compiledRuleRequirements.length > 0;
+  const EMPTY_REQUIREMENT_TUPLE = [];
+
+  const getRuleRequirementTuple = (ev) => {
+    if (!hasRuleRequirements) return EMPTY_REQUIREMENT_TUPLE;
+
+    let allDone = 1;
+    let totalDone = 0;
+    let totalMissing = 0;
+    const tuple = [];
+    const countsByOrb = ev?.initialComboSizeCountsByOrb;
+
+    for (const req of compiledRuleRequirements) {
+      const got = Number(countsByOrb?.[req.orb]?.[String(req.size)] || 0);
+      const missing = Math.max(0, req.count - got);
+      const done = missing <= 0 ? 1 : 0;
+
+      if (!done) allDone = 0;
+      totalDone += Math.min(got, req.count);
+      totalMissing += missing;
+      tuple.push(done, -missing, Math.min(got, req.count));
+    }
+
+    return [allDone, totalDone, -totalMissing, ...tuple];
+  };
+
+  const isRuleRequirementSatisfied = (ev) => {
+    if (!hasRuleRequirements) return true;
+    const countsByOrb = ev?.initialComboSizeCountsByOrb;
+    for (const req of compiledRuleRequirements) {
+      const got = Number(countsByOrb?.[req.orb]?.[String(req.size)] || 0);
+      if (got < req.count) return false;
+    }
+    return true;
+  };
+
   const dirsPlay = diagonal ? DIRS_8 : DIRS_4;
   const maxNodesEffective = cfg.maxNodes;
+  const baseBeamWidth = Math.max(32, Number(cfg.beamWidth) || 32);
 
   const IS_STEP_MODE = priority === "steps";
   const IS_COMBO_MODE = priority !== "steps";
+
+  // Progressive beam schedule: early fast -> middle balanced -> late wider.
+  const beamSchedule = (() => {
+    const w3 = baseBeamWidth;
+    const w2 = Math.max(48, Math.min(w3, Math.round(w3 * 0.7)));
+    const w1 = Math.max(32, Math.min(w2, Math.round(w3 * 0.4), 200));
+    return [w1, w2, w3];
+  })();
+
+  const getAdaptiveBeamWidth = (step, maxSteps, stagnantRounds, diversityRatio) => {
+    const p = maxSteps <= 1 ? 1 : step / Math.max(1, maxSteps - 1);
+    let tier = p < 0.34 ? 0 : p < 0.67 ? 1 : 2;
+
+    if (stagnantRounds >= 2) tier = Math.min(2, tier + 1);
+    if (diversityRatio < 0.35) tier = Math.min(2, tier + 1);
+
+    return beamSchedule[tier];
+  };
+
+  const getNodeDirectionSignature = (node, maxEdges = 6) => {
+    if (!node) return "none";
+    const parts = [];
+    let cur = node;
+    let cnt = 0;
+
+    while (cur && cur.parent && cnt < maxEdges) {
+      const dr = cur.r - cur.parent.r;
+      const dc = cur.c - cur.parent.c;
+      parts.push(`${dr},${dc}`);
+      cur = cur.parent;
+      cnt++;
+    }
+
+    return parts.reverse().join("|") || "none";
+  };
+
+  const getMoveCheapScore = (state, nr, nc, nextLocked, step) => {
+    let s = 0;
+    const ev = state?.ev || {};
+
+    s += (ev.initialCombos || 0) * 120;
+    s += (ev.combos || 0) * 80;
+    s += (ev.clearedCount || 0) * 8;
+    s -= (ev.initialComboDistance || 0) * 70;
+    s -= nextLocked ? 220 : 0;
+
+    if (q2Pos) {
+      const d = Math.abs(nr - q2Pos.r) + Math.abs(nc - q2Pos.c);
+      s -= d * 16;
+    }
+
+    // Small step bias: earlier layers keep slightly broader exploration.
+    s -= step * 0.15;
+
+    return s;
+  };
+
+  const pickCheapTopMoves = (moves, limit, perSigCap = 2) => {
+    if (!Array.isArray(moves) || moves.length === 0) return [];
+    const sorted = [...moves].sort((a, b) => b.cheapScore - a.cheapScore);
+    const out = [];
+    const sigCount = new Map();
+
+    for (let i = 0; i < sorted.length && out.length < limit; i++) {
+      const mv = sorted[i];
+      const sig = mv.cheapSig || "none";
+      const used = sigCount.get(sig) || 0;
+      if (used >= perSigCap) continue;
+      sigCount.set(sig, used + 1);
+      out.push(mv);
+    }
+
+    // Exploration tail: keep a tiny random slice if room remains.
+    if (out.length < limit && sorted.length > out.length) {
+      for (let i = 0; i < sorted.length && out.length < limit; i++) {
+        const mv = sorted[i];
+        if (out.includes(mv)) continue;
+        if (Math.random() < 0.03) out.push(mv);
+      }
+    }
+
+    return out;
+  };
+
+  const depthMilestones = (() => {
+    const maxSteps = Math.max(1, Number(cfg.maxSteps) || 1);
+    const d1 = Math.max(1, Math.min(maxSteps, Math.ceil(maxSteps * 0.35)));
+    const d2 = Math.max(d1, Math.min(maxSteps, Math.ceil(maxSteps * 0.7)));
+
+    return Array.from(new Set([d1, d2, maxSteps])).sort((a, b) => a - b);
+  })();
+
+  const getDepthPhaseIndex = (step) => {
+    for (let i = 0; i < depthMilestones.length; i++) {
+      if (step < depthMilestones[i]) return i;
+    }
+    return depthMilestones.length - 1;
+  };
+
+  const getDepthPhaseBeamScale = (phaseIdx) => {
+    if (depthMilestones.length <= 1) return 1;
+    if (phaseIdx <= 0) return 0.55;
+    if (phaseIdx === 1 && depthMilestones.length >= 3) return 0.78;
+    return 1;
+  };
+
+  const getCheapEvalBudget = (
+    moveCount,
+    beamWidth,
+    stagnantRounds,
+    specialDriven
+  ) => {
+    if (moveCount <= 0) return 0;
+
+    let budget = Math.max(
+      beamWidth + 48,
+      Math.floor(beamWidth * (specialDriven ? 4.6 : 3.8))
+    );
+
+    if (stagnantRounds >= 2) budget = Math.floor(budget * 1.35);
+    if (stagnantRounds >= 4) budget = Math.floor(budget * 1.2);
+
+    return Math.max(beamWidth, Math.min(moveCount, budget));
+  };
+
+  const getStateFamilySignature = (st) =>
+    st?.familySig || st?.cheapSig || getNodeDirectionSignature(st?.node);
+
+  const getDiversityRatio = (states) => {
+    if (!Array.isArray(states) || states.length === 0) return 1;
+    const uniq = new Set();
+    for (const st of states) uniq.add(getStateFamilySignature(st));
+    return uniq.size / states.length;
+  };
 
   const SEARCH_PROFILE = IS_STEP_MODE
     ? {
@@ -3817,9 +4398,24 @@ const beamSolve = async (
     return Number.isFinite(n) ? n : d;
   };
 
-  // ✅ 統一版：首消 target 資訊
-  // 不再做 cap / 不再做 0 特判成關閉限制
-  // 只算距離：distance = |initialCombos - target|
+  const toIntNonNegative = (v, d = 0) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return d;
+    return Math.max(0, Math.floor(n));
+  };
+
+  const STEP_COMBO_SLACK = toIntNonNegative(
+    cfg.stepComboSlack ?? cfg.stepSlack,
+    1
+  );
+  const COMBO_STEP_SLACK = toIntNonNegative(
+    cfg.comboStepSlack ?? cfg.comboSlack,
+    1
+  );
+
+  // ??蝯曹???擐? target 鞈?
+  // 銝???cap / 銝???0 ?孵??????
+  // ?芰?頝嚗istance = |initialCombos - target|
   const getInitialComboInfo = (evLike, targetLike = initTargetCombo) => {
     const targetNum = Number(targetLike);
     const initialCombos = toNum(
@@ -4022,7 +4618,8 @@ const beamSolve = async (
     steps,
     violatesN2,
     initExact,
-    initDistance = getInitComboDistance(ev)
+    initDistance = getInitComboDistance(ev),
+    anchors = null
   ) => {
     const legal = violatesN2 ? 0 : 1;
     const initEq = ev.initialAllEqual ? 1 : 0;
@@ -4030,19 +4627,30 @@ const beamSolve = async (
     const initCleared = ev.initialClearedCount || 0;
     const combos = ev.combos || 0;
     const cleared = ev.clearedCount || 0;
+    const requirementTuple = Array.isArray(ev?.ruleRequirementTuple)
+      ? ev.ruleRequirementTuple
+      : EMPTY_REQUIREMENT_TUPLE;
     const adaptiveMajor = getAdaptiveMajor(ev);
+    const bestStepsAnchor = Number.isFinite(Number(anchors?.bestSteps))
+      ? Number(anchors.bestSteps)
+      : steps;
+    const bestCombosAnchor = Number.isFinite(Number(anchors?.bestCombos))
+      ? Number(anchors.bestCombos)
+      : combos;
 
     if (IS_STEP_MODE) {
-      if (hasInitSensitiveSpecial) {
+      const inStepBand = steps <= bestStepsAnchor + STEP_COMBO_SLACK;
+      if (inStepBand) {
         return [
           legal,
+          ...requirementTuple,
           initExact ? 1 : 0,
           -initDistance,
           initEq,
           initCombos,
           initCleared,
-          -steps,
           combos,
+          -steps,
           cleared,
           adaptiveMajor,
           Math.floor(score),
@@ -4051,46 +4659,50 @@ const beamSolve = async (
 
       return [
         legal,
+        ...requirementTuple,
         initExact ? 1 : 0,
         -initDistance,
         initEq,
         initCombos,
         initCleared,
         -steps,
-        adaptiveMajor,
         combos,
+        adaptiveMajor,
         cleared,
         Math.floor(score),
       ];
     }
 
-    if (hasInitSensitiveSpecial) {
+    const inComboBand = combos >= bestCombosAnchor - COMBO_STEP_SLACK;
+    if (inComboBand) {
       return [
         legal,
+        ...requirementTuple,
         initExact ? 1 : 0,
         -initDistance,
         initEq,
         initCombos,
         initCleared,
-        combos,
-        cleared,
-        adaptiveMajor,
         -steps,
+        combos,
+        adaptiveMajor,
+        cleared,
         Math.floor(score),
       ];
     }
 
     return [
       legal,
+      ...requirementTuple,
       initExact ? 1 : 0,
       -initDistance,
       initEq,
       initCombos,
       initCleared,
       combos,
+      -steps,
       adaptiveMajor,
       cleared,
-      -steps,
       Math.floor(score),
     ];
   };
@@ -4129,6 +4741,7 @@ const beamSolve = async (
     !q2Pos || (node?.r === q2Pos.r && node?.c === q2Pos.c);
 
   const isSolvedGoal = (ev, extraCtx = {}) => {
+    if (!isRuleRequirementSatisfied(ev)) return false;
     if (!hasSpecial) return ev.combos >= target;
     return (
       ev.combos >= target &&
@@ -4161,6 +4774,17 @@ const beamSolve = async (
   let beam = [];
   let nodesExpanded = 0;
   const visitedBest = new Map();
+  const visitedDominanceFrontier = new Map();
+  const VISITED_FRONTIER_CAP = hasSpecial ? 8 : 6;
+  const VISITED_FAMILY_CAP = 3;
+  let stagnantRounds = 0;
+  let lastBestScore = -Infinity;
+  let diversityRatio = 1;
+
+  const getNoSpecialAnchors = (fallbackSteps = 0, fallbackCombos = 0) => ({
+    bestSteps: bestGlobal.node ? stepsOf(bestGlobal.node) : fallbackSteps,
+    bestCombos: bestGlobal.node ? bestGlobal.combos || 0 : fallbackCombos,
+  });
 
   let lastProgressReport = -1;
   const reportProgress = (force = false) => {
@@ -4180,6 +4804,28 @@ const beamSolve = async (
       current,
       max: Math.max(1, maxNodesEffective),
     });
+  };
+
+  const flushPendingPools = () => {
+    topStepCandidates = flushPendingSolutions(
+      topStepCandidates,
+      pendingTopStepCandidates,
+      "steps",
+      specialPriority,
+      initTargetCombo,
+      ruleProfile,
+      10
+    );
+
+    topComboCandidates = flushPendingSolutions(
+      topComboCandidates,
+      pendingTopComboCandidates,
+      "combo",
+      specialPriority,
+      initTargetCombo,
+      ruleProfile,
+      10
+    );
   };
 
   const packCandidateFromEval = ({
@@ -4229,6 +4875,7 @@ const beamSolve = async (
           "steps",
           specialPriority,
           initTargetCombo,
+          ruleProfile,
           10
         );
       }
@@ -4241,6 +4888,7 @@ const beamSolve = async (
           "combo",
           specialPriority,
           initTargetCombo,
+          ruleProfile,
           10
         );
       }
@@ -4262,13 +4910,15 @@ const beamSolve = async (
     const curInitDistance = getInitComboDistance(ev);
 
     if (!hasSpecial) {
+      const anchors = getNoSpecialAnchors(curSteps, ev.combos || 0);
       const curTuple = buildNoSpecialRankTuple(
         ev,
         score,
         curSteps,
         violatesN2,
         curInitExact,
-        curInitDistance
+        curInitDistance,
+        anchors
       );
 
       const bestSteps = bestGlobal.node ? stepsOf(bestGlobal.node) : Infinity;
@@ -4285,7 +4935,8 @@ const beamSolve = async (
             bestSteps,
             bestGlobal.violatesN2,
             bestInitExact,
-            bestInitDistance
+            bestInitDistance,
+            anchors
           )
         : null;
 
@@ -4313,6 +4964,7 @@ const beamSolve = async (
 
     const curTuple = [
       violatesN2 ? 0 : 1,
+      ...(ev?.ruleRequirementTuple || EMPTY_REQUIREMENT_TUPLE),
       ...specialTuple,
       curInitExact ? 1 : 0,
       -curInitDistance,
@@ -4332,6 +4984,7 @@ const beamSolve = async (
     const bestTuple = bestGlobal.node
       ? [
           bestGlobal.violatesN2 ? 0 : 1,
+          ...(bestGlobal.ruleRequirementTuple || EMPTY_REQUIREMENT_TUPLE),
           ...(bestGlobal.specialTuple || EMPTY_SPECIAL_TUPLE),
           hitsInitTargetComboExactly(bestGlobal) ? 1 : 0,
           -bestInitDistance,
@@ -4376,6 +5029,37 @@ const beamSolve = async (
     initExact,
     visitedTuple
   ) => {
+    const dominanceTuple = hasSpecial
+      ? [
+          ...(ev?.ruleRequirementTuple || EMPTY_REQUIREMENT_TUPLE),
+          ev.combos || 0,
+          ...(specialTuple || EMPTY_SPECIAL_TUPLE),
+          Math.floor(score),
+        ]
+      : [
+          ...(ev?.ruleRequirementTuple || EMPTY_REQUIREMENT_TUPLE),
+          ev.combos || 0,
+          Math.floor(score),
+        ];
+
+    const frontier = visitedDominanceFrontier.get(key) || [];
+    for (const prevDom of frontier) {
+      if (dominatesVec(prevDom, dominanceTuple)) return false;
+    }
+
+    const reducedFrontier = [];
+    for (const prevDom of frontier) {
+      if (!dominatesVec(dominanceTuple, prevDom)) {
+        reducedFrontier.push(prevDom);
+      }
+    }
+    reducedFrontier.push(dominanceTuple);
+    reducedFrontier.sort((a, b) => lexTupleCompareDesc(a, b));
+    if (reducedFrontier.length > VISITED_FRONTIER_CAP) {
+      reducedFrontier.length = VISITED_FRONTIER_CAP;
+    }
+    visitedDominanceFrontier.set(key, reducedFrontier);
+
     const prev = visitedBest.get(key);
 
     if (hasSpecial) {
@@ -4397,7 +5081,8 @@ const beamSolve = async (
       steps,
       violatesN2,
       initExact,
-      getInitComboDistance(ev)
+      getInitComboDistance(ev),
+      getNoSpecialAnchors(steps, ev.combos || 0)
     );
 
     if (!prev) {
@@ -4445,8 +5130,8 @@ const beamSolve = async (
     scoreBias = 0,
     parentExtraCtx = null
   ) => {
-    const { initial, violatesN2 } = getInitialMatchCheck(evalBoard);
-    const evRaw = evaluateBoard(evalBoard, skyfall, initial);
+    const { initial, violatesN2 } = getInitialMatchCheck(evalBoard, ruleProfile);
+    const evRaw = evaluateBoard(evalBoard, skyfall, initial, ruleProfile);
 
     const initInfo = extractInitialInfo(initial, evRaw);
 
@@ -4507,6 +5192,8 @@ const beamSolve = async (
     const specialTuple = hasSpecial
       ? getSpecialPriorityTupleCompiled(ev, compiledSpecials, extraCtx)
       : EMPTY_SPECIAL_TUPLE;
+    const requirementTuple = getRuleRequirementTuple(ev);
+    ev.ruleRequirementTuple = requirementTuple;
 
     const rawScore = calcScore(
       ev,
@@ -4527,8 +5214,8 @@ const beamSolve = async (
     score += ev.initialClearedCount * SEARCH_PROFILE.initClearedBonus;
     if (ev.initialAllEqual) score += SEARCH_PROFILE.initAllEqualBonus;
 
-    // ✅ 統一距離懲罰
-    // target 越接近越好，不再中途硬砍
+    // ??蝯曹?頝?脩蔑
+    // target 頞餈?憟踝?銝?銝剝′??
     if (initComboInfo.enabled) {
       score -= initComboInfo.distance * SEARCH_PROFILE.initTargetPenalty;
       if (initComboInfo.exact) {
@@ -4570,6 +5257,7 @@ const beamSolve = async (
     const visitedTuple = hasSpecial
       ? [
           violatesN2 ? 0 : 1,
+          ...requirementTuple,
           ...specialTuple,
           initExact ? 1 : 0,
           -initDistance,
@@ -4587,12 +5275,14 @@ const beamSolve = async (
           steps,
           violatesN2,
           initExact,
-          initDistance
+          initDistance,
+          getNoSpecialAnchors(steps, ev.combos || 0)
         );
 
     const finalRankTuple = hasSpecial
       ? [
           violatesN2 ? 0 : 1,
+          ...requirementTuple,
           ...specialTuple,
           initExact ? 1 : 0,
           -initDistance,
@@ -4610,7 +5300,8 @@ const beamSolve = async (
           steps,
           violatesN2,
           initExact,
-          initDistance
+          initDistance,
+          getNoSpecialAnchors(steps, ev.combos || 0)
         );
 
     return {
@@ -4638,6 +5329,7 @@ const beamSolve = async (
     scoreBias = 0,
     outCandidates,
     parentExtraCtx = null,
+    familySig = null,
   }) => {
     const steps = stepsOf(node);
     const evalBoard = boardWithHeldFilled(nextBoard, hole, held);
@@ -4656,9 +5348,11 @@ const beamSolve = async (
       initInfo,
     } = res;
 
-    const key = `${getBoardKey(nextBoard)}|${held}|${r},${c}|${
-      locked ? 1 : 0
-    }|${buildVisitedInitPart(initInfo)}`;
+    const boardKey = getBoardKey(nextBoard);
+    const holeKey = hole ? `${hole.r},${hole.c}` : "none";
+    const key = `${boardKey}|${holeKey}|${held}|${steps}`;
+    const resolvedFamilySig =
+      familySig || `${getNodeDirectionSignature(node)}|${boardKey}`;
 
     if (
       !betterThanVisited(
@@ -4696,6 +5390,7 @@ const beamSolve = async (
       specialTuple,
       visitedTuple,
       finalRankTuple,
+      familySig: resolvedFamilySig,
       _poolRankCached: [],
     });
 
@@ -4756,6 +5451,7 @@ const beamSolve = async (
 
         st.finalRankTuple = [
           st.violatesN2 ? 0 : 1,
+          ...(st.ev?.ruleRequirementTuple || EMPTY_REQUIREMENT_TUPLE),
           ...(st.specialTuple || EMPTY_SPECIAL_TUPLE),
           initExact ? 1 : 0,
           -initDistance,
@@ -4776,6 +5472,19 @@ const beamSolve = async (
   };
 
   const sortCandidatesNoSpecialCombo = (candidates) => {
+    const minSteps = candidates.reduce(
+      (mn, st) => Math.min(mn, stepsOf(st.node)),
+      Infinity
+    );
+    const maxCombos = candidates.reduce(
+      (mx, st) => Math.max(mx, st?.ev?.combos || 0),
+      -Infinity
+    );
+    const anchors = getNoSpecialAnchors(
+      Number.isFinite(minSteps) ? minSteps : 0,
+      Number.isFinite(maxCombos) ? maxCombos : 0
+    );
+
     candidates.sort((a, b) => {
       const aInit = hitsInitTargetComboExactly(a.ev) ? 1 : 0;
       const bInit = hitsInitTargetComboExactly(b.ev) ? 1 : 0;
@@ -4791,7 +5500,8 @@ const beamSolve = async (
         aSteps,
         a.violatesN2,
         aInit,
-        aDist
+        aDist,
+        anchors
       );
       const tb = buildNoSpecialRankTuple(
         b.ev,
@@ -4799,7 +5509,8 @@ const beamSolve = async (
         bSteps,
         b.violatesN2,
         bInit,
-        bDist
+        bDist,
+        anchors
       );
 
       return lexTupleCompareDesc(ta, tb);
@@ -4829,6 +5540,26 @@ const beamSolve = async (
     return quota;
   };
 
+  const buildFamilyFreqMap = (items) => {
+    const freq = new Map();
+    for (const st of items) {
+      const sig = getStateFamilySignature(st);
+      freq.set(sig, (freq.get(sig) || 0) + 1);
+    }
+    return freq;
+  };
+
+  const takeWithFamilyCap = (out, picked, familyUsed, st, cap) => {
+    if (!st || picked.has(st)) return false;
+    const sig = getStateFamilySignature(st);
+    const used = familyUsed.get(sig) || 0;
+    if (used >= cap) return false;
+    familyUsed.set(sig, used + 1);
+    out.push(st);
+    picked.add(st);
+    return true;
+  };
+
   const pickBeamLexicographicDiverse = (
     candidates,
     beamWidth,
@@ -4839,9 +5570,16 @@ const beamSolve = async (
     if (!Array.isArray(candidates) || candidates.length === 0) return [];
 
     sortCandidatesLexicographic(candidates);
+    const familyFreq = buildFamilyFreqMap(candidates);
+    const out = [];
+    const picked = new Set();
+    const familyUsed = new Map();
+    const familyCap = VISITED_FAMILY_CAP;
 
     const eliteN = Math.min(candidates.length, Math.max(6, (beamWidth / 3) | 0));
-    const out = candidates.slice(0, eliteN);
+    for (let i = 0; i < eliteN && out.length < beamWidth; i++) {
+      takeWithFamilyCap(out, picked, familyUsed, candidates[i], familyCap);
+    }
 
     if (out.length >= beamWidth) return out.slice(0, beamWidth);
 
@@ -4876,10 +5614,20 @@ const beamSolve = async (
     }
 
     for (const arr of buckets.values()) {
-      precomputeCandidateRanks(arr, mode, specialPriorities, initTargetCombo);
+      precomputeCandidateRanks(
+        arr,
+        mode,
+        specialPriorities,
+        initTargetCombo,
+        ruleProfile
+      );
       arr.sort((a, b) => {
         const t = lexCompareDesc(a._poolRankCached, b._poolRankCached);
         if (t !== 0) return t;
+
+        const af = familyFreq.get(getStateFamilySignature(a)) || 1;
+        const bf = familyFreq.get(getStateFamilySignature(b)) || 1;
+        if (af !== bf) return af - bf;
 
         const ad = getInitComboDistance(a.ev);
         const bd = getInitComboDistance(b.ev);
@@ -4905,15 +5653,16 @@ const beamSolve = async (
       });
     }
 
+    const pool = [];
     const bucketKeys = Array.from(buckets.keys());
     let idx = 0;
 
-    while (out.length < beamWidth && bucketKeys.length > 0) {
+    while (bucketKeys.length > 0) {
       const k = bucketKeys[idx % bucketKeys.length];
       const arr = buckets.get(k);
 
       if (arr && arr.length) {
-        out.push(arr.shift());
+        pool.push(arr.shift());
         idx++;
       } else {
         buckets.delete(k);
@@ -4922,21 +5671,49 @@ const beamSolve = async (
       }
     }
 
+    for (const st of pool) {
+      if (out.length >= beamWidth) break;
+      takeWithFamilyCap(out, picked, familyUsed, st, familyCap);
+    }
+
+    for (const st of candidates) {
+      if (out.length >= beamWidth) break;
+      if (!picked.has(st)) {
+        out.push(st);
+        picked.add(st);
+      }
+    }
+
     return out.slice(0, beamWidth);
   };
 
-  const pickBeamCombo = (candidates, explore) => {
+  const pickBeamCombo = (candidates, beamWidth, explore) => {
     if (hasSpecial) sortCandidatesLexicographic(candidates);
     else sortCandidatesNoSpecialCombo(candidates);
 
-    const BW = cfg.beamWidth;
+    const BW = beamWidth;
+    const familyFreq = buildFamilyFreqMap(candidates);
     const out = [];
+    const picked = new Set();
+    const familyUsed = new Map();
+    const familyCap = VISITED_FAMILY_CAP;
     const eliteN = Math.min(
       candidates.length,
       Math.max(6, ((BW * 0.28) | 0))
     );
 
-    for (let i = 0; i < eliteN && out.length < BW; i++) out.push(candidates[i]);
+    for (let i = 0; i < eliteN && out.length < BW; i++) {
+      takeWithFamilyCap(out, picked, familyUsed, candidates[i], familyCap);
+    }
+
+    if (out.length < Math.min(eliteN, BW)) {
+      for (let i = 0; i < eliteN && out.length < BW; i++) {
+        if (picked.has(candidates[i])) continue;
+        out.push(candidates[i]);
+        picked.add(candidates[i]);
+      }
+    }
+
     if (out.length >= BW) return out;
 
     const maxTier = SEARCH_PROFILE.comboMaxTier;
@@ -4987,24 +5764,68 @@ const beamSolve = async (
           }
         }
 
-        out.push(st);
+        if (!takeWithFamilyCap(out, picked, familyUsed, st, familyCap)) continue;
+
         usedPos.add(pc);
         if (explore) usedRegion.add(rg);
         if (miss <= maxTier) took[miss]++;
       }
     }
 
+    if (out.length < BW) {
+      for (const st of candidates) {
+        if (out.length >= BW) break;
+        if (picked.has(st)) continue;
+
+        const sig = getStateFamilySignature(st);
+        const rarity = familyFreq.get(sig) || 1;
+        if (rarity > 1 && Math.random() < 0.08) continue;
+
+        out.push(st);
+        picked.add(st);
+      }
+    }
+
     return out.slice(0, BW);
   };
 
-  const pickBeamStepsNoSpecial = (candidates) => {
+  const pickBeamStepsNoSpecial = (candidates, beamWidth) => {
     if (!Array.isArray(candidates) || candidates.length === 0) return [];
 
-    const BW = cfg.beamWidth;
+    const BW = beamWidth;
     sortCandidatesNoSpecialCombo(candidates);
+    const minSteps = candidates.reduce(
+      (mn, st) => Math.min(mn, stepsOf(st.node)),
+      Infinity
+    );
+    const maxCombos = candidates.reduce(
+      (mx, st) => Math.max(mx, st?.ev?.combos || 0),
+      -Infinity
+    );
+    const modeAnchors = getNoSpecialAnchors(
+      Number.isFinite(minSteps) ? minSteps : 0,
+      Number.isFinite(maxCombos) ? maxCombos : 0
+    );
+    const familyFreq = buildFamilyFreqMap(candidates);
+    const familyUsed = new Map();
+    const picked = new Set();
+    const familyCap = VISITED_FAMILY_CAP;
 
     const eliteN = Math.min(candidates.length, Math.max(10, (BW / 3) | 0));
-    const out = candidates.slice(0, eliteN);
+    const out = [];
+    for (let i = 0; i < eliteN && out.length < BW; i++) {
+      takeWithFamilyCap(out, picked, familyUsed, candidates[i], familyCap);
+    }
+
+    if (out.length < Math.min(BW, eliteN)) {
+      for (let i = 0; i < eliteN && out.length < BW; i++) {
+        const st = candidates[i];
+        if (picked.has(st)) continue;
+        out.push(st);
+        picked.add(st);
+      }
+    }
+
     if (out.length >= BW) return out.slice(0, BW);
 
     const buckets = new Map();
@@ -5072,7 +5893,8 @@ const beamSolve = async (
           aSteps,
           a.violatesN2,
           aInit,
-          aDist
+          aDist,
+          modeAnchors
         );
         const tb = buildNoSpecialRankTuple(
           b.ev,
@@ -5080,10 +5902,16 @@ const beamSolve = async (
           bSteps,
           b.violatesN2,
           bInit,
-          bDist
+          bDist,
+          modeAnchors
         );
 
-        return lexTupleCompareDesc(ta, tb);
+        const t = lexTupleCompareDesc(ta, tb);
+        if (t !== 0) return t;
+
+        const af = familyFreq.get(getStateFamilySignature(a)) || 1;
+        const bf = familyFreq.get(getStateFamilySignature(b)) || 1;
+        return af - bf;
       });
     }
 
@@ -5095,7 +5923,10 @@ const beamSolve = async (
       const arr = buckets.get(k);
 
       if (arr && arr.length) {
-        out.push(arr.shift());
+        const st = arr.shift();
+        if (!takeWithFamilyCap(out, picked, familyUsed, st, familyCap)) {
+          continue;
+        }
         idx++;
       } else {
         buckets.delete(k);
@@ -5104,11 +5935,39 @@ const beamSolve = async (
       }
     }
 
+    if (out.length < BW) {
+      for (const st of candidates) {
+        if (out.length >= BW) break;
+        if (picked.has(st)) continue;
+        out.push(st);
+        picked.add(st);
+      }
+    }
+
     return out.slice(0, BW);
   };
 
   for (let step = 0; step < cfg.maxSteps; step++) {
     let candidates = [];
+    const pendingPushMoves = [];
+    const pendingTerminalMoves = [];
+
+    const phaseIdx = getDepthPhaseIndex(step);
+    const phaseScale = getDepthPhaseBeamScale(phaseIdx);
+    const adaptiveBeamWidth = Math.max(
+      24,
+      Math.min(
+        baseBeamWidth,
+        Math.round(
+          getAdaptiveBeamWidth(
+            step,
+            cfg.maxSteps,
+            stagnantRounds,
+            diversityRatio
+          ) * phaseScale
+        )
+      )
+    );
 
     if (
       bestReachedSteps !== Infinity &&
@@ -5122,6 +5981,8 @@ const beamSolve = async (
       if (state.locked) continue;
 
       for (const [dr, dc] of dirsPlay) {
+        if (nodesExpanded > maxNodesEffective) break;
+
         const nr = state.r + dr;
         const nc = state.c + dc;
 
@@ -5136,6 +5997,8 @@ const beamSolve = async (
         }
 
         const newNode = makeNode(state.node, nr, nc);
+        const dirSig = `${dr},${dc}`;
+        const cheapSig = `${getNodeDirectionSignature(newNode)}|${dirSig}`;
 
         if (useRow0 && state.r === 0) {
           if (nr !== 1) continue;
@@ -5149,7 +6012,7 @@ const beamSolve = async (
           nextBoard[nr][nc] = -1;
           const nextHole = { r: nr, c: nc };
 
-          tryPushState({
+          pendingPushMoves.push({
             nextBoard,
             held: state.held,
             hole: nextHole,
@@ -5157,9 +6020,10 @@ const beamSolve = async (
             c: nc,
             node: newNode,
             locked: nextLocked,
-            scoreBias: 0,
-            outCandidates: candidates,
             parentExtraCtx: state.extraCtx,
+            cheapScore: getMoveCheapScore(state, nr, nc, nextLocked, step),
+            cheapSig,
+            familySig: `${cheapSig}|enter`,
           });
 
           nodesExpanded++;
@@ -5175,31 +6039,21 @@ const beamSolve = async (
           const evalBoard = clone2D(state.board);
           if (state.hole) evalBoard[state.hole.r][state.hole.c] = destVal;
 
-          const res = evalState(
+          pendingTerminalMoves.push({
             evalBoard,
-            newNode,
-            stepsOf(newNode),
-            0,
-            state.extraCtx
-          );
-          if (!res) continue;
-
-          pushTopCandidate(
-            res.ev,
-            newNode,
-            res.score,
-            res.violatesN2,
-            res.extraCtx,
-            res.specialTuple
-          );
-          considerBest(
-            res.ev,
-            res.score,
-            newNode,
-            res.violatesN2,
-            res.extraCtx,
-            res.specialTuple
-          );
+            node: newNode,
+            parentExtraCtx: state.extraCtx,
+            cheapScore:
+              getMoveCheapScore(
+                state,
+                nr,
+                nc,
+                chk.locked || isAtQ2(nr, nc),
+                step
+              ) + 40,
+            cheapSig,
+            familySig: `${cheapSig}|exit`,
+          });
 
           nodesExpanded++;
           reportProgress();
@@ -5216,7 +6070,7 @@ const beamSolve = async (
         const nextBoard = clone2D(state.board);
         const nextHole = holeStepInPlace(nextBoard, state.hole, { r: nr, c: nc });
 
-        tryPushState({
+        pendingPushMoves.push({
           nextBoard,
           held: state.held,
           hole: nextHole,
@@ -5224,9 +6078,10 @@ const beamSolve = async (
           c: nc,
           node: newNode,
           locked: nextLocked,
-          scoreBias: 0,
-          outCandidates: candidates,
           parentExtraCtx: state.extraCtx,
+          cheapScore: getMoveCheapScore(state, nr, nc, nextLocked, step),
+          cheapSig,
+          familySig: `${cheapSig}|${nr},${nc}`,
         });
 
         nodesExpanded++;
@@ -5234,45 +6089,106 @@ const beamSolve = async (
       }
     }
 
-    if (!candidates.length || nodesExpanded > maxNodesEffective) break;
+    if (!pendingPushMoves.length && !pendingTerminalMoves.length) break;
+
+    for (const mv of pendingTerminalMoves) {
+      const res = evalState(
+        mv.evalBoard,
+        mv.node,
+        stepsOf(mv.node),
+        0,
+        mv.parentExtraCtx
+      );
+      if (!res) continue;
+
+      pushTopCandidate(
+        res.ev,
+        mv.node,
+        res.score,
+        res.violatesN2,
+        res.extraCtx,
+        res.specialTuple
+      );
+      considerBest(
+        res.ev,
+        res.score,
+        mv.node,
+        res.violatesN2,
+        res.extraCtx,
+        res.specialTuple
+      );
+    }
+
+    const evalBudget = getCheapEvalBudget(
+      pendingPushMoves.length,
+      adaptiveBeamWidth,
+      stagnantRounds,
+      hasSpecial
+    );
+
+    const selectedPushMoves =
+      evalBudget >= pendingPushMoves.length
+        ? pendingPushMoves
+        : pickCheapTopMoves(pendingPushMoves, evalBudget, 2);
+
+    for (const mv of selectedPushMoves) {
+      tryPushState({
+        nextBoard: mv.nextBoard,
+        held: mv.held,
+        hole: mv.hole,
+        r: mv.r,
+        c: mv.c,
+        node: mv.node,
+        locked: mv.locked,
+        scoreBias: 0,
+        outCandidates: candidates,
+        parentExtraCtx: mv.parentExtraCtx,
+        familySig: mv.familySig || mv.cheapSig || null,
+      });
+    }
+
+    if (!candidates.length) {
+      if (depthMilestones.includes(step + 1)) flushPendingPools();
+      break;
+    }
 
     if (!hasSpecial) {
       if (priority === "combo") {
-        beam = pickBeamCombo(candidates, true);
+        beam = pickBeamCombo(candidates, adaptiveBeamWidth, true);
       } else {
-        beam = pickBeamStepsNoSpecial(candidates);
+        beam = pickBeamStepsNoSpecial(candidates, adaptiveBeamWidth);
       }
     } else {
       beam = pickBeamLexicographicDiverse(
         candidates,
-        cfg.beamWidth,
+        adaptiveBeamWidth,
         mode,
         specialPriority,
         initTargetCombo
       );
     }
 
+    const currentBestScore = Number(bestGlobal.score);
+    if (
+      Number.isFinite(currentBestScore) &&
+      currentBestScore > lastBestScore + 1e-6
+    ) {
+      lastBestScore = currentBestScore;
+      stagnantRounds = 0;
+    } else {
+      stagnantRounds++;
+    }
+
+    diversityRatio = getDiversityRatio(beam);
+    if (depthMilestones.includes(step + 1)) flushPendingPools();
+
     reportProgress(true);
     await yieldToBrowser();
+
+    if (nodesExpanded > maxNodesEffective) break;
   }
 
-  topStepCandidates = flushPendingSolutions(
-    topStepCandidates,
-    pendingTopStepCandidates,
-    "steps",
-    specialPriority,
-    initTargetCombo,
-    10
-  );
-
-  topComboCandidates = flushPendingSolutions(
-    topComboCandidates,
-    pendingTopComboCandidates,
-    "combo",
-    specialPriority,
-    initTargetCombo,
-    10
-  );
+  flushPendingPools();
 
   reportProgress(true);
 
@@ -5307,23 +6223,23 @@ const beamSolve = async (
 
 //536244441114
 const stopToBase = useCallback((clearStep = true) => {
-	  // 1) 停動畫
+	  // 1) ????
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
 	  replayAnimRef.current.raf = 0;
 
-	  // 2) 清掉重播狀態
+	  // 2) 皜?????
 	  setIsReplaying(false);
 	  setIsPaused(false);
 	  setFloating(null);
 	  setReplayBoard(null);
 	  setHolePos(null);
 
-	  // 3) ✅ 回到原盤（B版：baseBoardRef）
+	  // 3) ????嚗??baseBoardRef嚗?
 	  if (baseBoardRef.current?.length) {
 		setBoard(baseBoardRef.current.map(r => [...r]));
 	  }
 
-	  // 4) Stop 是否要把路徑回到未開始
+	  // 4) Stop ?臬閬?頝臬???芷?憪?
 	  if (clearStep) setCurrentStep(-1);
 	}, []);
 const [solutionPools, setSolutionPools] = useState({
@@ -5370,7 +6286,7 @@ const getSolutionSpecialSlotStatus = (sol, specialPriorities) => {
         type: "none",
         done: true,
         guide: 0,
-        label: "無",
+        label: "none",
       };
     }
 
@@ -5429,7 +6345,7 @@ const getSolutionMergeSignature = (sol) => {
   const totalCombos = Number(sol?.combos || 0);
   const skyfallCombos = Math.max(0, totalCombos - initialCombos);
 
-  // 只用「首批 + 疊消組合」做 merge signature
+  // ?芰????+ ??蝯??? merge signature
   return `${initialCombos}|${skyfallCombos}`;
 };
 
@@ -5513,10 +6429,17 @@ const precomputeCandidateRanks = (
   candidates,
   mode,
   specialPriorities,
-  initTargetCombo
+  initTargetCombo,
+  ruleProfile = null
 ) => {
   for (const st of candidates) {
-    st._poolRank = makePoolRank(st, mode, specialPriorities, initTargetCombo);
+    st._poolRank = makePoolRank(
+      st,
+      mode,
+      specialPriorities,
+      initTargetCombo,
+      ruleProfile
+    );
   }
   return candidates;
 };
@@ -5527,6 +6450,7 @@ const flushPendingSolutions = (
   mode,
   specialPriorities,
   initTargetCombo,
+  ruleProfile = null,
   limit = 10
 ) => {
   if (!pendingList.length) return currentList;
@@ -5536,6 +6460,7 @@ const flushPendingSolutions = (
     mode,
     specialPriorities,
     initTargetCombo,
+    ruleProfile,
     limit
   );
   pendingList.length = 0;
@@ -5662,11 +6587,44 @@ const getSpecialComboRank = (d1, d2, d3) => {
   return 0;                     // none
 };
 
-const makePoolRank = (sol, mode, specialPriorities, initTargetCombo) => {
+const makePoolRank = (
+  sol,
+  mode,
+  specialPriorities,
+  initTargetCombo,
+  ruleProfile = null
+) => {
+  const normalizedRuleProfile = normalizeRuleProfile(ruleProfile);
+  const compiledRequirements = normalizedRuleProfile.requirements;
+  const requirementTuple = [];
+
+  if (compiledRequirements.length > 0) {
+    let allDone = 1;
+    let totalDone = 0;
+    let totalMissing = 0;
+    const countsByOrb = sol?.initialComboSizeCountsByOrb;
+    for (const req of compiledRequirements) {
+      const orb = clampIntRange(req.orb, 0, 5, 0);
+      const size = clampIntRange(req.size, 1, 5, 3);
+      const count = Math.max(1, clampIntRange(req.count, 1, 999, 1));
+      const got = Number(countsByOrb?.[orb]?.[String(size)] || 0);
+      const missing = Math.max(0, count - got);
+      const done = missing <= 0 ? 1 : 0;
+      if (!done) allDone = 0;
+      totalDone += Math.min(got, count);
+      totalMissing += missing;
+      requirementTuple.push(done, -missing, Math.min(got, count));
+    }
+    requirementTuple.unshift(-totalMissing);
+    requirementTuple.unshift(totalDone);
+    requirementTuple.unshift(allDone);
+  }
+
   const cacheKey = JSON.stringify({
     mode,
     initTargetCombo: Number(initTargetCombo) || 0,
     specialPriorities: normalizeSpecialPriorityListKeepSlots(specialPriorities),
+    requirements: compiledRequirements,
   });
 
   if (sol?._poolRankCached && sol?._poolRankCacheKey === cacheKey) {
@@ -5714,25 +6672,25 @@ const makePoolRank = (sol, mode, specialPriorities, initTargetCombo) => {
     normalizeSpecialPriorityListKeepSlots(specialPriorities)
   );
 
+  const initDistance =
+    Number.isFinite(initTarget) && initTarget >= 0
+      ? Math.abs(initialCombos - initTarget)
+      : 0;
+
   const rank = [
     legal,
-
-    // 先比：123 > 12 > 13 > 23 > 1 > 2 > 3 > 0
+    ...requirementTuple,
     specialComboRank,
-
-    // 再比：首批期望 Combo 是否命中
     initExact,
-
-    // 再比：首批 + 疊消組合
+    -initDistance,
     initialCombos,
-    skyfallCombos,
-
-    // 再比：首批大（保險再放一次，讓語意更明確）
-    initialCombos,
-
-    // 最後：步數少
-    -steps,
   ];
+
+  if (mode === "steps") {
+    rank.push(-steps, totalCombos, skyfallCombos);
+  } else {
+    rank.push(totalCombos, -steps, skyfallCombos);
+  }
 
   sol._poolRankCached = rank;
   sol._poolRankCacheKey = cacheKey;
@@ -5744,17 +6702,29 @@ const shouldReplaceSameComboSignature = (
   cur,
   mode,
   specialPriorities,
-  initTargetCombo
+  initTargetCombo,
+  ruleProfile = null
 ) => {
-  const prevRank = makePoolRank(prev, mode, specialPriorities, initTargetCombo);
-  const curRank = makePoolRank(cur, mode, specialPriorities, initTargetCombo);
+  const prevRank = makePoolRank(
+    prev,
+    mode,
+    specialPriorities,
+    initTargetCombo,
+    ruleProfile
+  );
+  const curRank = makePoolRank(
+    cur,
+    mode,
+    specialPriorities,
+    initTargetCombo,
+    ruleProfile
+  );
 
   const cmp = lexCompareDesc(curRank, prevRank);
 
   if (cmp < 0) return true;
   if (cmp > 0) return false;
 
-  // 完全同 rank 才用步數當最後補刀
   const prevSteps = getPathSteps(prev?.path || []);
   const curSteps = getPathSteps(cur?.path || []);
   return curSteps < prevSteps;
@@ -5766,6 +6736,7 @@ const mergeTopSolutions = (
   mode,
   specialPriorities,
   initTargetCombo,
+  ruleProfile = null,
   limit = 10
 ) => {
   const bestBySig = new Map();
@@ -5787,7 +6758,8 @@ const mergeTopSolutions = (
         sol,
         mode,
         specialPriorities,
-        initTargetCombo
+        initTargetCombo,
+        ruleProfile
       )
     ) {
       bestBySig.set(sig, sol);
@@ -5796,7 +6768,13 @@ const mergeTopSolutions = (
 
   const arr = Array.from(bestBySig.values());
 
-  precomputeCandidateRanks(arr, mode, specialPriorities, initTargetCombo);
+  precomputeCandidateRanks(
+    arr,
+    mode,
+    specialPriorities,
+    initTargetCombo,
+    ruleProfile
+  );
 
   arr.sort((a, b) => lexCompareDesc(a._poolRankCached, b._poolRankCached));
 
@@ -5807,13 +6785,15 @@ const makeSolutionResetKey = (
   baseBoard,
   diagonalEnabled,
   skyfallEnabled,
-  autoRow0Expanded
+  autoRow0Expanded,
+  ruleProfile
 ) => {
   return JSON.stringify({
     board: getBoardKey(baseBoard),
     diagonal: !!diagonalEnabled,
     skyfall: !!skyfallEnabled,
     autoRow0Expanded: !!autoRow0Expanded,
+    ruleProfile: normalizeRuleProfile(ruleProfile),
   });
 };
 
@@ -5878,7 +6858,7 @@ useEffect(() => {
   applySolvedCandidate(activeList[idx]);
 }, [priorityMode, selectedPoolIndex, solutionPools, applySolvedCandidate]);
 const abortGifExport = useCallback(() => {
-	  // ✅ 讓正在跑的 exportGif 之後「所有 await 回來」都直接停掉
+	  // ??霈迤?刻???exportGif 銋?????await ????湔??
 	  exportTokenRef.current.cancelled = true;
 
 	  if (gifRef.current) {
@@ -5889,7 +6869,7 @@ const abortGifExport = useCallback(() => {
 	  setExportingGif(false);
 	  setGifProgress({ cur: 0, total: 0, pct: 0 });
 
-	  // ✅ 畫面立刻回底盤、停止匯出動畫
+	  // ???恍蝡???扎?甇Ｗ?箏???
 	  stopToBase(true);
 	}, [stopToBase]);
 const pauseReplay = useCallback(() => {
@@ -5897,7 +6877,7 @@ const pauseReplay = useCallback(() => {
   if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
   replayAnimRef.current.raf = 0;
 
-  // ✅ 把目前距離累積進 dist0
+  // ??????Ｙ敞蝛?dist0
   const st = replayAnimRef.current;
   if (st.tStart) {
     const elapsed = (performance.now() - st.tStart) / 1000;
@@ -5949,21 +6929,21 @@ const resumeReplay = useCallback(() => {
     );
 
     // =========================
-    // 🔥 STEP 推進（修正版）
+    // ? STEP ?券莎?靽格迤??
     // =========================
     while (s.lastNode < i) {
       const nextStep = s.lastNode + 1;
 
-      const prevRC = s.targetPath[s.lastNode];   // ✅ 補上
+      const prevRC = s.targetPath[s.lastNode];   // ??鋆?
       const currRC = s.targetPath[nextStep];
 
-      // ✅ 先清掉舊顯示
+      // ??????憿舐內
       setGhostArrived(null);
 
-      // ✅ 隱藏 B（同時你可以擴充 A 也一起隱藏）
+      // ???梯? B嚗????臭誑?游? A 銋?韏琿??
       setHiddenBCell({ r: prevRC.r, c: prevRC.c });
 
-      // ✅ spawn ghost（用 snapshot 避免同步問題）
+      // ??spawn ghost嚗 snapshot ?踹??郊??嚗?
       const boardSnap = s.b.map(r => [...r]);
 
       const pushedOrbId =
@@ -5983,7 +6963,7 @@ spawnManualGhostWithPt(
 );
 
       // =========================
-      // 回到 row0 → 結束
+      // ? row0 ??蝯?
       // =========================
       if (currRC.r === 0) {
         if (s.hole) {
@@ -6006,7 +6986,7 @@ spawnManualGhostWithPt(
       }
 
       // =========================
-      // 洞模型
+      // 瘣芋??
       // =========================
       if (!s.hole) {
         s.hole = { r: currRC.r, c: currRC.c };
@@ -6024,7 +7004,7 @@ spawnManualGhostWithPt(
     }
 
     // =========================
-    // 結束處理
+    // 蝯???
     // =========================
     if (dist >= s.total - EPS) {
       const lastIdx = s.targetPath.length - 1;
@@ -6135,6 +7115,7 @@ const stopSolveProgressTicker = useCallback((forceComplete = false) => {
 }, []);
 
 const solve = () => {
+  if (!ruleValidation.ok) return;
   solverCache.current.clear();
   stopToBase(true);
   setNeedsSolve(false);
@@ -6151,6 +7132,7 @@ const solve = () => {
     diagonal: diagonalEnabled,
     specialPriorities,
     autoRow0Expanded,
+    ruleProfile: normalizeRuleProfile(ruleProfile),
   });
 
   const boardKey = getBoardKey(base) + `|cfg:${configHash}`;
@@ -6158,12 +7140,13 @@ const solve = () => {
     base,
     diagonalEnabled,
     skyfallEnabled,
-    autoRow0Expanded
+    autoRow0Expanded,
+    ruleProfile
   );
 
   const maxProgressNodes = Math.max(1, solverConfig?.maxNodes || 1);
 
-  // 先重置進度
+  // ??蝵桅脣漲
   solveProgressRawRef.current = {
     current: 0,
     max: maxProgressNodes,
@@ -6175,7 +7158,7 @@ const solve = () => {
     elapsedSec: 0,
   });
 
-  // ✅ 這行是關鍵：啟動每秒 UI 同步
+  // ?????舫??蛛???瘥? UI ?郊
   startSolveProgressTicker();
 
   if (solverCache.current.has(boardKey)) {
@@ -6248,8 +7231,9 @@ const solve = () => {
         specialPriorities,
         initTargetCombo,
         autoRow0Expanded,
+        ruleProfile,
         ({ current, max }) => {
-          // 只更新 raw ref，UI 每秒同步一次
+          // ?芣??raw ref嚗I 瘥??郊銝甈?
           solveProgressRawRef.current = {
             current,
             max,
@@ -6276,6 +7260,7 @@ const solve = () => {
                 "steps",
                 specialPriorities,
                 initTargetCombo,
+                ruleProfile,
                 10
               ),
               combo: oldPools.combo || [],
@@ -6288,6 +7273,7 @@ const solve = () => {
                 "combo",
                 specialPriorities,
                 initTargetCombo,
+                ruleProfile,
                 10
               ),
             };
@@ -6332,7 +7318,7 @@ const solve = () => {
         setStats((prev) => ({ ...prev, ...finalStats }));
       }
 
-      // 完成時補滿
+      // 套用??皛?
       solveProgressRawRef.current = {
         current: solveProgressRawRef.current.max || maxProgressNodes,
         max: solveProgressRawRef.current.max || maxProgressNodes,
@@ -6372,6 +7358,9 @@ const [gifFooter, setGifFooter] = useState({
 	  step: 0,
 	  stepTotal: 0,
 	});
+/////////////////
+// 蝚砌??嚗IF ?臬瞍?瘜?/////////////////
+// ??頝臬????渡?畾蛛?靘?GIF footer 憿舐內?桀?畾菔?脣漲??// 撠楝敺??蝺挾蝝Ｗ?嚗策 GIF footer 憿舐內畾菔?脣漲??
 const buildSegmentIndexByStep = (rcPath) => {
 	  const n = rcPath?.length || 0;
 	  if (n < 2) return { segAt: [1], segTotal: 1 };
@@ -6389,7 +7378,7 @@ const buildSegmentIndexByStep = (rcPath) => {
 		const dr = rcPath[i].r - rcPath[i - 1].r;
 		const dc = rcPath[i].c - rcPath[i - 1].c;
 
-		// 方向改變（含斜轉↔直轉、直↔橫）就算新段
+		// ?孵??寡?嚗斜轉?頧?帖嚗停蝞畾?
 		if (dr !== prevDr || dc !== prevDc) seg++;
 
 		segAt[i] = seg;
@@ -6399,8 +7388,9 @@ const buildSegmentIndexByStep = (rcPath) => {
 
 	  return { segAt, segTotal: seg };
 	};
+// 靘?楝敺??瑕??恍銝西撓??GIF??// 靘楝敺??剝??瑕?嚗撓?箇?臭?頛?GIF??
 const exportGif = useCallback(async () => {
-	  // ✅ 開新的一次匯出：換 id、取消旗標歸零
+	  // ?????甈∪?綽???id??瘨?璅飛??
 	  const myId = ++exportTokenRef.current.id;
 	  exportTokenRef.current.cancelled = false;
 
@@ -6421,17 +7411,17 @@ const exportGif = useCallback(async () => {
 		setGifCaptureMode(true);
 		setGifStage("capture");
 
-		// 先回到原盤面（避免 replay 狀態干擾）
+		// ???啣??日嚗??replay ??僕?橘?
 		stopToBase(true);
 
-		// 讓 React 有時間把畫面穩定下來
+		// 霈?React ?????恍蝛拙?銝?
 		await new Promise(r => setTimeout(r, 80));
 
 		const el = boardInnerRef.current;
 		if (!el) return;
 
 		// =========
-		// 1) 自動決定 skip
+		// 1) ?芸?瘙箏? skip
 		// =========
 		const totalSteps = path.length - 1;
 
@@ -6451,16 +7441,16 @@ const exportGif = useCallback(async () => {
 
 		const baseFrames = 1 + Math.floor(totalSteps / skip); 
 		// 1 = firstCanvas
-		// + floor(totalSteps/skip) = i=skip,2skip,...,<=totalSteps 會被抓到的幀數
+		// + floor(totalSteps/skip) = i=skip,2skip,...,<=totalSteps ?◤?????
 
-		const forceLastFrame = 1; // 你後面固定會 addFrame() 一次（強制最後一步）
-		const tailHoldFrame  = 1; // 你後面 lastCanvas 又 addFrame 一次（delay 1500）
+		const forceLastFrame = 1; // 雿??Ｗ摰? addFrame() 銝甈∴?撘瑕?敺?甇伐?
+		const tailHoldFrame  = 1; // 雿???lastCanvas ??addFrame 銝甈∴?delay 1500嚗?
 
 		const totalFrames = baseFrames + forceLastFrame + tailHoldFrame;
 
 		setGifProgress({ cur: 0, total: totalFrames, pct: 0 });
 		// =========
-		// 2) 建立第一步畫面（跟你原本相同）
+		// 2) 撱箇?蝚砌?甇亦?ｇ?頝???詨?嚗?
 		// =========
 		const base = baseBoardRef.current.map(r => [...r]);
 		const start = path[0];
@@ -6485,14 +7475,14 @@ const exportGif = useCallback(async () => {
 		  setFloating({ orbId: orbOf(held), x: p0.x, y: p0.y, visible: true });
 		}
 
-		// 等 DOM 更新
+		// 蝑?DOM ?湔
 		await new Promise(r => requestAnimationFrame(() => r()));
-		await new Promise(r => requestAnimationFrame(() => r())); // 多等一幀更穩
+		await new Promise(r => requestAnimationFrame(() => r())); // 憭?銝撟?渡帘
 
 		// =========
-		// 3) foreignObject 截圖：固定輸出尺寸，避免擠壓
+		// 3) foreignObject ?芸?嚗摰撓?箏偕撖賂??踹???
 		// =========
-		// const rect0 = el.getBoundingClientRect(); // 你沒用到可以刪掉
+		// const rect0 = el.getBoundingClientRect(); // 雿??典?臭誑?芣?
 
 		const W = el.offsetWidth;
 		const H = el.offsetHeight;
@@ -6520,10 +7510,10 @@ const exportGif = useCallback(async () => {
 		  });
 		};
 
-		// ✅ 這個用來「不再抓圖」直接多加 3 偵
+		// ???靘?????亙???3 ??
 		let lastCanvas = null;
 
-		// 先截第一幀，用它決定 GIF 固定像素尺寸
+		// ?蝚砌?撟嚗摰捱摰?GIF ?箏???撠箏站
 		const firstCanvas = await toCanvas(el, captureOpts);
 		lastCanvas = firstCanvas;
 
@@ -6555,14 +7545,14 @@ const exportGif = useCallback(async () => {
 			return;
 		  }
 
-		  lastCanvas = canvas; // ✅ 記住最後一張（用來尾端多加偵）
+		  lastCanvas = canvas; // ??閮??敺?撘蛛??其?撠曄垢憭??蛛?
 
 		  gif.addFrame(canvas, { delay: frameDelay, copy: true });
 		  if (!isCancelled()) bumpProgress();
 		};
 
 		// =========
-		// 4) 推進步驟 + 擷取
+		// 4) ?券脫郊撽?+ ?瑕?
 		// =========
 		for (let i = 1; i < path.length; i++) {
 		  if (isCancelled()) return;
@@ -6604,14 +7594,14 @@ const exportGif = useCallback(async () => {
 		  if (isCancelled()) return;
 
 		  if (i % skip === 0 || i === path.length - 1) {
-			// ✅ 更新 footer（segment/step）
+			// ???湔 footer嚗egment/step嚗?
 			 setGifFooter(prev => ({
 			  ...prev,
 			  segment: segAt[i] || prev.segment || 1,
 			  step: i,
 			}));
 
-			// ✅ 等 footer DOM 真的更新再截（保險兩幀）
+			// ??蝑?footer DOM ???湔?嚗??芸撟嚗?
 			await new Promise(r => requestAnimationFrame(r));
 			await new Promise(r => requestAnimationFrame(r));
 
@@ -6620,7 +7610,7 @@ const exportGif = useCallback(async () => {
 		  }
 		}
 		
-		// ✅ 強制最後一步的 footer + 截一張，確保顯示 step=totalSteps
+		// ??撘瑕?敺?甇亦? footer + ?芯?撘蛛?蝣箔?憿舐內 step=totalSteps
 		setGifFooter(prev => ({
 		  ...prev,
 		  segment: segAt[totalSteps] || prev.segment || 1,
@@ -6628,24 +7618,24 @@ const exportGif = useCallback(async () => {
 		}));
 		await new Promise(r => requestAnimationFrame(r));
 		await new Promise(r => requestAnimationFrame(r));
-		await addFrame(); // 這張會變成真正的 lastCanvas
+		await addFrame(); // ?撐????甇?? lastCanvas
 
-		// ✅ 最後一幀都加完了，強制顯示 12/12（100%）
+		// ???敺?撟?賢?摰?嚗撥?園＊蝷?12/12嚗?00%嚗?
 		bumpProgress(totalFrames);
 
-		// ✅ 不再抓圖：直接把最後一張 canvas 重複加 3 偵
+		// ??銝???嚗?交??敺?撘?canvas ????3 ??
 		if (lastCanvas) {
 			if (isCancelled()) return;
 			gif.addFrame(lastCanvas, { delay: 1500, copy: true });
 		}
 
-		// ✅ 讓 React 有機會把 12/12 畫上去（哪怕一瞬間）
+		// ??霈?React ???? 12/12 ?思??鳴??芣??祇?嚗?
 		await new Promise(r => requestAnimationFrame(r));
 		await new Promise(r => setTimeout(r, 60));
 
 		if (isCancelled()) return;
 
-		// ✅ 進入「合成 GIF...」階段
+		// ???脣????GIF...??畾?
 		setGifStage("render");
 		await new Promise(r => requestAnimationFrame(r));
 
@@ -6672,7 +7662,7 @@ const exportGif = useCallback(async () => {
 
 		stopToBase(true);
 	  } catch (e) {
-			// ✅ 使用者按終止/取消：不要當錯誤，不要 alert
+			// ??雿輻??中止/取消嚗?閬?航炊嚗?閬?alert
 			  const msg = String(e?.message || e || "");
 			  if (exportTokenRef.current.cancelled || /aborted|abort/i.test(msg)) {
 				console.log("GIF export cancelled:", e);
@@ -6681,10 +7671,10 @@ const exportGif = useCallback(async () => {
 			  }
 
 			  console.error(e);
-			  alert("GIF 輸出失敗，請看 Console: " + (e?.message || e));
+			  alert("GIF 匯出失敗，請查看 Console: " + (e?.message || e));
 			  stopToBase(true);
 	  } finally {
-		// ✅ 只有「這次匯出」還是最新那次，才去收尾 UI
+		// ???芣??活?臬???舀??圈甈∴???嗅偏 UI
 		const stillMine = exportTokenRef.current.id === myId;
 		if (stillMine) {
 		  gifRef.current = null;
@@ -6701,7 +7691,7 @@ const onGifDownloadClick = useCallback(async () => {
 	  const name = gifReady?.name || "replay.gif";
 	  if (!blob && !url) return;
 
-	  // ✅ 只在「手機」才走 share（避免 Windows Chrome 也跳分享面板）
+	  // ???芸??璈?韏?share嚗??Windows Chrome 銋歲?澈?Ｘ嚗?
 	  const isMobile =
 		/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
 		(navigator.maxTouchPoints > 1 && window.matchMedia?.("(pointer: coarse)")?.matches);
@@ -6711,15 +7701,15 @@ const onGifDownloadClick = useCallback(async () => {
 		  const file = new File([blob], name, { type: "image/gif" });
 		  if (navigator.canShare({ files: [file] })) {
 			await navigator.share({ files: [file], title: name });
-			return; // ✅ 手機 share 成功就結束
+			return; // ???? share ??撠梁???
 		  }
 		} catch (e) {
-		  // 使用者取消/分享失敗 → fallback 下載
+		  // 雿輻??瘨??澈憭望? ??fallback 銝?
 		  console.log("share cancelled/failed:", e);
 		}
 	  }
 
-	  // ✅ fallback：直接下載（電腦一定走這條）
+	  // ??fallback嚗?乩?頛??餉銝摰粥??嚗?
 	  const downloadUrl = url || (blob ? URL.createObjectURL(blob) : "");
 	  if (!downloadUrl) return;
 
@@ -6731,9 +7721,13 @@ const onGifDownloadClick = useCallback(async () => {
 	  a.click();
 	  a.remove();
 
-	  // 若是臨時 createObjectURL，回收
+	  // ?交重置 createObjectURL嚗???
 	  if (!url && blob) setTimeout(() => URL.revokeObjectURL(downloadUrl), 10000);
 	}, [gifReady?.url, gifReady?.name]);
+/////////////////
+// 蝚砍??嚗楝敺＊蝷綽?SVG / Segment Label嚗?蝞?
+/////////////////
+// 撠摨扳?頝臬?頧???摨扳?頝臬?嚗? SVG ??replay ?梁??// 撠摨扳?頝臬?頧??頝臬?嚗楝敺?????梁嚗?
 const buildPixelPath = (rcPath, startPx = null) => {
     if (!rcPath || rcPath.length < 2) return null;
     const pts = rcPath.map(p => getCellCenterPx(p.r, p.c));
@@ -6758,11 +7752,11 @@ const replayPathContinuous = (targetPath = path, startPx = null) => {
 	  const start = targetPath[0];
 	  const base = baseBoardRef.current;
 
-	  const startCell = base[start.r][start.c]; // ✅ 手上那顆永遠固定
+	  const startCell = base[start.r][start.c]; // ???????瘞賊??箏?
 	  const startOrbId = orbOf(startCell);
 	  let b = base.map(r => [...r]);
 
-	  // ✅ 初始化：起手在 row0，棋盤先不挖洞；洞會在「第一次踏入 row1~5」才出現
+	  // ??????韏瑟???row0嚗??文?銝?瘣?瘣??具洵銝甈∟???row1~5???箇
 	  let hole = null;
 
 	if (start.r >= PLAY_ROWS_START) {
@@ -6770,7 +7764,7 @@ const replayPathContinuous = (targetPath = path, startPx = null) => {
 	  b[start.r][start.c] = -1;
 	  setHolePos({ ...hole });
 	} else {
-	  // ✅ 起手在 row0：一開始沒洞（你的規則）
+	  // ??韏瑟???row0嚗???瘝?嚗?????
 	  setHolePos(null);
 	}
 
@@ -6801,8 +7795,8 @@ const replayPathContinuous = (targetPath = path, startPx = null) => {
 		dist0: 0,
 
 		b,
-		hole,          // ✅ 洞位置（b 裡面對應 -1）
-		held: startCell,// ✅ 永遠固定
+		hole,          // ??瘣?蝵殷?b 鋆⊿撠? -1嚗?
+		held: startCell,// ??瘞賊??箏?
 
 		lastNode: 0,
 		pts,
@@ -6818,7 +7812,7 @@ const replayPathContinuous = (targetPath = path, startPx = null) => {
 		const elapsed = (now - st.tStart) / 1000;
 		const dist = (st.dist0 || 0) + elapsed * st.pxPerSec;
 
-		// 位置插值
+		// 雿蔭??
 		const clamped = Math.min(dist, st.total);
 		let acc = 0;
 		let i = 0;
@@ -6832,7 +7826,7 @@ const replayPathContinuous = (targetPath = path, startPx = null) => {
 		const y = st.pts[i].y + (st.pts[i + 1].y - st.pts[i].y) * t;
 		setFloating(prev => prev ? { ...prev, x, y, visible: true } : prev);
 
-		// ✅ 走過節點就提交「洞滑動」
+		// ??韏圈?蝭暺停?漱??皛???
 		while (st.lastNode < i) {
   const nextStep = st.lastNode + 1;
   const prevRC = st.targetPath[st.lastNode];
@@ -6857,7 +7851,7 @@ spawnManualGhostWithPt(
   prevRC.r, prevRC.c
 );
 
-  // 踏回 row0：終止（先把 held 放回洞）
+  // 頦? row0嚗?甇ｇ??? held ?曉?瘣?
   if (currRC.r === 0) {
     if (st.hole) {
       const bb = st.b.map(r => [...r]);
@@ -6876,7 +7870,7 @@ spawnManualGhostWithPt(
     return;
   }
 
-  // 第一次踏入 row1~5：在那格挖洞（把那顆「抽走」不顯示，洞開始移動）
+  // 蝚砌?甈∟???row1~5嚗??取消嚗?????韏啜?憿舐內嚗???蝘餃?嚗?
   if (!st.hole) {
     st.hole = { r: currRC.r, c: currRC.c };
     st.b[currRC.r][currRC.c] = -1;
@@ -6891,11 +7885,11 @@ spawnManualGhostWithPt(
   setCurrentStep(nextStep);
 }
 		
-		// 結束：把 held 放到洞，浮珠消失
+		// 蝯?嚗? held ?曉瘣?瘚桃?瘨仃
 		if (dist >= st.total - EPS) {
 			const lastIdx = st.targetPath.length - 1;
 
-	  // 🔥 只補「最後一個 step」
+	  // ? 編輯??敺???step??
 	  if (st.lastNode < lastIdx) {
 		const currRC = st.targetPath[lastIdx];
 
@@ -6915,7 +7909,7 @@ spawnManualGhostWithPt(
 			  const lastRC = st.targetPath[lastIdx];
 
 			  if (lastRC.r === 0) {
-				// ✅ 最後停在 row0，用 row0 該欄珠補洞
+				// ???敺???row0嚗 row0 閰脫???瘣?
 				bb[st.hole.r][st.hole.c] = st.b[0][lastRC.c];
 			  } else {
 				bb[st.hole.r][st.hole.c] = st.held;
@@ -7057,11 +8051,11 @@ const collapseUpcomingOverlapRunsV3 = (
     const P = { x: A.x + nx * h, y: A.y + ny * h };
     const r = { x: ux, y: uy };
 
-    // C2 = line(C->A) ∩ parallel line
+    // C2 = line(C->A) ??parallel line
     const rCA = { x: A.x - C.x, y: A.y - C.y };
     const hitC = lineIntersection(P, r, C, rCA, 1e-9);
 
-    // D2 = line(B->D) ∩ parallel line
+    // D2 = line(B->D) ??parallel line
     const rBD = { x: D.x - B.x, y: D.y - B.y };
     const hitD = lineIntersection(P, r, B, rBD, 1e-9);
 
@@ -7275,6 +8269,7 @@ const sampleAlongPolyline = (pts, spacing = 22, startOffset = 10) => {
   }
   return out;
 };
+// 撱箇??? path 摮葡?絲蝯?璅?鞈???// ?Ｙ??? SVG path 摮葡?絲蝯?璅???
 const buildPathStringAndMarkersRounded = (pts, radius = 8) => {
   if (!pts || pts.length < 2) return { d: "", start: null, tip: null };
 
@@ -7350,6 +8345,7 @@ const buildSegmentsFromRcPath = (rcPathRaw) => {
   segs.push({ start, end: rcPath.length - 1 });
   return segs;
 };
+// 靘楝敺挾?賜???1,2,3... 璅惜雿蔭嚗?票朣楝敺???????// 求解瘥挾頝臬??摮?蝐支?蝵株?閫漲??
 const buildSegmentLabelsFromRcPath = (
   rcPathRaw,
   getCellCenterPx,
@@ -7440,11 +8436,11 @@ const ensureImageLoaded = (imgEl) =>
 const featureFromImageData = (imgData) => {
 	  const { data, width, height } = imgData;
 
-	  // bins: H(12) + S(6) + V(6) + edge(6) = 30 維
+	  // bins: H(12) + S(6) + V(6) + edge(6) = 30 蝬?
 	  const H_BINS = 12, S_BINS = 6, V_BINS = 6, E_BINS = 6;
 	  const feat = new Float32Array(H_BINS + S_BINS + V_BINS + E_BINS);
 
-	  // 先做灰階方便算 edge
+	  // ???圈??嫣噶蝞?edge
 	  const gray = new Float32Array(width * height);
 
 	  let idx = 0;
@@ -7456,7 +8452,7 @@ const featureFromImageData = (imgData) => {
 		  const b = data[i + 2] / 255;
 		  const a = data[i + 3] / 255;
 
-		  // 透明像素略過（模板圖可能有透明背景）
+		  // ?????仿?嚗芋?踹??航???嚗?
 		  if (a < 0.15) {
 			gray[idx] = 0;
 			continue;
@@ -7487,20 +8483,20 @@ const featureFromImageData = (imgData) => {
 		  feat[H_BINS + sb] += 1;
 		  feat[H_BINS + S_BINS + vb] += 1;
 
-		  // 灰階 (感知亮度)
+		  // ?圈? (?鈭桀漲)
 		  gray[idx] = (0.2126 * r + 0.7152 * g + 0.0722 * b);
 		}
 	  }
 
-	  // edge histogram (簡單 Sobel-ish，用差分近似)
-	  // 用來區分圖案結構，提升準度
+	  // edge histogram (蝪∪ Sobel-ish嚗撌桀?餈撮)
+	  // ?其????獢?瑽???皞漲
 	  let eCount = 0;
 	  for (let y = 1; y < height - 1; y++) {
 		for (let x = 1; x < width - 1; x++) {
 		  const p = y * width + x;
 		  const gx = (gray[p + 1] - gray[p - 1]);
 		  const gy = (gray[p + width] - gray[p - width]);
-		  const mag = Math.min(1, Math.hypot(gx, gy) * 2.2); // 放大一點
+		  const mag = Math.min(1, Math.hypot(gx, gy) * 2.2); // ?曉之銝暺?
 		  const eb = Math.min(E_BINS - 1, Math.floor(mag * E_BINS));
 		  feat[H_BINS + S_BINS + V_BINS + eb] += 1;
 		  eCount++;
@@ -7525,7 +8521,7 @@ const isProbablyEmptyCell = (imgData) => {
 	  let n = 0;
 	  let mean = 0, m2 = 0;
 
-	  // 取樣（每 4px 取一次）
+	  // ?見嚗? 4px ??甈∴?
 	  for (let i = 0; i < data.length; i += 16) {
 		const a = data[i + 3];
 		if (a < 30) continue;
@@ -7536,27 +8532,27 @@ const isProbablyEmptyCell = (imgData) => {
 		mean += d / n;
 		m2 += d * (y - mean);
 	  }
-	  if (n < 40) return true; // 幾乎全透明/全空
+	  if (n < 40) return true; // 撟曆??券?/?函征
 
 	  const varY = m2 / n;
-	  // 你盤面背景通常偏暗且變化小（黑格/空格）
+	  // 雿?Ｚ??舫虜??銝???嚗???蝛箸嚗?
 	  return (mean < 35 && varY < 120);
 	};
 const buildTemplateDB = async (ORB_TYPES) => {
 	  const types = Object.values(ORB_TYPES);
 
-	  // 確保模板圖都載入
+	  // 蝣箔?璅⊥?頛
 	  await Promise.all(types.map(t => ensureImageLoaded(t.imgEl || null)));
 
-	  const SIZE = 28; // 模板抽樣尺寸（小但夠用）
+	  const SIZE = 28; // 璅⊥?賣見撠箏站嚗?雿??剁?
 	  const cvs = document.createElement("canvas");
 	  cvs.width = SIZE; cvs.height = SIZE;
 	  const ctx = cvs.getContext("2d", { willReadFrequently: true });
 
 	  const db = [];
 	  for (const t of types) {
-		// t.imgEl：你最好在 ORB_TYPES 裡放一個已載入的 Image 物件
-		// 如果你現在 ORB_TYPES 只有 img URL，我下面也提供改法（第 2 節）
+		// t.imgEl嚗??憟賢 ORB_TYPES 鋆⊥銝?歇頛??Image ?拐辣
+		// 憒?雿??ORB_TYPES ?芣? img URL嚗?銝銋?靘瘜?蝚?2 蝭嚗?
 		ctx.clearRect(0, 0, SIZE, SIZE);
 		ctx.drawImage(t.imgEl, 0, 0, SIZE, SIZE);
 		const imgData = ctx.getImageData(0, 0, SIZE, SIZE);
@@ -7569,7 +8565,7 @@ const detectFromCroppedCanvas = (cropCanvas, ORB_TYPES, templateCacheRef, opts =
 	  const rows = opts.rows ?? 5;
 	  const cols = opts.cols ?? 6;
 
-	  // innerPad：避開格線/邊框（很重要，會提升準度）
+	  // innerPad嚗?蝺???嚗???嚗???皞漲嚗?
 	  const innerPad = opts.innerPad ?? 0.12; // 12% padding
 	  const sampleSize = opts.sampleSize ?? 28;
 
@@ -7597,7 +8593,7 @@ const detectFromCroppedCanvas = (cropCanvas, ORB_TYPES, templateCacheRef, opts =
 		  const x0 = c * cellW;
 		  const y0 = r * cellH;
 
-		  // 內縮取樣區，避開邊框/格線
+		  // ?抒葬?見?嚗??獢??潛?
 		  const px = x0 + cellW * innerPad;
 		  const py = y0 + cellH * innerPad;
 		  const pw = cellW * (1 - innerPad * 2);
@@ -7609,7 +8605,7 @@ const detectFromCroppedCanvas = (cropCanvas, ORB_TYPES, templateCacheRef, opts =
 
 		  const imgData = tctx.getImageData(0, 0, sampleSize, sampleSize);
 
-		  // 空格判斷（可選）
+		  // 蝛箸?斗嚗?賂?
 		  if (opts.allowEmpty && isProbablyEmptyCell(imgData)) {
 			out[r][c] = -1;
 			continue;
@@ -7617,7 +8613,7 @@ const detectFromCroppedCanvas = (cropCanvas, ORB_TYPES, templateCacheRef, opts =
 
 		  const feat = featureFromImageData(imgData);
 
-		  // 比對模板（cosine: 因為特徵已 L2 normalize，所以 dot 就是 cosine）
+		  // 瘥?璅⊥嚗osine: ??孵噩撌?L2 normalize嚗?隞?dot 撠望 cosine嚗?
 		  let bestId = cache.db[0].id;
 		  let bestScore = -1;
 
@@ -7629,10 +8625,10 @@ const detectFromCroppedCanvas = (cropCanvas, ORB_TYPES, templateCacheRef, opts =
 			}
 		  }
 
-		  // 可加一道門檻：太不像就當空/未知
+		  // ?臬?銝??瑼鳴?憭芯??停?嗥征/?芰
 		  const minScore = opts.minScore ?? 0.55;
 		  if (opts.allowUnknown && bestScore < minScore) {
-			out[r][c] = -1; // 或你想用 0 / null
+			out[r][c] = -1; // ???喟 0 / null
 		  } else {
 			out[r][c] = bestId;
 		  }
@@ -7642,91 +8638,140 @@ const detectFromCroppedCanvas = (cropCanvas, ORB_TYPES, templateCacheRef, opts =
 	  return out;
 	};
 const SPECIAL_ORB_OPTIONS = [
-  { label: "任意", value: SPECIAL_ORB_ANY },
-  { label: "水", value: ORB_TYPES.WATER.id },
-  { label: "火", value: ORB_TYPES.FIRE.id },
-  { label: "木", value: ORB_TYPES.EARTH.id },
-  { label: "光", value: ORB_TYPES.LIGHT.id },
-  { label: "暗", value: ORB_TYPES.DARK.id },
-  { label: "心", value: ORB_TYPES.HEART.id },
+  { label: "*", value: SPECIAL_ORB_ANY },
+  { label: "W", value: ORB_TYPES.WATER.id },
+  { label: "F", value: ORB_TYPES.FIRE.id },
+  { label: "P", value: ORB_TYPES.EARTH.id },
+  { label: "L", value: ORB_TYPES.LIGHT.id },
+  { label: "D", value: ORB_TYPES.DARK.id },
+  { label: "H", value: ORB_TYPES.HEART.id },
 ];
 const EQUAL_FIRST_OPTIONS = [
-  { label: "水", value: ORB_TYPES.WATER.id },
-  { label: "火", value: ORB_TYPES.FIRE.id },
-  { label: "木", value: ORB_TYPES.EARTH.id },
-  { label: "光", value: ORB_TYPES.LIGHT.id },
-  { label: "暗", value: ORB_TYPES.DARK.id },
-  { label: "心", value: ORB_TYPES.HEART.id },
+  { label: "W", value: ORB_TYPES.WATER.id },
+  { label: "F", value: ORB_TYPES.FIRE.id },
+  { label: "P", value: ORB_TYPES.EARTH.id },
+  { label: "L", value: ORB_TYPES.LIGHT.id },
+  { label: "D", value: ORB_TYPES.DARK.id },
+  { label: "H", value: ORB_TYPES.HEART.id },
 ];
 
-const updateSpecialPriority = (patch) => {
-  setSpecialPriority((prev) => ({
-    ...prev,
-    ...patch,
-  }));
-  setNeedsSolve(true);
-};
 const displayBoard = renderBoard;
+/////////////////
+// 演算法集中區：特優先顯示摘要
+/////////////////
+// 將特優先設定轉成單行摘要，供按鈕與列表顯示。
 const getSpecialPriorityLabel = (sp) => {
-  if (!sp || sp.type === "none") return "無";
+  if (!sp || sp.type === "none") return "未設定";
+
+  const orbNameMap = {
+    [SPECIAL_ORB_ANY]: "*",
+    [ORB_TYPES.WATER.id]: "W",
+    [ORB_TYPES.FIRE.id]: "F",
+    [ORB_TYPES.EARTH.id]: "P",
+    [ORB_TYPES.LIGHT.id]: "L",
+    [ORB_TYPES.DARK.id]: "D",
+    [ORB_TYPES.HEART.id]: "H",
+  };
 
   if (sp.type === "clearCount") {
-    return `首消 ${sp.clearCount || 3} 粒盾`;
+    return `首消總消珠 ${sp.clearCount || 3}`;
   }
 
   if (sp.type === "equalFirst") {
     const selected = normalizeSelectedEqualOrbs(sp.equalOrbs);
-    if (selected.length === 0) return "連擊相等盾";
-    const map = {
-      [ORB_TYPES.WATER.id]: "水",
-      [ORB_TYPES.FIRE.id]: "火",
-      [ORB_TYPES.EARTH.id]: "木",
-      [ORB_TYPES.LIGHT.id]: "光",
-      [ORB_TYPES.DARK.id]: "暗",
-      [ORB_TYPES.HEART.id]: "心",
-    };
-    return `連擊相等盾（${selected.map((x) => map[x]).join(" / ")}）`;
+    if (selected.length === 0) return "等量首消（未選珠）";
+    return `等量首消：${selected.map((x) => orbNameMap[x]).join(" / ")}`;
   }
 
   if (sp.type === "rect") {
-    const orbNameMap = {
-      [SPECIAL_ORB_ANY]: "任意",
-      [ORB_TYPES.WATER.id]: "水",
-      [ORB_TYPES.FIRE.id]: "火",
-      [ORB_TYPES.EARTH.id]: "木",
-      [ORB_TYPES.LIGHT.id]: "光",
-      [ORB_TYPES.DARK.id]: "暗",
-      [ORB_TYPES.HEART.id]: "心",
-    };
-    return `靈罩（${sp.rectM || 3}x${sp.rectN || 3} / ${orbNameMap[sp.rectOrb] ?? "任意"}）`;
+    return `靈罩 ${sp.rectM || 3}x${sp.rectN || 3} / ${
+      orbNameMap[sp.rectOrb] ?? "*"
+    }`;
   }
 
   const shapeName =
-    sp.type === "cross" ? "十字盾" :
-    sp.type === "l" ? "L字盾" :
-    sp.type === "t" ? "T字盾" :
-    "無";
-
-  const orbNameMap = {
-    [SPECIAL_ORB_ANY]: "任意",
-    [ORB_TYPES.WATER.id]: "水",
-    [ORB_TYPES.FIRE.id]: "火",
-    [ORB_TYPES.EARTH.id]: "木",
-    [ORB_TYPES.LIGHT.id]: "光",
-    [ORB_TYPES.DARK.id]: "暗",
-    [ORB_TYPES.HEART.id]: "心",
-  };
-
-  const orbLabel = orbNameMap[sp.orb] ?? "任意";
+    sp.type === "cross"
+      ? "十字"
+      : sp.type === "l"
+      ? "L"
+      : sp.type === "t"
+      ? "T"
+      : "特殊";
+  const orbLabel = orbNameMap[sp.orb] ?? "*";
   const count = sp.count || 1;
 
-  return `${shapeName}（${orbLabel}*${count}）`;
+  return `${shapeName} ${orbLabel} x${count}`;
+};
+
+const renderSpecialPriorityCompact = (sp) => {
+  if (!sp || sp.type === "none") return "未設定";
+
+  if (sp.type === "clearCount") {
+    return <span>首消 {sp.clearCount || 3} 粒盾</span>;
+  }
+
+  if (sp.type === "equalFirst") {
+    const selected = normalizeSelectedEqualOrbs(sp.equalOrbs);
+    if (selected.length === 0) return <span>連擊相等盾（未選珠）</span>;
+    return (
+      <span className="inline-flex items-center gap-1">
+        <span>連擊相等盾</span>
+        {selected.map((orb) => (
+          <span key={`eq-chip-${orb}`} className="inline-flex items-center">
+            {renderOrbIcon(orb, "h-3.5 w-3.5")}
+          </span>
+        ))}
+      </span>
+    );
+  }
+
+  if (sp.type === "rect") {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <span>靈罩 {sp.rectM || 3}x{sp.rectN || 3}</span>
+        <span>/</span>
+        <span className="inline-flex items-center">
+          {Number(sp.rectOrb) === SPECIAL_ORB_ANY ? (
+            <span className="text-[11px] font-black">*</span>
+          ) : (
+            renderOrbIcon(Number(sp.rectOrb), "h-3.5 w-3.5")
+          )}
+        </span>
+      </span>
+    );
+  }
+
+  const shapeName =
+    sp.type === "cross"
+      ? "十字"
+      : sp.type === "l"
+      ? "L 字"
+      : sp.type === "t"
+      ? "T 字"
+      : "特殊";
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span>{shapeName} /</span>
+      <span className="inline-flex items-center">
+        {Number(sp.orb) === SPECIAL_ORB_ANY ? (
+          <span className="text-[11px] font-black">*</span>
+        ) : (
+          renderOrbIcon(Number(sp.orb), "h-3.5 w-3.5")
+        )}
+      </span>
+      <span>/ {sp.count || 1}組</span>
+    </span>
+  );
 };
 
 const specialPriority1 = specialPriorities[0];
 const specialPriority2 = specialPriorities[1];
 const specialPriority3 = specialPriorities[2];
+const ruleProfileView = ruleValidation.normalizedProfile;
+const ruleAddOptions = ruleValidation.addOptions || [];
 
+// 皜脫??孵???憿??怎??閬?蝐歹???
 const renderPriorityHeaderLabel = (title, sp) => {
   const active = sp?.type && sp.type !== "none";
 
@@ -7746,11 +8791,46 @@ const renderPriorityHeaderLabel = (title, sp) => {
             shadow-[0_0_10px_rgba(244,114,182,0.22)]
           "
         >
-          <span className="truncate">{getSpecialPriorityLabel(sp)}</span>
+          <span className="truncate">{renderSpecialPriorityCompact(sp)}</span>
         </span>
       ) : (
-        <span className="text-sm font-bold text-neutral-500">無</span>
+        <span className="text-sm font-bold text-neutral-500">未設定</span>
       )}
+    </div>
+  );
+};
+
+const renderSpecialOrbPicker = (
+  currentValue,
+  onPick,
+  allowAny = true
+) => {
+  const opts = allowAny ? [SPECIAL_ORB_ANY, ...ORB_IDS] : ORB_IDS;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {opts.map((orb) => {
+        const isAny = orb === SPECIAL_ORB_ANY;
+        const active = Number(currentValue) === Number(orb);
+        return (
+          <button
+            key={`special-orb-${orb}`}
+            type="button"
+            onClick={() => onPick(orb)}
+            className={[
+              "h-9 w-9 rounded-lg border transition-all inline-flex items-center justify-center",
+              active
+                ? "bg-pink-600 border-pink-400/30"
+                : "bg-neutral-900 border-neutral-800 hover:bg-neutral-800",
+            ].join(" ")}
+          >
+            {isAny ? (
+              <span className="text-xs font-black text-white">*</span>
+            ) : (
+              renderOrbIcon(orb, "h-5 w-5")
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 };
@@ -7762,17 +8842,17 @@ return (
     <div className="flex items-center gap-3">
       <img src={logoImg} className="w-8 h-8" alt="" />
       <h1 className="text-lg md:text-xl font-black tracking-wide">
-        Tower of Saviors 神魔之塔｜
+        Tower of Saviors 神魔之塔
         {isManual ? (
           <span className="bg-orange-600 text-white px-2 py-0.5 rounded-md mx-1 shadow-sm">
-            手動 Manual
+            手轉 Manual
           </span>
         ) : (
           <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-md mx-1 shadow-sm">
             自動 Auto
           </span>
         )}
-        ｜轉珠模擬器
+        轉珠模擬器
       </h1>
     </div>
 
@@ -7803,7 +8883,7 @@ return (
     </div>
   </div>
 
-  {/* 顏色條 */}
+  {/* 憿璇?*/}
   <div
     className={`h-1 w-full transition-colors duration-300 ${
       isManual ? "bg-orange-500" : "bg-indigo-500"
@@ -7876,7 +8956,7 @@ return (
               : "text-neutral-500 hover:bg-neutral-800"
           }`}
         >
-          疊珠 <CloudLightning size={14} />
+          疊消 <CloudLightning size={14} />
         </button>
       </div>
 
@@ -7901,11 +8981,11 @@ return (
   <Route size={16} className="text-yellow-300" />
 
   <span className="text-sm font-black text-yellow-300">
-    路徑 10 解
+    路徑 Top 10
   </span>
 
   <span className="text-xs text-white/50">
-    {pathsExpanded ? "已展開" : "已收起"}
+    {pathsExpanded ? "展開中" : "已收合"}
   </span>
 </div>
 
@@ -7966,20 +9046,20 @@ return (
         #{idx + 1}
       </span>
       <span className="text-[11px] font-black text-white/65">
-        總粒 {clearedText}
+        消珠 {clearedText}
       </span>
     </div>
 
     <div className="mt-1 text-xs text-white/80">
       {priorityMode === "steps" ? (
-        <>步數 {steps} ・Combo {comboText}</>
+        <>步數 {steps} / Combo {comboText}</>
       ) : (
-        <>Combo {comboText} ・步數 {steps}</>
+        <>Combo {comboText} / 步數 {steps}</>
       )}
     </div>
 
     <div className="mt-1 flex items-center gap-1 text-[11px] font-black flex-wrap">
-      <span className="text-white/70">特優先級</span>
+      <span className="text-white/70">解盾</span>
 
       {specialSlotStatus.map((item, i) => (
         <span
@@ -7994,7 +9074,7 @@ return (
           ].join(" ")}
           title={`${item.label}${item.type !== "none" ? ` / guide: ${item.guide}` : ""}`}
         >
-          {item.type === "none" ? "—" : item.done ? "✓" : "✕"}
+          {item.type === "none" ? "-" : item.done ? "✓" : "✕"}
         </span>
       ))}
     </div>
@@ -8017,12 +9097,12 @@ return (
 
             <div className="mt-1 text-xs text-white/35">
               {priorityMode === "steps"
-                ? "步數 -- ・總 Combo --"
-                : "總 Combo -- ・步數 --"}
+                ? "步數 -- / Combo --"
+                : "Combo -- / 步數 --"}
             </div>
 
             <div className="mt-1 text-[11px] text-white/25">
-              特優先級 --
+              解盾 --
             </div>
           </div>
         ))}
@@ -8038,7 +9118,7 @@ return (
         <div className={`flex flex-row gap-2 mb-4 w-full items-stretch ${isManual ? "mt-3" : ""}`}>
 			<div className="flex-[0.7] min-w-0 bg-neutral-900/50 p-1.5 sm:p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
 			  <span className="text-xs text-neutral-500 font-bold uppercase truncate w-full text-center leading-none">
-				上限
+				理論
 			  </span>
 			  <span className="text-xl font-black text-white/40 w-full text-center leading-none">
 				{stats.theoreticalMax}
@@ -8055,7 +9135,7 @@ return (
     </span>
   </div>
 
-  {/* ✅ 手轉模式隱藏 十字/L字/T字 */}
+  {/* ????璅∪??梯? ??/L摮?T摮?*/}
   {!isManual &&
   specialPriorities.some(
     (sp) =>
@@ -8065,12 +9145,12 @@ return (
   ) && (
     <div className="flex-[1.8] min-w-0 bg-pink-900/20 p-1.5 sm:p-2.5 rounded-xl border border-pink-500/30 ring-1 ring-pink-500/20 flex flex-col items-center justify-center space-y-1">
       
-      {/* 上：固定顯示三種 */}
+      {/* 銝??箏?憿舐內銝車 */}
       <span className="text-xs text-pink-300 font-bold truncate w-full text-center leading-none">
         十 / T / L
       </span>
 
-      {/* 下：三個數量 */}
+      {/* 銝?銝??*/}
       <span className="text-xl font-black text-pink-400 w-full text-center leading-none">
         {(stats.crossCount || 0)} / {(stats.tCount || 0)} / {(stats.lCount || 0)}
       </span>
@@ -8102,7 +9182,7 @@ return (
               onClick={() => setShowBasicSettings(!showBasicSettings)}
               className="flex items-center gap-2 text-[14px] font-bold text-blue-300 pl-2"
             >
-              <Settings size={18} /> {isManual ? "手動設定" : "設定與目標"}
+              <Settings size={18} /> {isManual ? "手轉設定" : "自動設定"}
             </button>
 
             <div className="flex items-center gap-3 pr-2">
@@ -8110,7 +9190,7 @@ return (
                 onClick={resetBasic}
                 className="flex items-center gap-1.5 px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs font-bold transition-all border border-neutral-700 shadow-sm"
               >
-                <RotateCcw size={14} /> 恢復預設
+                <RotateCcw size={14} /> 重設
               </button>
               <span
                 className="text-xs text-neutral-600 uppercase font-bold cursor-pointer"
@@ -8123,14 +9203,14 @@ return (
 
           {showBasicSettings && (
   <div
-    className={`p-4 grid grid-cols-1 gap-6 bg-neutral-900/40 ${
+    className={`p-4 grid grid-cols-1 gap-3 bg-neutral-900/40 ${
       isManual ? "md:grid-cols-2" : "md:grid-cols-3"
     }`}
   >
     {!isManual && (
       <>
         <ParamSlider
-  label="🎯 首消 Combo"
+  label="目標首消 Combo"
   value={initTargetCombo}
   min={0}
   max={stats.theoreticalMax || 1}
@@ -8144,7 +9224,7 @@ return (
 
     {isManual && (
       <ParamSlider
-        label="⏳ 手動轉珠時間 (秒)"
+        label="手轉倒數時間（秒）"
         value={maxTime}
         min={1}
         max={30}
@@ -8161,7 +9241,7 @@ return (
 
     <div>
       <ParamSlider
-        label="⏱️ 播放速度"
+        label="回放速度"
         value={config.replaySpeed / 1000}
         min={0.08}
         max={0.45}
@@ -8174,10 +9254,10 @@ return (
 	{!isManual && (
   <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-3 flex flex-col justify-between">
     
-    {/* 標題 */}
+    {/* 璅? */}
     <div className="flex items-center justify-between mb-2">
       <span className="text-sm font-bold text-neutral-300">
-        性能等級
+        效能等級
       </span>
 
       <span className="text-xs font-black text-yellow-300">
@@ -8187,7 +9267,7 @@ return (
       </span>
     </div>
 
-    {/* 按鈕 */}
+    {/* ?? */}
     <div className="flex gap-2 justify-between">
       {[1, 2, 3, 4, 5].map((lv) => {
         const active = lv === performanceLevel;
@@ -8214,731 +9294,881 @@ return (
 )}
 
     {!isManual && (
+  <div className="md:col-span-3 rounded-2xl border border-neutral-800 bg-neutral-950/50 p-4">
+    <div className="flex items-center justify-between rounded-xl border border-cyan-400/20 bg-neutral-900/70 px-3 py-2">
+      <span className="text-sm font-black text-cyan-300">底層條件（消除規則）</span>
+      <button
+        type="button"
+        onClick={() => setRulePanelExpanded((v) => !v)}
+        className="rounded-xl px-3 py-1.5 text-xs font-black transition-all bg-neutral-800 text-white hover:bg-neutral-700"
+      >
+        {rulePanelExpanded ? "收起" : "展開"}
+      </button>
+    </div>
+
+    {rulePanelExpanded && (
+      <div className="mt-4 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          {ORB_IDS.map((orb) => {
+            const rule = ruleProfileView.orbRules[orb] || normalizeOrbRule(null);
+            const stock = Number(ruleValidation.stockByOrb?.[orb] || 0);
+            const used = Number(ruleValidation.usedByOrb?.[orb] || 0);
+            const remain = Number(ruleValidation.remainingByOrb?.[orb] || 0);
+
+            return (
+              <div
+                key={`orb-rule-${orb}`}
+                className="rounded-xl border border-neutral-800 bg-neutral-900/50 px-3 py-2"
+              >
+                <div className="mb-2 flex items-center justify-between text-xs">
+                  <span className="inline-flex h-5 w-5 items-center justify-center">
+                    {renderOrbIcon(orb, "h-5 w-5")}
+                  </span>
+                  <span className={remain < 0 ? "font-black text-red-400" : "font-bold text-neutral-400"}>
+                    版面 {stock} / 已用 {used} / 剩餘 {remain}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-neutral-400">最低消除</label>
+                  <select
+                    value={rule.minClear}
+                    onChange={(e) =>
+                      updateRuleOrbSetting(orb, {
+                        minClear: Number(e.target.value),
+                      })
+                    }
+                    className="rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm font-black text-cyan-200"
+                  >
+                    {RULE_SIZE_OPTIONS.map((item) => (
+  <option key={`min-clear-${orb}-${item.id}`} value={item.id}>
+    {item.text}消
+  </option>
+))}
+                  </select>
+
+                  <select
+                    value={rule.clearMode}
+                    onChange={(e) =>
+                      updateRuleOrbSetting(orb, {
+                        clearMode: e.target.value,
+                      })
+                    }
+                    className="rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm font-black text-cyan-200"
+                  >
+                    {RULE_CLEAR_MODES.map((opt) => (
+                      <option key={`mode-${orb}-${opt.value}`} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-3">
+          <div className="mb-2 text-sm font-black text-cyan-300">需求組合（可複數）</div>
+
+          {ruleProfileView.requirements.length === 0 ? (
+            <div className="h-5 text-xs font-bold text-neutral-500">❌尚未設定需求。</div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+  {ruleProfileView.requirements.map((req, idx) => {
+    const maxCount = Math.max(
+      1,
+      getRequirementMaxCountAtIndex(ruleProfileView, ruleValidation.stockByOrb, idx)
+    );
+
+    return (
+      <div
+        key={`req-${idx}`}
+        className="relative flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-950/60 px-2 py-2 min-w-0"
+      >
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm font-black text-cyan-200">
+          {renderOrbIcon(req.orb, "h-4 w-4")}
+          <span>消 {req.size}</span>
+        </span>
+
+        {/* --- 縮減寬度後的 Select --- */}
+        <select
+          value={req.count}
+          onChange={(e) =>
+            updateRuleRequirementAt(idx, { count: Number(e.target.value) })
+          }
+          // w-fit: 根據內容縮放
+          // min-w-[3.5rem]: 確保至少有一個適當的點擊寬度，不會縮得太死
+          // pr-6: 預留右側箭頭空間
+          className="w-fit min-w-[2.5rem] cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900 py-1 pl-2 pr-6 text-right text-sm font-black text-cyan-200 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2322d3ee%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E')] bg-[length:1rem_1rem] bg-[right_0.25rem_center] bg-no-repeat"
+        >
+          {Array.from({ length: maxCount }, (_, i) => i + 1).map((num) => (
+            <option key={num} value={num} className="bg-neutral-900 text-cyan-200">
+              {num}
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="button"
+          onClick={() => removeRuleRequirement(idx)}
+          className={`
+            absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full 
+            md:static md:h-auto md:w-auto md:rounded-lg md:px-2 md:py-1 shrink-0
+            border border-red-400/20 bg-red-500/10 text-xs font-black text-red-300 hover:bg-red-500/20 shadow-lg md:shadow-none
+          `}
+        >
+          <span className="md:hidden">✕</span>
+          <span className="hidden md:inline">刪除</span>
+        </button>
+      </div>
+    );
+  })}
+</div>
+          )}
+<hr className="border-cyan-400/20 my-2" />
+          <div className="mt-3">
+            <div className="mb-2 text-xs font-bold text-neutral-400">
+              快速新增（直到沒有可用選項）
+            </div>
+            <div className="grid grid-cols-7 gap-2">
+              {ruleAddOptions.length === 0 ? (
+                <span className="col-span-7 text-xs font-bold text-neutral-500">❌無可新增選項。</span>
+              ) : (
+                ruleAddOptions.map((opt) => (
+                  <button
+                    key={`add-opt-${opt.key}`}
+                    type="button"
+                    onClick={() => addRuleRequirement(opt.orb, opt.size)}
+                    className="inline-flex items-center justify-center gap-1 rounded-lg border border-cyan-400/20 bg-cyan-500/10 px-2 py-1 text-xs font-black text-cyan-200 hover:bg-cyan-500/20"
+                  >
+                    {renderOrbIcon(opt.orb, "h-4 w-4")}
+                    <span>消 {opt.size}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+)}
+
+    {!isManual && (
   <div className="md:col-span-3">
-    {/* 第一優先 */}
+    {/* 外層總解盾 */}
     <div className="rounded-2xl border border-neutral-800 bg-neutral-950/50 p-4">
       <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-black text-pink-400 flex items-center gap-2">
-            {specialPriorityExpanded[0] ? (
-              "第一優先"
-            ) : (
-              <>
-                {renderPriorityHeaderLabel("第一優先：", specialPriority1)}
-              </>
-            )}
+        <button
+          type="button"
+          onClick={() =>
+            setSpecialPriorityGroupExpanded((v) => !v)
+          }
+          className="flex items-center gap-2 text-left"
+        >
+          <span className="text-sm font-black text-pink-400">
+            解盾（最多可選三個）
           </span>
-        </div>
+        </button>
 
-
-        <div className="flex items-center gap-2">
-  <button
-    type="button"
-    onClick={() => updateSpecialPriorityAt(0, { type: "none" })}
-    className="rounded-xl px-3 py-1.5 text-xs font-black transition-all bg-neutral-800 text-white hover:bg-neutral-700"
-  >
-    清空
-  </button>
-
-  <button
-    type="button"
-    onClick={() => toggleSpecialPriorityExpanded(0)}
-    className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
-      specialPriorityExpanded[0]
-        ? "bg-pink-400 text-black hover:bg-pink-300"
-        : "bg-neutral-800 text-white hover:bg-neutral-700"
-    }`}
-  >
-    {specialPriorityExpanded[0] ? "收起" : "展開"}
-  </button>
-</div>
+        <button
+          type="button"
+          onClick={() =>
+            setSpecialPriorityGroupExpanded((v) => !v)
+          }
+          className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+            specialPriorityGroupExpanded
+              ? "bg-pink-400 text-black hover:bg-pink-300"
+              : "bg-neutral-800 text-white hover:bg-neutral-700"
+          }`}
+        >
+          {specialPriorityGroupExpanded ? "收起" : "展開"}
+        </button>
       </div>
 
-      {specialPriorityExpanded[0] && (
+      {specialPriorityGroupExpanded && (
         <div className="mt-4">
-          <div className="grid grid-cols-2 md:grid-cols-7 gap-2 mb-4">
-            {[
-  { key: "none", label: "無" },
-  { key: "clearCount", label: "首消 n 粒盾" },
-  { key: "equalFirst", label: "連擊相等盾" },
-  { key: "rect", label: "靈罩" },
-  { key: "cross", label: "十字盾" },
-  { key: "l", label: "L字盾" },
-  { key: "t", label: "T字盾" },
-].map((item) => (
-              <button
-                key={item.key}
-                onClick={() => updateSpecialPriorityAt(0, { type: item.key })}
-                className={[
-                  "px-3 py-2 rounded-xl border text-sm font-black transition-all",
-                  specialPriority1.type === item.key
-                    ? "bg-pink-600 text-white border-pink-400/30"
-                    : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
-                ].join(" ")}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-
-                    {specialPriority1.type === "clearCount" && (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-bold text-neutral-400">首消顆數</span>
-
-                <input
-                  type="number"
-                  min={3}
-                  max={30}
-                  value={specialPriority1.clearCount}
-                  onChange={(e) =>
-                    updateSpecialPriorityAt(0, {
-                      clearCount: e.target.value,
-                    })
-                  }
-                  onBlur={(e) =>
-                    updateSpecialPriorityAt(0, {
-                      clearCount: Math.max(
-                        3,
-                        Math.min(30, Number(e.target.value) || 3)
-                      ),
-                    })
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") e.currentTarget.blur();
-                  }}
-                  className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                />
+          {/* 解盾 #1 */}
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-950/50 p-2">
+            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-pink-400 flex items-center gap-2">
+                  {specialPriorityExpanded[0] ? (
+                    "#1"
+                  ) : (
+                    <>{renderPriorityHeaderLabel("#1", specialPriority1)}</>
+                  )}
+                </span>
               </div>
 
-              <input
-                type="range"
-                min={3}
-                max={30}
-                step={1}
-                value={Math.max(
-                  3,
-                  Math.min(30, Number(specialPriority1.clearCount) || 3)
-                )}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(0, {
-                    clearCount: Number(e.target.value),
-                  })
-                }
-                className="w-full accent-pink-500 cursor-pointer"
-              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => updateSpecialPriorityAt(0, { type: "none" })}
+                  className="rounded-xl px-3 py-1.5 text-xs font-black transition-all bg-neutral-800 text-white hover:bg-neutral-700"
+                >
+                  清除
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => toggleSpecialPriorityExpanded(0)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+                    specialPriorityExpanded[0]
+                      ? "bg-pink-400 text-black hover:bg-pink-300"
+                      : "bg-neutral-800 text-white hover:bg-neutral-700"
+                  }`}
+                >
+                  {specialPriorityExpanded[0] ? "收起" : "展開"}
+                </button>
+              </div>
             </div>
-          )}
 
-          {specialPriority1.type === "equalFirst" && (
-            <div className="flex flex-col gap-3">
-              <span className="text-sm font-bold text-neutral-400">
-                勾選要相等的首消屬性
-              </span>
-
-              <div className="flex flex-wrap gap-2">
-                {EQUAL_FIRST_OPTIONS.map((opt) => {
-                  const active = normalizeSelectedEqualOrbs(
-                    specialPriority1.equalOrbs
-                  ).includes(opt.value);
-
-                  return (
+            {specialPriorityExpanded[0] && (
+              <div className="mt-4">
+                <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
+                  {[
+                    { key: "none", label: "無" },
+                    { key: "clearCount", label: "首消n粒盾" },
+                    { key: "equalFirst", label: "連擊相等盾" },
+                    { key: "rect", label: "靈罩" },
+                    { key: "cross", label: "十字盾" },
+                    { key: "l", label: "L 字盾" },
+                    { key: "t", label: "T 字盾" },
+                  ].map((item) => (
                     <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => toggleEqualOrbAt(0, opt.value)}
+                      key={item.key}
+                      onClick={() => updateSpecialPriorityAt(0, { type: item.key })}
                       className={[
                         "px-3 py-2 rounded-xl border text-sm font-black transition-all",
-                        active
+                        specialPriority1.type === item.key
                           ? "bg-pink-600 text-white border-pink-400/30"
                           : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
                       ].join(" ")}
                     >
-                      {opt.label}
+                      {item.label}
                     </button>
-                  );
-                })}
+                  ))}
+                </div>
+
+                {specialPriority1.type === "clearCount" && (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold text-neutral-400">總粒數</span>
+
+                      <input
+                        type="number"
+                        min={3}
+                        max={30}
+                        value={specialPriority1.clearCount}
+                        onChange={(e) =>
+                          updateSpecialPriorityAt(0, {
+                            clearCount: e.target.value,
+                          })
+                        }
+                        onBlur={(e) =>
+                          updateSpecialPriorityAt(0, {
+                            clearCount: Math.max(
+                              3,
+                              Math.min(30, Number(e.target.value) || 3)
+                            ),
+                          })
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") e.currentTarget.blur();
+                        }}
+                        className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                      />
+                    </div>
+
+                    <input
+                      type="range"
+                      min={3}
+                      max={30}
+                      step={1}
+                      value={Math.max(
+                        3,
+                        Math.min(30, Number(specialPriority1.clearCount) || 3)
+                      )}
+                      onChange={(e) =>
+                        updateSpecialPriorityAt(0, {
+                          clearCount: Number(e.target.value),
+                        })
+                      }
+                      className="w-full accent-pink-500 cursor-pointer"
+                    />
+                  </div>
+                )}
+
+                {specialPriority1.type === "equalFirst" && (
+                  <div className="flex flex-col gap-3">
+                    <span className="text-sm font-bold text-neutral-400">
+                      選擇要比較首消組數的屬性
+                    </span>
+
+                    <div className="flex flex-wrap gap-2">
+                      {EQUAL_FIRST_OPTIONS.map((opt) => {
+                        const active = normalizeSelectedEqualOrbs(
+                          specialPriority1.equalOrbs
+                        ).includes(opt.value);
+
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => toggleEqualOrbAt(0, opt.value)}
+                            className={[
+                              "px-2 py-2 rounded-xl border text-sm font-black transition-all",
+                              active
+                                ? "bg-pink-600 text-white border-pink-400/30"
+                                : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
+                            ].join(" ")}
+                          >
+                            {renderOrbIcon(opt.value, "h-5 w-5")}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <span className="text-xs text-neutral-500">
+                      會比較各選擇屬性的首消組數，全部相等且至少 1 組才算達成。
+                    </span>
+                  </div>
+                )}
+
+                {specialPriority1.type === "rect" && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-bold text-neutral-400">m</span>
+                    <select
+                      value={specialPriority1.rectM}
+                      onChange={(e) =>
+                        updateSpecialPriorityAt(0, { rectM: Number(e.target.value) })
+                      }
+                      className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+                    >
+                      {RECT_M_OPTIONS.map((v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+
+                    <span className="text-sm font-bold text-neutral-400">n</span>
+                    <select
+                      value={specialPriority1.rectN}
+                      onChange={(e) =>
+                        updateSpecialPriorityAt(0, { rectN: Number(e.target.value) })
+                      }
+                      className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+                    >
+                      {RECT_N_OPTIONS.map((v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+
+                    <span className="text-sm font-bold text-neutral-400"></span>
+                    {renderSpecialOrbPicker(
+                      specialPriority1.rectOrb,
+                      (orb) => updateSpecialPriorityAt(0, { rectOrb: Number(orb) }),
+                      true
+                    )}
+
+                    <span className="text-xs text-neutral-500">
+                      首消至少形成 1 組 m*n 的完整矩形。
+                    </span>
+                  </div>
+                )}
+
+                {(specialPriority1.type === "cross" ||
+                  specialPriority1.type === "l" ||
+                  specialPriority1.type === "t") && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-bold text-neutral-400">數量</span>
+
+                    <select
+                      value={specialPriority1.count}
+                      onChange={(e) =>
+                        updateSpecialPriorityAt(0, { count: Number(e.target.value) })
+                      }
+                      className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+                    >
+                      <option value={1}>1</option>
+                      <option value={2}>2</option>
+                      <option value={3}>3</option>
+                    </select>
+
+                    <span className="text-sm font-bold text-neutral-400"></span>
+                    {renderSpecialOrbPicker(
+                      specialPriority1.orb,
+                      (orb) => updateSpecialPriorityAt(0, { orb: Number(orb) }),
+                      true
+                    )}
+
+                    <span className="text-xs text-neutral-500">
+                      至少達成 1 組指定形狀。
+                    </span>
+                  </div>
+                )}
               </div>
-
-              <span className="text-xs text-neutral-500">
-                被勾選的屬性，首消 combo 數必須完全相等，且至少各 1 組
-              </span>
-            </div>
-          )}
-
-          {specialPriority1.type === "rect" && (
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-bold text-neutral-400">m</span>
-              <select
-                value={specialPriority1.rectM}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(0, { rectM: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                {RECT_M_OPTIONS.map((v) => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </select>
-
-              <span className="text-sm font-bold text-neutral-400">n</span>
-              <select
-                value={specialPriority1.rectN}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(0, { rectN: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                {RECT_N_OPTIONS.map((v) => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </select>
-
-              <span className="text-sm font-bold text-neutral-400">屬性</span>
-              <select
-                value={specialPriority1.rectOrb}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(0, { rectOrb: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                {SPECIAL_ORB_OPTIONS.map((opt) => (
-                  <option key={opt.label} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-
-              <span className="text-xs text-neutral-500">
-                首消至少 1 個純 m*n 矩形，不可多接其他同組消除
-              </span>
-            </div>
-          )}
-
-          {(specialPriority1.type === "cross" ||
-            specialPriority1.type === "l" ||
-            specialPriority1.type === "t") && (
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-bold text-neutral-400">數量</span>
-
-              <select
-                value={specialPriority1.count}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(0, { count: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                <option value={1}>1</option>
-                <option value={2}>2</option>
-                <option value={3}>3</option>
-              </select>
-
-              <span className="text-sm font-bold text-neutral-400">屬性</span>
-
-              <select
-                value={specialPriority1.orb}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(0, { orb: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                {SPECIAL_ORB_OPTIONS.map((opt) => (
-                  <option key={opt.label} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-
-              <span className="text-xs text-neutral-500">
-                只算首消，不計疊珠
-              </span>
-            </div>
-          )}
-		  </div>
-      )}
-    </div>
-
-    {/* 第二優先 */}
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/50 p-4">
-      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-black text-pink-300 flex items-center gap-2">
-            {specialPriorityExpanded[1] ? (
-              "第二優先"
-            ) : (
-              <>
-                {renderPriorityHeaderLabel("第二優先：", specialPriority2)}
-              </>
             )}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-  <button
-    type="button"
-    onClick={() => updateSpecialPriorityAt(1, { type: "none" })}
-    className="rounded-xl px-3 py-1.5 text-xs font-black transition-all bg-neutral-800 text-white hover:bg-neutral-700"
-  >
-    清空
-  </button>
-
-  <button
-    type="button"
-    onClick={() => toggleSpecialPriorityExpanded(1)}
-    className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
-      specialPriorityExpanded[1]
-        ? "bg-pink-400 text-black hover:bg-pink-300"
-        : "bg-neutral-800 text-white hover:bg-neutral-700"
-    }`}
-  >
-    {specialPriorityExpanded[1] ? "收起" : "展開"}
-  </button>
-</div>
-      </div>
-
-      {specialPriorityExpanded[1] && (
-        <div className="mt-4">
-          <div className="grid grid-cols-2 md:grid-cols-7 gap-2 mb-4">
-            {[
-  { key: "none", label: "無" },
-  { key: "clearCount", label: "首消 n 粒盾" },
-  { key: "equalFirst", label: "連擊相等盾" },
-  { key: "rect", label: "靈罩" },
-  { key: "cross", label: "十字盾" },
-  { key: "l", label: "L字盾" },
-  { key: "t", label: "T字盾" },
-].map((item) => (
-              <button
-                key={item.key}
-                onClick={() => updateSpecialPriorityAt(1, { type: item.key })}
-                className={[
-                  "px-3 py-2 rounded-xl border text-sm font-black transition-all",
-                  specialPriority2.type === item.key
-                    ? "bg-pink-600 text-white border-pink-400/30"
-                    : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
-                ].join(" ")}
-              >
-                {item.label}
-              </button>
-            ))}
           </div>
 
-                    {specialPriority2.type === "clearCount" && (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-bold text-neutral-400">首消顆數</span>
-
-                <input
-                  type="number"
-                  min={3}
-                  max={30}
-                  value={specialPriority2.clearCount}
-                  onChange={(e) =>
-                    updateSpecialPriorityAt(1, {
-                      clearCount: e.target.value,
-                    })
-                  }
-                  onBlur={(e) =>
-                    updateSpecialPriorityAt(1, {
-                      clearCount: Math.max(
-                        3,
-                        Math.min(30, Number(e.target.value) || 3)
-                      ),
-                    })
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") e.currentTarget.blur();
-                  }}
-                  className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                />
+          {/* 解盾 #2 */}
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-950/50 p-2">
+            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-pink-400 flex items-center gap-2">
+                  {specialPriorityExpanded[1] ? (
+                    "#2"
+                  ) : (
+                    <>{renderPriorityHeaderLabel("#2", specialPriority2)}</>
+                  )}
+                </span>
               </div>
 
-              <input
-                type="range"
-                min={3}
-                max={30}
-                step={1}
-                value={Math.max(
-                  3,
-                  Math.min(30, Number(specialPriority2.clearCount) || 3)
-                )}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(1, {
-                    clearCount: Number(e.target.value),
-                  })
-                }
-                className="w-full accent-pink-500 cursor-pointer"
-              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => updateSpecialPriorityAt(1, { type: "none" })}
+                  className="rounded-xl px-3 py-1.5 text-xs font-black transition-all bg-neutral-800 text-white hover:bg-neutral-700"
+                >
+                  清除
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => toggleSpecialPriorityExpanded(1)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+                    specialPriorityExpanded[1]
+                      ? "bg-pink-400 text-black hover:bg-pink-300"
+                      : "bg-neutral-800 text-white hover:bg-neutral-700"
+                  }`}
+                >
+                  {specialPriorityExpanded[1] ? "收起" : "展開"}
+                </button>
+              </div>
             </div>
-          )}
 
-          {specialPriority2.type === "equalFirst" && (
-            <div className="flex flex-col gap-3">
-              <span className="text-sm font-bold text-neutral-400">
-                勾選要相等的首消屬性
-              </span>
-
-              <div className="flex flex-wrap gap-2">
-                {EQUAL_FIRST_OPTIONS.map((opt) => {
-                  const active = normalizeSelectedEqualOrbs(
-                    specialPriority2.equalOrbs
-                  ).includes(opt.value);
-
-                  return (
+            {specialPriorityExpanded[1] && (
+              <div className="mt-4">
+                <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
+                  {[
+                    { key: "none", label: "無" },
+                    { key: "clearCount", label: "首消n粒盾" },
+                    { key: "equalFirst", label: "連擊相等盾" },
+                    { key: "rect", label: "靈罩" },
+                    { key: "cross", label: "十字盾" },
+                    { key: "l", label: "L 字盾" },
+                    { key: "t", label: "T 字盾" },
+                  ].map((item) => (
                     <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => toggleEqualOrbAt(1, opt.value)}
+                      key={item.key}
+                      onClick={() => updateSpecialPriorityAt(1, { type: item.key })}
                       className={[
                         "px-3 py-2 rounded-xl border text-sm font-black transition-all",
-                        active
+                        specialPriority2.type === item.key
                           ? "bg-pink-600 text-white border-pink-400/30"
                           : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
                       ].join(" ")}
                     >
-                      {opt.label}
+                      {item.label}
                     </button>
-                  );
-                })}
+                  ))}
+                </div>
+
+                {specialPriority2.type === "clearCount" && (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold text-neutral-400">總粒數</span>
+
+                      <input
+                        type="number"
+                        min={3}
+                        max={30}
+                        value={specialPriority2.clearCount}
+                        onChange={(e) =>
+                          updateSpecialPriorityAt(1, {
+                            clearCount: e.target.value,
+                          })
+                        }
+                        onBlur={(e) =>
+                          updateSpecialPriorityAt(1, {
+                            clearCount: Math.max(
+                              3,
+                              Math.min(30, Number(e.target.value) || 3)
+                            ),
+                          })
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") e.currentTarget.blur();
+                        }}
+                        className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                      />
+                    </div>
+
+                    <input
+                      type="range"
+                      min={3}
+                      max={30}
+                      step={1}
+                      value={Math.max(
+                        3,
+                        Math.min(30, Number(specialPriority2.clearCount) || 3)
+                      )}
+                      onChange={(e) =>
+                        updateSpecialPriorityAt(1, {
+                          clearCount: Number(e.target.value),
+                        })
+                      }
+                      className="w-full accent-pink-500 cursor-pointer"
+                    />
+                  </div>
+                )}
+
+                {specialPriority2.type === "equalFirst" && (
+                  <div className="flex flex-col gap-3">
+                    <span className="text-sm font-bold text-neutral-400">
+                      選擇要比較首消組數的屬性
+                    </span>
+
+                    <div className="flex flex-wrap gap-2">
+                      {EQUAL_FIRST_OPTIONS.map((opt) => {
+                        const active = normalizeSelectedEqualOrbs(
+                          specialPriority2.equalOrbs
+                        ).includes(opt.value);
+
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => toggleEqualOrbAt(1, opt.value)}
+                            className={[
+                              "px-2 py-2 rounded-xl border text-sm font-black transition-all",
+                              active
+                                ? "bg-pink-600 text-white border-pink-400/30"
+                                : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
+                            ].join(" ")}
+                          >
+                            {renderOrbIcon(opt.value, "h-5 w-5")}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <span className="text-xs text-neutral-500">
+                      會比較各選擇屬性的首消組數，全部相等且至少 1 組才算達成。
+                    </span>
+                  </div>
+                )}
+
+                {specialPriority2.type === "rect" && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-bold text-neutral-400">m</span>
+                    <select
+                      value={specialPriority2.rectM}
+                      onChange={(e) =>
+                        updateSpecialPriorityAt(1, { rectM: Number(e.target.value) })
+                      }
+                      className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+                    >
+                      {RECT_M_OPTIONS.map((v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+
+                    <span className="text-sm font-bold text-neutral-400">n</span>
+                    <select
+                      value={specialPriority2.rectN}
+                      onChange={(e) =>
+                        updateSpecialPriorityAt(1, { rectN: Number(e.target.value) })
+                      }
+                      className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+                    >
+                      {RECT_N_OPTIONS.map((v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+
+                    <span className="text-sm font-bold text-neutral-400"></span>
+                    {renderSpecialOrbPicker(
+                      specialPriority2.rectOrb,
+                      (orb) => updateSpecialPriorityAt(1, { rectOrb: Number(orb) }),
+                      true
+                    )}
+
+                    <span className="text-xs text-neutral-500">
+                      首消至少形成 1 組 m*n 的完整矩形。
+                    </span>
+                  </div>
+                )}
+
+                {(specialPriority2.type === "cross" ||
+                  specialPriority2.type === "l" ||
+                  specialPriority2.type === "t") && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-bold text-neutral-400">數量</span>
+
+                    <select
+                      value={specialPriority2.count}
+                      onChange={(e) =>
+                        updateSpecialPriorityAt(1, { count: Number(e.target.value) })
+                      }
+                      className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+                    >
+                      <option value={1}>1</option>
+                      <option value={2}>2</option>
+                      <option value={3}>3</option>
+                    </select>
+
+                    <span className="text-sm font-bold text-neutral-400"></span>
+                    {renderSpecialOrbPicker(
+                      specialPriority2.orb,
+                      (orb) => updateSpecialPriorityAt(1, { orb: Number(orb) }),
+                      true
+                    )}
+
+                    <span className="text-xs text-neutral-500">
+                      至少達成 1 組指定形狀。
+                    </span>
+                  </div>
+                )}
               </div>
-
-              <span className="text-xs text-neutral-500">
-                被勾選的屬性，首消 combo 數必須完全相等，且至少各 1 組
-              </span>
-            </div>
-          )}
-
-          {specialPriority2.type === "rect" && (
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-bold text-neutral-400">m</span>
-              <select
-                value={specialPriority2.rectM}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(1, { rectM: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                {RECT_M_OPTIONS.map((v) => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </select>
-
-              <span className="text-sm font-bold text-neutral-400">n</span>
-              <select
-                value={specialPriority2.rectN}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(1, { rectN: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                {RECT_N_OPTIONS.map((v) => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </select>
-
-              <span className="text-sm font-bold text-neutral-400">屬性</span>
-              <select
-                value={specialPriority2.rectOrb}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(1, { rectOrb: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                {SPECIAL_ORB_OPTIONS.map((opt) => (
-                  <option key={opt.label} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-
-              <span className="text-xs text-neutral-500">
-                首消至少 1 個純 m*n 矩形，不可多接其他同組消除
-              </span>
-            </div>
-          )}
-
-          {(specialPriority2.type === "cross" ||
-            specialPriority2.type === "l" ||
-            specialPriority2.type === "t") && (
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-bold text-neutral-400">數量</span>
-
-              <select
-                value={specialPriority2.count}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(1, { count: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                <option value={1}>1</option>
-                <option value={2}>2</option>
-                <option value={3}>3</option>
-              </select>
-
-              <span className="text-sm font-bold text-neutral-400">屬性</span>
-
-              <select
-                value={specialPriority2.orb}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(1, { orb: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                {SPECIAL_ORB_OPTIONS.map((opt) => (
-                  <option key={opt.label} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-
-              <span className="text-xs text-neutral-500">
-                只算首消，不計疊珠
-              </span>
-            </div>
-          )}
-		</div>
-      )}
-    </div>
-
-    {/* 第三優先 */}
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/50 p-4">
-      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-black text-pink-300 flex items-center gap-2">
-            {specialPriorityExpanded[2] ? (
-              "第三優先"
-            ) : (
-              <>
-                {renderPriorityHeaderLabel("第三優先：", specialPriority3)}
-              </>
             )}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-  <button
-    type="button"
-    onClick={() => updateSpecialPriorityAt(2, { type: "none" })}
-    className="rounded-xl px-3 py-1.5 text-xs font-black transition-all bg-neutral-800 text-white hover:bg-neutral-700"
-  >
-    清空
-  </button>
-
-  <button
-    type="button"
-    onClick={() => toggleSpecialPriorityExpanded(2)}
-    className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
-      specialPriorityExpanded[2]
-        ? "bg-pink-400 text-black hover:bg-pink-300"
-        : "bg-neutral-800 text-white hover:bg-neutral-700"
-    }`}
-  >
-    {specialPriorityExpanded[2] ? "收起" : "展開"}
-  </button>
-</div>
-      </div>
-
-      {specialPriorityExpanded[2] && (
-        <div className="mt-4">
-          <div className="grid grid-cols-2 md:grid-cols-7 gap-2 mb-4">
-            {[
-  { key: "none", label: "無" },
-  { key: "clearCount", label: "首消 n 粒盾" },
-  { key: "equalFirst", label: "連擊相等盾" },
-  { key: "rect", label: "靈罩" },
-  { key: "cross", label: "十字盾" },
-  { key: "l", label: "L字盾" },
-  { key: "t", label: "T字盾" },
-].map((item) => (
-              <button
-                key={item.key}
-                onClick={() => updateSpecialPriorityAt(2, { type: item.key })}
-                className={[
-                  "px-3 py-2 rounded-xl border text-sm font-black transition-all",
-                  specialPriority3.type === item.key
-                    ? "bg-pink-600 text-white border-pink-400/30"
-                    : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
-                ].join(" ")}
-              >
-                {item.label}
-              </button>
-            ))}
           </div>
 
-                    {specialPriority3.type === "clearCount" && (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-bold text-neutral-400">首消顆數</span>
-
-                <input
-                  type="number"
-                  min={3}
-                  max={30}
-                  value={specialPriority3.clearCount}
-                  onChange={(e) =>
-                    updateSpecialPriorityAt(2, {
-                      clearCount: e.target.value,
-                    })
-                  }
-                  onBlur={(e) =>
-                    updateSpecialPriorityAt(2, {
-                      clearCount: Math.max(
-                        3,
-                        Math.min(30, Number(e.target.value) || 3)
-                      ),
-                    })
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") e.currentTarget.blur();
-                  }}
-                  className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                />
+          {/* 解盾 #3 */}
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-950/50 p-2">
+            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-pink-400 flex items-center gap-2">
+                  {specialPriorityExpanded[2] ? (
+                    "#3"
+                  ) : (
+                    <>{renderPriorityHeaderLabel("#3", specialPriority3)}</>
+                  )}
+                </span>
               </div>
 
-              <input
-                type="range"
-                min={3}
-                max={30}
-                step={1}
-                value={Math.max(
-                  3,
-                  Math.min(30, Number(specialPriority3.clearCount) || 3)
-                )}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(2, {
-                    clearCount: Number(e.target.value),
-                  })
-                }
-                className="w-full accent-pink-500 cursor-pointer"
-              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => updateSpecialPriorityAt(2, { type: "none" })}
+                  className="rounded-xl px-3 py-1.5 text-xs font-black transition-all bg-neutral-800 text-white hover:bg-neutral-700"
+                >
+                  清除
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => toggleSpecialPriorityExpanded(2)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+                    specialPriorityExpanded[2]
+                      ? "bg-pink-400 text-black hover:bg-pink-300"
+                      : "bg-neutral-800 text-white hover:bg-neutral-700"
+                  }`}
+                >
+                  {specialPriorityExpanded[2] ? "收起" : "展開"}
+                </button>
+              </div>
             </div>
-          )}
 
-          {specialPriority3.type === "equalFirst" && (
-            <div className="flex flex-col gap-3">
-              <span className="text-sm font-bold text-neutral-400">
-                勾選要相等的首消屬性
-              </span>
-
-              <div className="flex flex-wrap gap-2">
-                {EQUAL_FIRST_OPTIONS.map((opt) => {
-                  const active = normalizeSelectedEqualOrbs(
-                    specialPriority3.equalOrbs
-                  ).includes(opt.value);
-
-                  return (
+            {specialPriorityExpanded[2] && (
+              <div className="mt-4">
+                <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
+                  {[
+                    { key: "none", label: "無" },
+                    { key: "clearCount", label: "首消n粒盾" },
+                    { key: "equalFirst", label: "連擊相等盾" },
+                    { key: "rect", label: "靈罩" },
+                    { key: "cross", label: "十字盾" },
+                    { key: "l", label: "L 字盾" },
+                    { key: "t", label: "T 字盾" },
+                  ].map((item) => (
                     <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => toggleEqualOrbAt(2, opt.value)}
+                      key={item.key}
+                      onClick={() => updateSpecialPriorityAt(2, { type: item.key })}
                       className={[
                         "px-3 py-2 rounded-xl border text-sm font-black transition-all",
-                        active
+                        specialPriority3.type === item.key
                           ? "bg-pink-600 text-white border-pink-400/30"
                           : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
                       ].join(" ")}
                     >
-                      {opt.label}
+                      {item.label}
                     </button>
-                  );
-                })}
+                  ))}
+                </div>
+
+                {specialPriority3.type === "clearCount" && (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold text-neutral-400">總粒數</span>
+
+                      <input
+                        type="number"
+                        min={3}
+                        max={30}
+                        value={specialPriority3.clearCount}
+                        onChange={(e) =>
+                          updateSpecialPriorityAt(2, {
+                            clearCount: e.target.value,
+                          })
+                        }
+                        onBlur={(e) =>
+                          updateSpecialPriorityAt(2, {
+                            clearCount: Math.max(
+                              3,
+                              Math.min(30, Number(e.target.value) || 3)
+                            ),
+                          })
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") e.currentTarget.blur();
+                        }}
+                        className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                      />
+                    </div>
+
+                    <input
+                      type="range"
+                      min={3}
+                      max={30}
+                      step={1}
+                      value={Math.max(
+                        3,
+                        Math.min(30, Number(specialPriority3.clearCount) || 3)
+                      )}
+                      onChange={(e) =>
+                        updateSpecialPriorityAt(2, {
+                          clearCount: Number(e.target.value),
+                        })
+                      }
+                      className="w-full accent-pink-500 cursor-pointer"
+                    />
+                  </div>
+                )}
+
+                {specialPriority3.type === "equalFirst" && (
+                  <div className="flex flex-col gap-3">
+                    <span className="text-sm font-bold text-neutral-400">
+                      選擇要比較首消組數的屬性
+                    </span>
+
+                    <div className="flex flex-wrap gap-2">
+                      {EQUAL_FIRST_OPTIONS.map((opt) => {
+                        const active = normalizeSelectedEqualOrbs(
+                          specialPriority3.equalOrbs
+                        ).includes(opt.value);
+
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => toggleEqualOrbAt(2, opt.value)}
+                            className={[
+                              "px-2 py-2 rounded-xl border text-sm font-black transition-all",
+                              active
+                                ? "bg-pink-600 text-white border-pink-400/30"
+                                : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800",
+                            ].join(" ")}
+                          >
+                            {renderOrbIcon(opt.value, "h-5 w-5")}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <span className="text-xs text-neutral-500">
+                      會比較各選擇屬性的首消組數，全部相等且至少 1 組才算達成。
+                    </span>
+                  </div>
+                )}
+
+                {specialPriority3.type === "rect" && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-bold text-neutral-400">m</span>
+                    <select
+                      value={specialPriority3.rectM}
+                      onChange={(e) =>
+                        updateSpecialPriorityAt(2, { rectM: Number(e.target.value) })
+                      }
+                      className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+                    >
+                      {RECT_M_OPTIONS.map((v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+
+                    <span className="text-sm font-bold text-neutral-400">n</span>
+                    <select
+                      value={specialPriority3.rectN}
+                      onChange={(e) =>
+                        updateSpecialPriorityAt(2, { rectN: Number(e.target.value) })
+                      }
+                      className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+                    >
+                      {RECT_N_OPTIONS.map((v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+
+                    <span className="text-sm font-bold text-neutral-400"></span>
+                    {renderSpecialOrbPicker(
+                      specialPriority3.rectOrb,
+                      (orb) => updateSpecialPriorityAt(2, { rectOrb: Number(orb) }),
+                      true
+                    )}
+
+                    <span className="text-xs text-neutral-500">
+                      首消至少形成 1 組 m*n 的完整矩形。
+                    </span>
+                  </div>
+                )}
+
+                {(specialPriority3.type === "cross" ||
+                  specialPriority3.type === "l" ||
+                  specialPriority3.type === "t") && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-bold text-neutral-400">數量</span>
+
+                    <select
+                      value={specialPriority3.count}
+                      onChange={(e) =>
+                        updateSpecialPriorityAt(2, { count: Number(e.target.value) })
+                      }
+                      className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
+                    >
+                      <option value={1}>1</option>
+                      <option value={2}>2</option>
+                      <option value={3}>3</option>
+                    </select>
+
+                    <span className="text-sm font-bold text-neutral-400"></span>
+                    {renderSpecialOrbPicker(
+                      specialPriority3.orb,
+                      (orb) => updateSpecialPriorityAt(2, { orb: Number(orb) }),
+                      true
+                    )}
+
+                    <span className="text-xs text-neutral-500">
+                      至少達成 1 組指定形狀。
+                    </span>
+                  </div>
+                )}
               </div>
-
-              <span className="text-xs text-neutral-500">
-                被勾選的屬性，首消 combo 數必須完全相等，且至少各 1 組
-              </span>
-            </div>
-          )}
-
-          {specialPriority3.type === "rect" && (
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-bold text-neutral-400">m</span>
-              <select
-                value={specialPriority3.rectM}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(2, { rectM: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                {RECT_M_OPTIONS.map((v) => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </select>
-
-              <span className="text-sm font-bold text-neutral-400">n</span>
-              <select
-                value={specialPriority3.rectN}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(2, { rectN: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                {RECT_N_OPTIONS.map((v) => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </select>
-
-              <span className="text-sm font-bold text-neutral-400">屬性</span>
-              <select
-                value={specialPriority3.rectOrb}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(2, { rectOrb: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                {SPECIAL_ORB_OPTIONS.map((opt) => (
-                  <option key={opt.label} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-
-              <span className="text-xs text-neutral-500">
-                首消至少 1 個純 m*n 矩形，不可多接其他同組消除
-              </span>
-            </div>
-          )}
-
-          {(specialPriority3.type === "cross" ||
-            specialPriority3.type === "l" ||
-            specialPriority3.type === "t") && (
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-bold text-neutral-400">數量</span>
-
-              <select
-                value={specialPriority3.count}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(2, { count: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                <option value={1}>1</option>
-                <option value={2}>2</option>
-                <option value={3}>3</option>
-              </select>
-
-              <span className="text-sm font-bold text-neutral-400">屬性</span>
-
-              <select
-                value={specialPriority3.orb}
-                onChange={(e) =>
-                  updateSpecialPriorityAt(2, { orb: Number(e.target.value) })
-                }
-                className="px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-pink-300 font-black"
-              >
-                {SPECIAL_ORB_OPTIONS.map((opt) => (
-                  <option key={opt.label} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-
-              <span className="text-xs text-neutral-500">
-                只算首消，不計疊珠
-              </span>
-            </div>
-          )}
-		</div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   </div>
@@ -9028,7 +10258,7 @@ return (
           </span>
 
           <span className="text-xs text-white/50">
-            {autoRow0Expanded ? "已展開" : "已收起"}
+            {autoRow0Expanded ? "展開中" : "已收合"}
           </span>
         </div>
       </div>
@@ -9455,12 +10685,12 @@ const visualImg = Object.values(ORB_TYPES).find(
             top: g.y,
             transform: "translate(-50%, -50%)",
             opacity: g.alpha,
-            width: stableCellSize,     // ✅ 改這裡
-            height: stableCellSize,    // ✅ 改這裡
+            width: stableCellSize,     // ???寥ㄐ
+            height: stableCellSize,    // ???寥ㄐ
             willChange: "transform",
           }}
         >
-          {/* ❌ 建議先拿掉，避免視覺膨脹 */}
+          {/* ??撱箄降????踹?閬死?刻 */}
           {/* <div className="absolute inset-0 rounded-full blur-md bg-white/25" /> */}
 
           <img
@@ -9578,11 +10808,11 @@ const visualImg = Object.values(ORB_TYPES).find(
             className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-fuchsia-500 shadow-[0_0_16px_rgba(56,189,248,0.45)] transition-[width] duration-500 ease-out"
             style={{ width: `${percent}%` }}
           >
-            {/* 掃光 */}
+            {/* ?? */}
             <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent_0%,rgba(255,255,255,0.2)_35%,transparent_70%)] opacity-70" />
           </div>
 
-          {/* 微內框 */}
+          {/* 敺桀獢?*/}
           <div className="absolute inset-0 rounded-full ring-1 ring-inset ring-cyan-300/10" />
         </div>
       </>
@@ -9658,7 +10888,7 @@ const visualImg = Object.values(ORB_TYPES).find(
           disabled={solving || isReplaying || exportingGif}
           className="w-full min-w-0 flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-20 px-2 py-3 rounded-2xl font-black transition-all text-sm border border-neutral-700 shadow-md active:scale-95"
         >
-          <Edit3 size={17} /> 自訂
+          <Edit3 size={17} /> 編輯
         </button>
       ),
     },
@@ -9669,20 +10899,32 @@ const visualImg = Object.values(ORB_TYPES).find(
             node: (
               <button
                 onClick={solve}
-                disabled={solving || isReplaying || showEditor || exportingGif}
+                disabled={
+                  solving ||
+                  isReplaying ||
+                  showEditor ||
+                  exportingGif ||
+                  !ruleValidation.ok
+                }
                 className={[
                   "w-full min-w-0 flex items-center justify-center gap-1.5 px-2 py-3 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95",
-                  solving || isReplaying || showEditor || exportingGif
+                  solving || isReplaying || showEditor || exportingGif || !ruleValidation.ok
                     ? "opacity-20"
                     : "",
                   needsSolve
                     ? "bg-emerald-600 hover:bg-emerald-500 border-emerald-400/30 shadow-emerald-900/30 text-white"
                     : "bg-neutral-800 hover:bg-neutral-700 border-neutral-700 text-neutral-200",
                 ].join(" ")}
-                title={needsSolve ? "參數已變更，尚未重新計算" : "目前結果已是最新"}
+                title={
+                  !ruleValidation.ok
+                    ? "請先修正底層條件的衝突設定"
+                    : needsSolve
+                    ? "盤面已變更，請重新求解"
+                    : "盤面未變更"
+                }
               >
                 <Lightbulb size={17} />
-                計算
+                求解
               </button>
             ),
           },
@@ -9744,10 +10986,10 @@ const visualImg = Object.values(ORB_TYPES).find(
                   "w-full min-w-0 flex items-center justify-center gap-1.5 px-2 py-3 rounded-2xl font-black transition-all text-sm border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 active:scale-95 shadow-md",
                   exportingGif ? "opacity-20 pointer-events-none" : "",
                 ].join(" ")}
-                title="Stop / 回到原盤"
+                title="Stop / 取消"
               >
                 <Square size={17} fill="currentColor" />
-                中止
+                停止
               </button>
             ),
           },
@@ -9795,14 +11037,14 @@ const visualImg = Object.values(ORB_TYPES).find(
                   : "",
                 "bg-fuchsia-600 hover:bg-fuchsia-500 border-fuchsia-400/30 shadow-fuchsia-900/30 text-white",
               ].join(" ")}
-              title="將轉珠播放輸出為 GIF"
+              title="匯出目前回放為 GIF"
             >
               <Database size={20} />
               {exportingGif
                 ? gifStage === "render"
-                  ? "合成GIF..."
-                  : `擷取中... ${gifProgress.pct || 0}%`
-                : "輸出 GIF"}
+                  ? "產生 GIF..."
+                  : `擷取中.. ${gifProgress.pct || 0}%`
+                : "匯出 GIF"}
             </button>
 
             {exportingGif && (
@@ -9811,7 +11053,7 @@ const visualImg = Object.values(ORB_TYPES).find(
                 className="flex items-center gap-2 px-6 py-4 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95 bg-red-600 hover:bg-red-500 border-red-400/30 shadow-red-900/30 text-white"
               >
                 <Square size={20} />
-                終止
+                中止
               </button>
             )}
           </div>
@@ -9819,7 +11061,7 @@ const visualImg = Object.values(ORB_TYPES).find(
           {exportingGif && (
             <div className="w-full max-w-xl">
               <div className="flex justify-between text-xs font-bold text-neutral-400 mb-1">
-                <span>擷取幀數</span>
+                <span>選擇圖片</span>
                 <span className="text-fuchsia-300">
                   {gifProgress.cur}/{gifProgress.total}
                 </span>
@@ -9833,7 +11075,7 @@ const visualImg = Object.values(ORB_TYPES).find(
               </div>
 
               <div className="mt-1 text-[11px] text-neutral-500 text-center">
-                產生中請勿切換頁面（會吃 CPU 是正常的）
+                匯出期間請保持頁面開啟，GIF 轉檔較吃 CPU。
               </div>
             </div>
           )}
@@ -10020,7 +11262,7 @@ onTouchMove={(e) => {
   </p>
 
   <p className="mt-2 text-sm md:text-base font-black underline underline-offset-4 text-neutral-200">
-    {STATE_DESC[selectedMark] ?? "選擇狀態"}
+    {STATE_DESC[selectedMark] ?? "未知狀態"}
   </p>
 </div>
 
@@ -10033,7 +11275,7 @@ onTouchMove={(e) => {
                               ? "ring-4 ring-indigo-500 scale-110 shadow-lg shadow-indigo-500/20"
                               : "opacity-70 hover:opacity-100"
                           }`}
-                        title="刷符石（不附加狀態）"
+                        title="一般珠子"
                       >
                         <span className="font-black text-neutral-300">ORB</span>
                       </button>
@@ -10047,7 +11289,7 @@ onTouchMove={(e) => {
                                 ? "ring-4 ring-red-500 scale-110 shadow-lg shadow-red-500/20"
                                 : "opacity-70 hover:opacity-100"
                             }`}
-                          title="附加 X1（路徑不可碰）"
+                          title="設定 X1（不可移動）"
                         >
                           <img
                             src={x1Img}
@@ -10066,7 +11308,7 @@ onTouchMove={(e) => {
                               ? "ring-4 ring-yellow-400 scale-110 shadow-lg shadow-yellow-400/20"
                               : "opacity-70 hover:opacity-100"
                           }`}
-                        title="附加 X2（路徑不可碰，但最後一格可）"
+                        title="設定 X2（可被穿越）"
                       >
                         <img
                           src={x2Img}
@@ -10086,7 +11328,7 @@ onTouchMove={(e) => {
                                   ? "ring-4 ring-cyan-400 scale-110 shadow-lg"
                                   : "opacity-70"
                               }`}
-                            title="附加 Start"
+                            title="設定 Start"
                           >
                             <span className="font-black text-cyan-300 text-lg">
                               START
@@ -10101,7 +11343,7 @@ onTouchMove={(e) => {
                                   ? "ring-4 ring-fuchsia-400 scale-110 shadow-lg"
                                   : "opacity-70"
                               }`}
-                            title="附加 End"
+                            title="設定 End"
                           >
                             <span className="font-black text-fuchsia-300 text-lg">
                               END
@@ -10118,7 +11360,7 @@ onTouchMove={(e) => {
         ? "ring-4 ring-emerald-400 scale-110 shadow-lg shadow-emerald-500/20"
         : "opacity-70 hover:opacity-100"
     }`}
-  title="附加 N1（首批與疊珠都不能消）"
+  title="設定 N1（首消與天降不可消）"
 >
   <img
     src={n1Img}
@@ -10137,7 +11379,7 @@ onTouchMove={(e) => {
           ? "ring-4 ring-lime-400 scale-110 shadow-lg shadow-lime-500/20"
           : "opacity-70 hover:opacity-100"
       }`}
-    title="附加 N2（首批不可參與消除；但疊珠可消）"
+    title="設定 N2（首消禁消，天降可消）"
   >
     <img
       src={n2Img}
@@ -10172,16 +11414,16 @@ onTouchMove={(e) => {
                         : "hover:brightness-110",
                       "bg-fuchsia-600 border-fuchsia-400/30 shadow-xl shadow-fuchsia-900/20",
                     ].join(" ")}
-                    title="匯入截圖並自動辨識盤面"
+                    title="從圖片辨識盤面"
                   >
-                    匯入版面
+                    圖片辨識
                   </button>
 				  
 				  <button
 					  onClick={() => setShowTemplateBrowser(true)}
 					  className="w-full py-5 rounded-2xl font-black bg-purple-600 hover:bg-purple-500 shadow-xl shadow-purple-900/20 transition-all flex items-center justify-center gap-2 text-base"
 					>
-					  固版查詢
+					  固版搜尋
 					</button>
 
                   <button
@@ -10210,7 +11452,7 @@ onTouchMove={(e) => {
 }}
   className="w-full py-5 rounded-2xl font-black bg-indigo-600 hover:bg-indigo-500 shadow-xl shadow-indigo-900/20 transition-all flex items-center justify-center gap-2 text-base"
 >
-  <Check size={22} /> 完成
+  <Check size={22} /> 套用
 </button>
                 </div>
               </div>
@@ -10222,12 +11464,12 @@ onTouchMove={(e) => {
           <Wrench size={18} className="text-indigo-500 shrink-0 mt-1" />
           <div>
             <strong className="text-indigo-400 block mb-1 text-base">
-              功能介紹：
+              使用說明
             </strong>
             <strong className="block text-xs">
-              自動轉珠模擬器，全自動搜尋最優路徑。自訂盤面模擬、疊珠與斜轉判定、
-              完整顯示 Combo 數、總消除符石數與移動步數。
-              可設定目標 Combo、步數上限與回放速度。
+              自動模式會依設定搜尋路徑，並在限制內盡量最佳化。
+              結果會顯示首消/天降 Combo 與步數，便於比較。
+              可切換 Combo 優先或步數優先。
             </strong>
 
             <a
@@ -10236,7 +11478,7 @@ onTouchMove={(e) => {
               rel="noopener noreferrer"
               className="inline-block mt-3 text-indigo-400 neon-link font-semibold tracking-wide text-base"
             >
-              → 前往巴哈介紹文
+              前往巴哈討論
             </a>
           </div>
         </div>
@@ -10261,7 +11503,7 @@ onTouchMove={(e) => {
         setImportBusy(true);
         try {
           if (!cropCanvas) {
-            alert("cropCanvas 是空的（Modal 沒有傳出來）");
+            alert("裁切資料不存在，請重新開啟裁切視窗。");
             return;
           }
 
@@ -10300,12 +11542,12 @@ onTouchMove={(e) => {
           setShowEditor(true);
           setShowImportCrop(false);
         } catch (err) {
-          console.error("偵測流程炸掉：", err);
+          console.error("匯入失敗", err);
           console.error("err.message:", err?.message);
           console.error("err.stack:", err?.stack);
           console.log("cropCanvas:", cropCanvas);
           console.log("cropCanvas size:", cropCanvas?.width, cropCanvas?.height);
-          alert("偵測失敗（看 console 錯誤）");
+          alert("匯入失敗，請查看 console。");
         } finally {
           setImportBusy(false);
         }
@@ -10337,10 +11579,10 @@ onTouchMove={(e) => {
       });
 
       setShowTemplateBrowser(false);
-      console.log("已套用固版:", template.characterName, board2D);
+      console.log("套用模板", template.characterName, board2D);
     } catch (err) {
-      console.error("套用固版失敗:", err);
-      alert(`套用固版失敗: ${err.message}`);
+      console.error("套用模板失敗:", err);
+      alert(`套用模板失敗: ${err.message}`);
     }
   }}
 />
@@ -10424,7 +11666,7 @@ const commitClearCountText = () => {
       <div className="flex justify-between items-center text-[14px] font-bold text-neutral-400 gap-2">
         <span>{label}</span>
 
-        {/* ✅ 只保留可輸入 input，拿掉原本不可輸入 label */}
+        {/* ???芯??頛詨 input嚗???砌??航撓??label */}
         <input
           value={text}
           inputMode={inputMode}
@@ -10461,3 +11703,5 @@ const commitClearCountText = () => {
 };
 
 export default App;
+
+
