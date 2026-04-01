@@ -9296,7 +9296,7 @@ return (
     {!isManual && (
   <div className="md:col-span-3 rounded-2xl border border-neutral-800 bg-neutral-950/50 p-4">
     <div className="flex items-center justify-between rounded-xl border border-cyan-400/20 bg-neutral-900/70 px-3 py-2">
-      <span className="text-sm font-black text-cyan-300">底層條件（消除規則）</span>
+      <span className="text-sm font-black text-cyan-300">符石需求（消除規則）</span>
       <button
         type="button"
         onClick={() => setRulePanelExpanded((v) => !v)}
@@ -9467,7 +9467,7 @@ return (
           className="flex items-center gap-2 text-left"
         >
           <span className="text-sm font-black text-pink-400">
-            解盾（最多可選三個）
+            解盾需求（可選三個）
           </span>
         </button>
 
