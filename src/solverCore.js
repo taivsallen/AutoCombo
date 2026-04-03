@@ -44,13 +44,6 @@ const holeStepInPlace = (b, hole, toRC) => {
   return toRC; // new hole
 };
 
-const boardWithHeldFilled = (b, hole, held) => {
-  if (!hole) return b;
-  const next = clone2D(b);
-  next[hole.r][hole.c] = held;
-  return next;
-};
-
 const getBoardKey = (b) => {
   // 兩個 32-bit hash 合成 BigInt 字串 key（低碰撞、Map key 短）
   let h1 = 2166136261 >>> 0; // FNV-ish
@@ -77,8 +70,7 @@ const getBoardKey = (b) => {
     h2 = Math.imul(h2, 2246822507) >>> 0;
   }
 
-  const key = (BigInt(h1) << 32n) ^ BigInt(h2);
-  return key.toString();
+  return `${h1.toString(16)}-${h2.toString(16)}`;
 };
 
 const orbOf = (v) => (v < 0 ? -1 : v % 10);                    // 0~5
@@ -482,8 +474,19 @@ const beamSolve = (
     parentExtraCtx = null,
   }) => {
     const steps = stepsOf(node);
-    const evalBoard = boardWithHeldFilled(nextBoard, hole, held);
-    const res = evalState(evalBoard, node, steps, scoreBias, parentExtraCtx);
+    let restoreHoleVal = null;
+    if (hole) {
+      restoreHoleVal = nextBoard[hole.r][hole.c];
+      nextBoard[hole.r][hole.c] = held;
+    }
+
+    let res = null;
+    try {
+      res = evalState(nextBoard, node, steps, scoreBias, parentExtraCtx);
+    } finally {
+      if (hole) nextBoard[hole.r][hole.c] = restoreHoleVal;
+    }
+
     if (!res) return;
 
     const {
@@ -804,16 +807,25 @@ const beamSolve = (
           const chk = stepConstraint(destVal);
           if (!chk.ok) continue;
 
-          const evalBoard = clone2D(state.board);
-          if (state.hole) evalBoard[state.hole.r][state.hole.c] = destVal;
+          let restoreHoleVal = null;
+          if (state.hole) {
+            restoreHoleVal = state.board[state.hole.r][state.hole.c];
+            state.board[state.hole.r][state.hole.c] = destVal;
+          }
 
-          const res = evalState(
-            evalBoard,
-            newNode,
-            stepsOf(newNode),
-            0,
-            state.extraCtx
-          );
+          let res = null;
+          try {
+            res = evalState(
+              state.board,
+              newNode,
+              stepsOf(newNode),
+              0,
+              state.extraCtx
+            );
+          } finally {
+            if (state.hole) state.board[state.hole.r][state.hole.c] = restoreHoleVal;
+          }
+
           if (!res) continue;
 
           pushTopCandidate(

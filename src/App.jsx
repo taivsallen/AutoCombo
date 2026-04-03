@@ -2228,12 +2228,6 @@ const clone2D = (b) => {
   for (let i = 0; i < len; i++) copy[i] = b[i].slice();
   return copy;
 };
-const boardWithHeldFilled = (b, hole, held) => {
-  if (!hole) return b;
-  const next = clone2D(b);
-  next[hole.r][hole.c] = held;
-  return next;
-};
 const holeStepInPlace = (b, hole, toRC) => {
   const moved = b[toRC.r][toRC.c];
   b[hole.r][hole.c] = moved;
@@ -3741,8 +3735,7 @@ const getBoardKey = (b) => {
     h2 = Math.imul(h2, 2246822507) >>> 0;
   }
 
-  const key = (BigInt(h1) << 32n) ^ BigInt(h2);
-  return key.toString();
+  return `${h1.toString(16)}-${h2.toString(16)}`;
 };
 const calcScore = (
   ev,
@@ -4223,8 +4216,37 @@ const beamSolve = async (
     return beamSchedule[tier];
   };
 
-  const getNodeDirectionSignature = (node, maxEdges = 6) => {
+  const NODE_DIR_SIG_MAX_EDGES = 6;
+
+  const appendNodeDirectionSignature = (
+    parentSig,
+    parentDepth,
+    edgeSig,
+    maxEdges = NODE_DIR_SIG_MAX_EDGES
+  ) => {
+    if (!parentSig || parentSig === "none" || parentDepth <= 0) {
+      return { sig: edgeSig, depth: 1 };
+    }
+
+    if (parentDepth < maxEdges) {
+      return {
+        sig: `${parentSig}|${edgeSig}`,
+        depth: parentDepth + 1,
+      };
+    }
+
+    const cut = parentSig.indexOf("|");
+    const trimmed = cut >= 0 ? parentSig.slice(cut + 1) : "";
+    return {
+      sig: trimmed ? `${trimmed}|${edgeSig}` : edgeSig,
+      depth: maxEdges,
+    };
+  };
+
+  const getNodeDirectionSignature = (node, maxEdges = NODE_DIR_SIG_MAX_EDGES) => {
     if (!node) return "none";
+    if (typeof node.dirSig === "string") return node.dirSig;
+
     const parts = [];
     let cur = node;
     let cnt = 0;
@@ -4377,12 +4399,34 @@ const beamSolve = async (
         stepMaxTier: 8,
       };
 
-  const makeNode = (parent, r, c) => ({
-    parent,
-    r,
-    c,
-    len: parent ? parent.len + 1 : 1,
-  });
+  const makeNode = (parent, r, c) => {
+    if (!parent) {
+      return {
+        parent: null,
+        r,
+        c,
+        len: 1,
+        dirSig: "none",
+        dirDepth: 0,
+      };
+    }
+
+    const edgeSig = `${r - parent.r},${c - parent.c}`;
+    const nextDir = appendNodeDirectionSignature(
+      parent.dirSig,
+      parent.dirDepth || 0,
+      edgeSig
+    );
+
+    return {
+      parent,
+      r,
+      c,
+      len: parent.len + 1,
+      dirSig: nextDir.sig,
+      dirDepth: nextDir.depth,
+    };
+  };
 
   const buildPath = (node) => {
     const out = [];
@@ -5332,8 +5376,19 @@ const beamSolve = async (
     familySig = null,
   }) => {
     const steps = stepsOf(node);
-    const evalBoard = boardWithHeldFilled(nextBoard, hole, held);
-    const res = evalState(evalBoard, node, steps, scoreBias, parentExtraCtx);
+    let restoreHoleVal = null;
+    if (hole) {
+      restoreHoleVal = nextBoard[hole.r][hole.c];
+      nextBoard[hole.r][hole.c] = held;
+    }
+
+    let res = null;
+    try {
+      res = evalState(nextBoard, node, steps, scoreBias, parentExtraCtx);
+    } finally {
+      if (hole) nextBoard[hole.r][hole.c] = restoreHoleVal;
+    }
+
     if (!res) return;
 
     const {
@@ -5947,6 +6002,25 @@ const beamSolve = async (
     return out.slice(0, BW);
   };
 
+  const materializePendingPushMove = (mv) => {
+    const nextBoard = clone2D(mv.sourceBoard);
+
+    if (mv.kind === "enterFromRow0") {
+      const { r, c } = mv.to;
+      nextBoard[r][c] = -1;
+      return {
+        nextBoard,
+        nextHole: { r, c },
+      };
+    }
+
+    const nextHole = holeStepInPlace(nextBoard, mv.sourceHole, mv.to);
+    return {
+      nextBoard,
+      nextHole,
+    };
+  };
+
   for (let step = 0; step < cfg.maxSteps; step++) {
     let candidates = [];
     const pendingPushMoves = [];
@@ -6008,14 +6082,13 @@ const beamSolve = async (
           if (!chk.ok) continue;
 
           const nextLocked = chk.locked || isAtQ2(nr, nc);
-          const nextBoard = clone2D(state.board);
-          nextBoard[nr][nc] = -1;
-          const nextHole = { r: nr, c: nc };
 
           pendingPushMoves.push({
-            nextBoard,
+            kind: "enterFromRow0",
+            sourceBoard: state.board,
+            sourceHole: null,
+            to: { r: nr, c: nc },
             held: state.held,
-            hole: nextHole,
             r: nr,
             c: nc,
             node: newNode,
@@ -6036,11 +6109,10 @@ const beamSolve = async (
           const chk = stepConstraint(destVal);
           if (!chk.ok) continue;
 
-          const evalBoard = clone2D(state.board);
-          if (state.hole) evalBoard[state.hole.r][state.hole.c] = destVal;
-
           pendingTerminalMoves.push({
-            evalBoard,
+            sourceBoard: state.board,
+            hole: state.hole,
+            fillVal: destVal,
             node: newNode,
             parentExtraCtx: state.extraCtx,
             cheapScore:
@@ -6067,13 +6139,13 @@ const beamSolve = async (
         if (!chk.ok) continue;
 
         const nextLocked = chk.locked || isAtQ2(nr, nc);
-        const nextBoard = clone2D(state.board);
-        const nextHole = holeStepInPlace(nextBoard, state.hole, { r: nr, c: nc });
 
         pendingPushMoves.push({
-          nextBoard,
+          kind: "dragInPlay",
+          sourceBoard: state.board,
+          sourceHole: state.hole,
+          to: { r: nr, c: nc },
           held: state.held,
-          hole: nextHole,
           r: nr,
           c: nc,
           node: newNode,
@@ -6092,13 +6164,25 @@ const beamSolve = async (
     if (!pendingPushMoves.length && !pendingTerminalMoves.length) break;
 
     for (const mv of pendingTerminalMoves) {
-      const res = evalState(
-        mv.evalBoard,
-        mv.node,
-        stepsOf(mv.node),
-        0,
-        mv.parentExtraCtx
-      );
+      let restoreHoleVal = null;
+      if (mv.hole) {
+        restoreHoleVal = mv.sourceBoard[mv.hole.r][mv.hole.c];
+        mv.sourceBoard[mv.hole.r][mv.hole.c] = mv.fillVal;
+      }
+
+      let res = null;
+      try {
+        res = evalState(
+          mv.sourceBoard,
+          mv.node,
+          stepsOf(mv.node),
+          0,
+          mv.parentExtraCtx
+        );
+      } finally {
+        if (mv.hole) mv.sourceBoard[mv.hole.r][mv.hole.c] = restoreHoleVal;
+      }
+
       if (!res) continue;
 
       pushTopCandidate(
@@ -6132,10 +6216,11 @@ const beamSolve = async (
         : pickCheapTopMoves(pendingPushMoves, evalBudget, 2);
 
     for (const mv of selectedPushMoves) {
+      const { nextBoard, nextHole } = materializePendingPushMove(mv);
       tryPushState({
-        nextBoard: mv.nextBoard,
+        nextBoard,
         held: mv.held,
-        hole: mv.hole,
+        hole: nextHole,
         r: mv.r,
         c: mv.c,
         node: mv.node,
