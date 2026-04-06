@@ -1,0 +1,99 @@
+{
+  "timestamp": "2026-04-04T00:45:42.665Z",
+  "options": {
+    "a": "benchmark.js",
+    "b": "temp_tuner.mjs",
+    "suite": "fixed_test_suite.json",
+    "boards": 10,
+    "target": 8,
+    "mode": "horizontal",
+    "priority": "combo",
+    "skyfall": true,
+    "diagonal": true,
+    "autoRow0Expanded": false,
+    "initTargetCombo": 6,
+    "warmup": 2,
+    "config": {
+      "beamWidth": 350,
+      "maxSteps": 30,
+      "maxNodes": 50000,
+      "stepPenalty": 0,
+      "potentialWeight": 10,
+      "clearedWeight": 300
+    },
+    "ruleProfile": {
+      "requirements": [
+        {
+          "orb": 0,
+          "size": 3,
+          "count": 1,
+          "match": "atLeast"
+        }
+      ]
+    },
+    "special": [
+      {
+        "type": "cross",
+        "count": 1,
+        "orb": -1
+      }
+    ],
+    "output": "reports/ab_quick_after_strategy.json"
+  },
+  "solverA": "D:\\桌面\\code\\ComboAuto\\benchmark.js",
+  "solverB": "D:\\桌面\\code\\ComboAuto\\temp_tuner.mjs",
+  "resultA": {
+    "name": "A",
+    "cases": 10,
+    "errors": 0,
+    "avgMs": 1726.9053799999995,
+    "p95Ms": 2107.2014,
+    "avgStepsTop1": 17.8,
+    "avgCombosTop1": 7.3,
+    "avgTop1Quality": 7282.2,
+    "avgNodes": 37347.3,
+    "top1HitRate": 0,
+    "top10HitRate": 0,
+    "top1RequirementRate": 0,
+    "top10RequirementRate": 0,
+    "top1SpecialRate": 0,
+    "top10SpecialRate": 0,
+    "top1InitRate": 10,
+    "top10InitRate": 10
+  },
+  "resultB": {
+    "name": "B",
+    "cases": 10,
+    "errors": 0,
+    "avgMs": 1364.6116299999987,
+    "p95Ms": 1611.789499999999,
+    "avgStepsTop1": 17.8,
+    "avgCombosTop1": 7.3,
+    "avgTop1Quality": 7282.2,
+    "avgNodes": 37347.3,
+    "top1HitRate": 0,
+    "top10HitRate": 0,
+    "top1RequirementRate": 0,
+    "top10RequirementRate": 0,
+    "top1SpecialRate": 0,
+    "top10SpecialRate": 0,
+    "top1InitRate": 10,
+    "top10InitRate": 10
+  },
+  "delta": {
+    "top1Hit": 0,
+    "top10Hit": 0,
+    "top1Requirement": 0,
+    "top10Requirement": 0,
+    "top1Special": 0,
+    "top10Special": 0,
+    "top1Init": 0,
+    "top10Init": 0,
+    "avgStepsTop1": 0,
+    "avgCombosTop1": 0,
+    "avgTop1Quality": 0,
+    "avgMs": -362.2937500000007,
+    "p95Ms": -495.41190000000097,
+    "avgNodes": 0
+  }
+}

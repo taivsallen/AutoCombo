@@ -1,0 +1,68 @@
+{
+  "timestamp": "2026-04-04T00:10:27.605Z",
+  "options": {
+    "a": "benchmark.js",
+    "b": "temp_tuner.mjs",
+    "suite": "fixed_test_suite.json",
+    "boards": 5,
+    "target": 8,
+    "mode": "horizontal",
+    "priority": "combo",
+    "skyfall": true,
+    "diagonal": true,
+    "autoRow0Expanded": false,
+    "initTargetCombo": -1,
+    "warmup": 1,
+    "config": {
+      "beamWidth": 350,
+      "maxSteps": 30,
+      "maxNodes": 50000,
+      "stepPenalty": 0,
+      "potentialWeight": 10,
+      "clearedWeight": 300
+    },
+    "special": [],
+    "output": "reports/ab_smoke_5.json"
+  },
+  "solverA": "D:\\桌面\\code\\ComboAuto\\benchmark.js",
+  "solverB": "D:\\桌面\\code\\ComboAuto\\temp_tuner.mjs",
+  "resultA": {
+    "name": "A",
+    "cases": 5,
+    "errors": 0,
+    "avgMs": 2088.02472,
+    "p95Ms": 2343.3763,
+    "avgStepsTop1": 18.8,
+    "avgCombosTop1": 7.4,
+    "avgNodes": 37176.8,
+    "top1HitRate": 40,
+    "top10HitRate": 40,
+    "top1SpecialRate": 100,
+    "top10SpecialRate": 100
+  },
+  "resultB": {
+    "name": "B",
+    "cases": 5,
+    "errors": 0,
+    "avgMs": 1899.8824999999997,
+    "p95Ms": 2239.819299999999,
+    "avgStepsTop1": 18.8,
+    "avgCombosTop1": 7.4,
+    "avgNodes": 37176.8,
+    "top1HitRate": 40,
+    "top10HitRate": 40,
+    "top1SpecialRate": 100,
+    "top10SpecialRate": 100
+  },
+  "delta": {
+    "top1Hit": 0,
+    "top10Hit": 0,
+    "top1Special": 0,
+    "top10Special": 0,
+    "avgStepsTop1": 0,
+    "avgCombosTop1": 0,
+    "avgMs": -188.14222000000018,
+    "p95Ms": -103.5570000000007,
+    "avgNodes": 0
+  }
+}
