@@ -668,19 +668,24 @@ const beamSolve = (
     }
 
     const bucketKeys = Array.from(buckets.keys());
+    const bucketCursor = new Map();
+    for (const k of bucketKeys) bucketCursor.set(k, 0);
     let idx = 0;
 
     while (out.length < beamWidth && bucketKeys.length > 0) {
-      const k = bucketKeys[idx % bucketKeys.length];
+      const pickIdx = idx % bucketKeys.length;
+      const k = bucketKeys[pickIdx];
       const arr = buckets.get(k);
+      const cur = bucketCursor.get(k) || 0;
 
-      if (arr && arr.length) {
-        out.push(arr.shift());
+      if (arr && cur < arr.length) {
+        out.push(arr[cur]);
+        bucketCursor.set(k, cur + 1);
         idx++;
       } else {
         buckets.delete(k);
-        const removeIdx = idx % bucketKeys.length;
-        bucketKeys.splice(removeIdx, 1);
+        bucketCursor.delete(k);
+        bucketKeys.splice(pickIdx, 1);
       }
     }
 

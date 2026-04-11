@@ -3367,6 +3367,31 @@ const hasN2InVanillaInitialPattern = (board) => {
 
   return false;
 };
+const createFindMatchesScratch = (totalCells) => ({
+  totalCells,
+  isH: new Uint8Array(totalCells),
+  isV: new Uint8Array(totalCells),
+  connVisited: new Uint8Array(totalCells),
+  bfsQ: new Int16Array(totalCells),
+  visited: new Uint8Array(totalCells),
+  qR: new Int8Array(totalCells),
+  qC: new Int8Array(totalCells),
+});
+
+const getFindMatchesScratch = (totalCells) => {
+  let scratch = getFindMatchesScratch._cache;
+  if (!scratch || scratch.totalCells !== totalCells) {
+    scratch = createFindMatchesScratch(totalCells);
+    getFindMatchesScratch._cache = scratch;
+  }
+
+  scratch.isH.fill(0);
+  scratch.isV.fill(0);
+  scratch.connVisited.fill(0);
+  scratch.visited.fill(0);
+  return scratch;
+};
+
 const findMatches = (tempBoard, phase = "initial", ruleProfileLike = null) => {
   let combos = 0,
     clearedCount = 0,
@@ -3374,13 +3399,13 @@ const findMatches = (tempBoard, phase = "initial", ruleProfileLike = null) => {
     hC = 0;
 
   const ruleCtx = getRuleRuntimeContext(ruleProfileLike);
-  const normalizedRules = ruleCtx.profile;
   const minClearByOrb = ruleCtx.minClearByOrb;
   const clearModeByOrb = ruleCtx.clearModeByOrb;
 
   const totalCells = TOTAL_ROWS * COLS;
-  const isH = new Uint8Array(totalCells);
-  const isV = new Uint8Array(totalCells);
+  const scratch = getFindMatchesScratch(totalCells);
+  const isH = scratch.isH;
+  const isV = scratch.isV;
   const toClear1D = new Uint8Array(totalCells);
   const patternCounts = makePatternCounts();
   const comboCountsByOrb = makeComboCountsByOrb();
@@ -3438,8 +3463,8 @@ const findMatches = (tempBoard, phase = "initial", ruleProfileLike = null) => {
     }
   }
 
-  const connVisited = new Uint8Array(totalCells);
-  const bfsQ = new Int16Array(totalCells);
+  const connVisited = scratch.connVisited;
+  const bfsQ = scratch.bfsQ;
   const drs = [0, 0, 1, -1];
   const dcs = [1, -1, 0, 0];
 
@@ -3499,9 +3524,9 @@ const findMatches = (tempBoard, phase = "initial", ruleProfileLike = null) => {
     }
   }
 
-  const visited = new Uint8Array(totalCells);
-  const qR = new Int8Array(totalCells);
-  const qC = new Int8Array(totalCells);
+  const visited = scratch.visited;
+  const qR = scratch.qR;
+  const qC = scratch.qC;
 
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
@@ -5407,6 +5432,8 @@ const beamSolve = async (
 
   let evalWorkerScriptURL = null;
   let parallelEvalFailed = false;
+  let evalWorkerPool = [];
+  let evalWorkerNextRequestId = 1;
 
   const buildEvalWorkerScript = () => {
     const fn = (name, value) => `const ${name} = ${value.toString()};`;
@@ -5449,6 +5476,8 @@ ${fn("makeRectCounts", makeRectCounts)}
 ${fn("makePatternCounts", makePatternCounts)}
 ${fn("makeComboCountsByOrb", makeComboCountsByOrb)}
 ${fn("makeComboSizeCountsByOrb", makeComboSizeCountsByOrb)}
+${fn("createFindMatchesScratch", createFindMatchesScratch)}
+${fn("getFindMatchesScratch", getFindMatchesScratch)}
 ${fn("detectExact5Shape", detectExact5Shape)}
 ${fn("findMatches", findMatches)}
 ${fn("hasInitialN2Clear", hasInitialN2Clear)}
@@ -5459,15 +5488,28 @@ ${fn("combinedPotentialScore", combinedPotentialScore)}
 const SHAPE_CANONICAL = Object.fromEntries(
   Object.entries(SHAPE_TEMPLATES).map(([k, cells]) => [k, canonicalShapeKey(cells)])
 );
+const boardFromBuffer = (buf) => {
+  const flat = new Int16Array(buf);
+  const out = new Array(TOTAL_ROWS);
+  for (let r = 0; r < TOTAL_ROWS; r++) {
+    const row = new Array(COLS);
+    const base = r * COLS;
+    for (let c = 0; c < COLS; c++) row[c] = flat[base + c];
+    out[r] = row;
+  }
+  return out;
+};
 self.onmessage = (e) => {
-  const { type, payload } = e.data || {};
+  const { type, payload, requestId } = e.data || {};
   if (type !== "evalBatch") return;
   try {
     const { moves, mode, skyfall, ruleRuntimeCtx } = payload || {};
     const out = new Array(moves.length);
     for (let i = 0; i < moves.length; i++) {
       const mv = moves[i];
-      const evalBoard = boardWithHeldFilled(mv.nextBoard, mv.hole, mv.held);
+      const nextBoard = boardFromBuffer(mv.boardBuffer);
+      const hole = mv.holeR >= 0 && mv.holeC >= 0 ? { r: mv.holeR, c: mv.holeC } : null;
+      const evalBoard = boardWithHeldFilled(nextBoard, hole, mv.held);
       const { initial, violatesN2 } = getInitialMatchCheck(evalBoard, ruleRuntimeCtx);
       const evRaw = evaluateBoard(evalBoard, skyfall, initial, ruleRuntimeCtx);
       const pot = combinedPotentialScore(evalBoard, mode);
@@ -5481,10 +5523,11 @@ self.onmessage = (e) => {
         },
       };
     }
-    self.postMessage({ type: "evalBatchDone", payload: { out } });
+    self.postMessage({ type: "evalBatchDone", requestId, payload: { out } });
   } catch (err) {
     self.postMessage({
       type: "evalBatchError",
+      requestId,
       payload: { message: err?.message || String(err), stack: err?.stack || "" },
     });
   }
@@ -5502,12 +5545,137 @@ self.onmessage = (e) => {
     return evalWorkerScriptURL;
   };
 
+  const terminateEvalWorkerPool = () => {
+    for (const slot of evalWorkerPool) {
+      if (!slot?.worker) continue;
+      try {
+        slot.worker.terminate();
+      } catch (_e) {
+        // noop
+      }
+    }
+    evalWorkerPool = [];
+  };
+
+  const boardToTransferBuffer = (board) => {
+    const flat = new Int16Array(TOTAL_ROWS * COLS);
+    let idx = 0;
+    for (let r = 0; r < TOTAL_ROWS; r++) {
+      const row = board[r];
+      for (let c = 0; c < COLS; c++) flat[idx++] = row[c];
+    }
+    return flat.buffer;
+  };
+
+  const ensureEvalWorkerPool = (workerN) => {
+    if (parallelEvalFailed) return false;
+    if (evalWorkerPool.length === workerN) return true;
+
+    terminateEvalWorkerPool();
+
+    const workerURL = ensureEvalWorkerScriptURL();
+
+    try {
+      for (let i = 0; i < workerN; i++) {
+        const worker = new Worker(workerURL);
+        const slot = {
+          worker,
+          pending: new Map(),
+          broken: false,
+        };
+
+        worker.onmessage = (evt) => {
+          const { type, payload, requestId } = evt.data || {};
+          const p = slot.pending.get(requestId);
+          if (!p) return;
+
+          slot.pending.delete(requestId);
+
+          if (type === "evalBatchDone") {
+            p.resolve(Array.isArray(payload?.out) ? payload.out : []);
+            return;
+          }
+
+          if (type === "evalBatchError") {
+            p.reject(new Error(payload?.message || "evalBatchError"));
+            return;
+          }
+
+          p.reject(new Error(`unexpected worker message: ${type || "unknown"}`));
+        };
+
+        worker.onerror = (err) => {
+          slot.broken = true;
+          parallelEvalFailed = true;
+          for (const [, p] of slot.pending) {
+            p.reject(err?.error || new Error(err?.message || "worker error"));
+          }
+          slot.pending.clear();
+        };
+
+        evalWorkerPool.push(slot);
+      }
+      return true;
+    } catch (_err) {
+      parallelEvalFailed = true;
+      terminateEvalWorkerPool();
+      return false;
+    }
+  };
+
+  const dispatchEvalChunkToWorker = (slot, chunk) =>
+    new Promise((resolve, reject) => {
+      if (!slot || slot.broken) {
+        reject(new Error("worker unavailable"));
+        return;
+      }
+
+      const requestId = evalWorkerNextRequestId++;
+      slot.pending.set(requestId, { resolve, reject });
+
+      const packedMoves = new Array(chunk.length);
+      const transferList = [];
+
+      for (let i = 0; i < chunk.length; i++) {
+        const mv = chunk[i];
+        const boardBuffer = boardToTransferBuffer(mv.nextBoard);
+        transferList.push(boardBuffer);
+        packedMoves[i] = {
+          index: mv.index,
+          boardBuffer,
+          holeR: mv.hole?.r ?? -1,
+          holeC: mv.hole?.c ?? -1,
+          held: mv.held,
+        };
+      }
+
+      try {
+        slot.worker.postMessage(
+          {
+            type: "evalBatch",
+            requestId,
+            payload: {
+              moves: packedMoves,
+              mode,
+              skyfall,
+              ruleRuntimeCtx,
+            },
+          },
+          transferList
+        );
+      } catch (err) {
+        slot.pending.delete(requestId);
+        reject(err);
+      }
+    });
+
   const runParallelPrimitiveEval = async (jobs) => {
     if (!enableParallelEval || parallelEvalFailed) return null;
     if (!Array.isArray(jobs) || jobs.length === 0) return [];
 
     const workerN = Math.max(1, Math.min(evalWorkerCount, jobs.length));
     if (workerN <= 1) return null;
+    if (!ensureEvalWorkerPool(evalWorkerCount)) return null;
 
     const chunks = [];
     const chunkSize = Math.ceil(jobs.length / workerN);
@@ -5515,59 +5683,17 @@ self.onmessage = (e) => {
       chunks.push(jobs.slice(i, i + chunkSize));
     }
 
-    const workerURL = ensureEvalWorkerScriptURL();
-    const workers = [];
-    const collected = [];
-
     try {
-      const promises = chunks.map((chunk) => {
-        return new Promise((resolve, reject) => {
-          const w = new Worker(workerURL);
-          workers.push(w);
-
-          w.onmessage = (evt) => {
-            const { type, payload } = evt.data || {};
-            if (type === "evalBatchDone") {
-              if (Array.isArray(payload?.out)) {
-                collected.push(...payload.out);
-              }
-              resolve();
-              return;
-            }
-            if (type === "evalBatchError") {
-              reject(new Error(payload?.message || "evalBatchError"));
-            }
-          };
-
-          w.onerror = (err) => {
-            reject(err?.error || new Error(err?.message || "worker error"));
-          };
-
-          w.postMessage({
-            type: "evalBatch",
-            payload: {
-              moves: chunk,
-              mode,
-              skyfall,
-              ruleRuntimeCtx,
-            },
-          });
-        });
-      });
-
-      await Promise.all(promises);
-      return collected;
+      const chunkResults = await Promise.all(
+        chunks.map((chunk, i) =>
+          dispatchEvalChunkToWorker(evalWorkerPool[i], chunk)
+        )
+      );
+      return chunkResults.flat();
     } catch (_err) {
       parallelEvalFailed = true;
+      terminateEvalWorkerPool();
       return null;
-    } finally {
-      for (const w of workers) {
-        try {
-          w.terminate();
-        } catch (_e) {
-          // noop
-        }
-      }
     }
   };
 
@@ -5932,19 +6058,24 @@ self.onmessage = (e) => {
 
     const pool = [];
     const bucketKeys = Array.from(buckets.keys());
+    const bucketCursor = new Map();
+    for (const k of bucketKeys) bucketCursor.set(k, 0);
     let idx = 0;
 
     while (bucketKeys.length > 0) {
-      const k = bucketKeys[idx % bucketKeys.length];
+      const pickIdx = idx % bucketKeys.length;
+      const k = bucketKeys[pickIdx];
       const arr = buckets.get(k);
+      const cur = bucketCursor.get(k) || 0;
 
-      if (arr && arr.length) {
-        pool.push(arr.shift());
+      if (arr && cur < arr.length) {
+        pool.push(arr[cur]);
+        bucketCursor.set(k, cur + 1);
         idx++;
       } else {
         buckets.delete(k);
-        const removeIdx = idx % bucketKeys.length;
-        bucketKeys.splice(removeIdx, 1);
+        bucketCursor.delete(k);
+        bucketKeys.splice(pickIdx, 1);
       }
     }
 
@@ -6193,22 +6324,27 @@ self.onmessage = (e) => {
     }
 
     const bucketKeys = Array.from(buckets.keys());
+    const bucketCursor = new Map();
+    for (const k of bucketKeys) bucketCursor.set(k, 0);
     let idx = 0;
 
     while (out.length < BW && bucketKeys.length > 0) {
-      const k = bucketKeys[idx % bucketKeys.length];
+      const pickIdx = idx % bucketKeys.length;
+      const k = bucketKeys[pickIdx];
       const arr = buckets.get(k);
+      const cur = bucketCursor.get(k) || 0;
 
-      if (arr && arr.length) {
-        const st = arr.shift();
+      if (arr && cur < arr.length) {
+        const st = arr[cur];
+        bucketCursor.set(k, cur + 1);
         if (!takeWithFamilyCap(out, picked, familyUsed, st, familyCap)) {
           continue;
         }
         idx++;
       } else {
         buckets.delete(k);
-        const removeIdx = idx % bucketKeys.length;
-        bucketKeys.splice(removeIdx, 1);
+        bucketCursor.delete(k);
+        bucketKeys.splice(pickIdx, 1);
       }
     }
 
@@ -6515,7 +6651,13 @@ self.onmessage = (e) => {
     if (depthMilestones.includes(step + 1)) flushPendingPools();
 
     reportProgress(true);
-    await yieldToBrowser();
+    const yieldStride = enableParallelEval ? 3 : 1;
+    if (
+      step % yieldStride === yieldStride - 1 ||
+      nodesExpanded > maxNodesEffective
+    ) {
+      await yieldToBrowser();
+    }
 
     if (nodesExpanded > maxNodesEffective) break;
   }
@@ -6527,6 +6669,8 @@ self.onmessage = (e) => {
   bestGlobal.path = bestGlobal.node ? buildPath(bestGlobal.node) : [];
   bestGlobal.nodesExpanded = nodesExpanded;
   delete bestGlobal.node;
+
+  terminateEvalWorkerPool();
 
   if (evalWorkerScriptURL) {
     try {
