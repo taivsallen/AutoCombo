@@ -1,0 +1,33 @@
+{
+  "generated_at": "2026-04-09T15:20:32.174Z",
+  "elapsed_sec": 2214.788,
+  "config": {
+    "outputDir": "teacher_data_full",
+    "prefix": "full200k",
+    "baseSeed": 12345,
+    "boards": 20000,
+    "statesPerBoard": 10,
+    "rolloutSteps": 12,
+    "stepsLeftMin": 4,
+    "stepsLeftMax": 14,
+    "beamWidth": 120,
+    "maxNodes": 20000,
+    "target": 8,
+    "mode": "combo",
+    "skyfall": false,
+    "diagonal": true,
+    "progressEvery": 500
+  },
+  "counts": {
+    "train": 160000,
+    "valid": 20000,
+    "test": 20000,
+    "totalStates": 200000,
+    "totalLabelExpansions": 812600616
+  },
+  "files": {
+    "train": "teacher_data_full\\full200k.train.jsonl",
+    "valid": "teacher_data_full\\full200k.valid.jsonl",
+    "test": "teacher_data_full\\full200k.test.jsonl"
+  }
+}

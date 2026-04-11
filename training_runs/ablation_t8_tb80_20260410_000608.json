@@ -1,0 +1,68 @@
+{
+  "generated_at": "2026-04-09T16:07:14.397Z",
+  "config": {
+    "boards": 200,
+    "seed": 20260409,
+    "target": 8,
+    "mode": "combo",
+    "priority": "combo",
+    "skyfall": false,
+    "diagonal": true,
+    "maxSteps": 30,
+    "beamWidth": 440,
+    "maxNodes": 50000,
+    "stepPenalty": 0,
+    "potentialWeight": 10,
+    "timeBudgetMs": 80,
+    "primitiveQuota": 0.35,
+    "evalBudgetFactor": 3.8,
+    "macroMaxLen": 3,
+    "macroPerStateMax": 2,
+    "macroTargetCount": 4,
+    "valueLambdaBase": 0.12,
+    "valueLambdaMin": 0.05,
+    "valueLambdaMax": 0.2,
+    "valueLambdaPower": 1,
+    "valueScale": 100000,
+    "valueClip": 20,
+    "out": "training_runs/ablation_t8_tb80_20260410_000608.json"
+  },
+  "reports": [
+    {
+      "variant": "Baseline",
+      "successAtTarget": 0.035,
+      "avgCombos": 6.22,
+      "avgSteps": 24.19,
+      "avgMs": 73.39746350000001,
+      "avgNodes": 48406.435,
+      "timeoutRate": 0.18
+    },
+    {
+      "variant": "+Vhat",
+      "successAtTarget": 0.035,
+      "avgCombos": 6.245,
+      "avgSteps": 22.34,
+      "avgMs": 74.22341800000002,
+      "avgNodes": 49305.685,
+      "timeoutRate": 0.175
+    },
+    {
+      "variant": "+Macro",
+      "successAtTarget": 0,
+      "avgCombos": 4.695,
+      "avgSteps": 8.26,
+      "avgMs": 89.00124950000017,
+      "avgNodes": 14899.39,
+      "timeoutRate": 1
+    },
+    {
+      "variant": "+Vhat+Macro",
+      "successAtTarget": 0,
+      "avgCombos": 4.695,
+      "avgSteps": 8,
+      "avgMs": 91.0943729999999,
+      "avgNodes": 14831.825,
+      "timeoutRate": 1
+    }
+  ]
+}

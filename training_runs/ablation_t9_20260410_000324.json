@@ -1,0 +1,68 @@
+{
+  "generated_at": "2026-04-09T16:05:56.179Z",
+  "config": {
+    "boards": 200,
+    "seed": 20260409,
+    "target": 9,
+    "mode": "combo",
+    "priority": "combo",
+    "skyfall": false,
+    "diagonal": true,
+    "maxSteps": 30,
+    "beamWidth": 440,
+    "maxNodes": 50000,
+    "stepPenalty": 0,
+    "potentialWeight": 10,
+    "timeBudgetMs": 0,
+    "primitiveQuota": 0.35,
+    "evalBudgetFactor": 3.8,
+    "macroMaxLen": 3,
+    "macroPerStateMax": 2,
+    "macroTargetCount": 4,
+    "valueLambdaBase": 0.12,
+    "valueLambdaMin": 0.05,
+    "valueLambdaMax": 0.2,
+    "valueLambdaPower": 1,
+    "valueScale": 100000,
+    "valueClip": 20,
+    "out": "training_runs/ablation_t9_20260410_000324.json"
+  },
+  "reports": [
+    {
+      "variant": "Baseline",
+      "successAtTarget": 0,
+      "avgCombos": 6.255,
+      "avgSteps": 25.065,
+      "avgMs": 74.61434550000004,
+      "avgNodes": 50000,
+      "timeoutRate": 0
+    },
+    {
+      "variant": "+Vhat",
+      "successAtTarget": 0,
+      "avgCombos": 6.26,
+      "avgSteps": 23.035,
+      "avgMs": 76.74772300000001,
+      "avgNodes": 50000,
+      "timeoutRate": 0
+    },
+    {
+      "variant": "+Macro",
+      "successAtTarget": 0,
+      "avgCombos": 6.21,
+      "avgSteps": 20.065,
+      "avgMs": 299.3800324999996,
+      "avgNodes": 50000,
+      "timeoutRate": 0
+    },
+    {
+      "variant": "+Vhat+Macro",
+      "successAtTarget": 0,
+      "avgCombos": 6.21,
+      "avgSteps": 19.055,
+      "avgMs": 307.57665200000025,
+      "avgNodes": 50000,
+      "timeoutRate": 0
+    }
+  ]
+}

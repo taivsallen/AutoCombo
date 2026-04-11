@@ -1,0 +1,33 @@
+{
+  "generated_at": "2026-04-09T14:43:23.629Z",
+  "elapsed_sec": 23.579,
+  "config": {
+    "outputDir": "teacher_data_pilot",
+    "prefix": "pilot",
+    "baseSeed": 12345,
+    "boards": 200,
+    "statesPerBoard": 10,
+    "rolloutSteps": 12,
+    "stepsLeftMin": 4,
+    "stepsLeftMax": 14,
+    "beamWidth": 120,
+    "maxNodes": 20000,
+    "target": 8,
+    "mode": "combo",
+    "skyfall": false,
+    "diagonal": true,
+    "progressEvery": 50
+  },
+  "counts": {
+    "train": 1600,
+    "valid": 200,
+    "test": 200,
+    "totalStates": 2000,
+    "totalLabelExpansions": 8160816
+  },
+  "files": {
+    "train": "teacher_data_pilot\\pilot.train.jsonl",
+    "valid": "teacher_data_pilot\\pilot.valid.jsonl",
+    "test": "teacher_data_pilot\\pilot.test.jsonl"
+  }
+}

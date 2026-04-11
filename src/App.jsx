@@ -111,6 +111,31 @@ const normalizeRuleProfile = (profileLike) => {
   };
 };
 
+const buildRuleRuntimeContext = (profileLike) => {
+  const profile = normalizeRuleProfile(profileLike);
+  return {
+    profile,
+    minClearByOrb: ORB_IDS.map(
+      (orb) => profile.orbRules[orb]?.minClear || 3
+    ),
+    clearModeByOrb: ORB_IDS.map(
+      (orb) => profile.orbRules[orb]?.clearMode || RULE_CLEAR_MODE_LINE
+    ),
+  };
+};
+
+const getRuleRuntimeContext = (ruleProfileLike) => {
+  if (
+    ruleProfileLike &&
+    ruleProfileLike.profile &&
+    Array.isArray(ruleProfileLike.minClearByOrb) &&
+    Array.isArray(ruleProfileLike.clearModeByOrb)
+  ) {
+    return ruleProfileLike;
+  }
+  return buildRuleRuntimeContext(ruleProfileLike);
+};
+
 const orbOf = (v) => (v < 0 ? -1 : v % 10);                    // 0~5
 const xMarkOf = (v) => (v < 0 ? 0 : Math.floor(v / 10) % 10); // 0/1/2
 const qMarkOf = (v) => (v < 0 ? 0 : Math.floor(v / 100) % 10); // 0/1/2
@@ -201,6 +226,7 @@ const DEFAULT_CONFIG = {
   beamWidth: 440,    
   maxSteps: 30,      
   maxNodes: 50000,  
+  evalWorkers: 1,
   stepPenalty: 0,  
   potentialWeight: 10, 
   clearedWeight: 300,
@@ -3262,8 +3288,8 @@ const hasInitialN2Clear = (board, toClear1D) => {
   }
   return false;
 };
-const getInitialMatchCheck = (board, ruleProfile = null) => {
-  const initial = findMatches(board, "initial", ruleProfile);
+const getInitialMatchCheck = (board, ruleProfileLike = null) => {
+  const initial = findMatches(board, "initial", ruleProfileLike);
   return {
     initial,
     violatesN2: hasInitialN2Clear(board, initial?.toClearMap),
@@ -3341,19 +3367,16 @@ const hasN2InVanillaInitialPattern = (board) => {
 
   return false;
 };
-const findMatches = (tempBoard, phase = "initial", ruleProfile = null) => {
+const findMatches = (tempBoard, phase = "initial", ruleProfileLike = null) => {
   let combos = 0,
     clearedCount = 0,
     vC = 0,
     hC = 0;
 
-  const normalizedRules = normalizeRuleProfile(ruleProfile);
-  const minClearByOrb = ORB_IDS.map(
-    (orb) => normalizedRules.orbRules[orb]?.minClear || 3
-  );
-  const clearModeByOrb = ORB_IDS.map(
-    (orb) => normalizedRules.orbRules[orb]?.clearMode || RULE_CLEAR_MODE_LINE
-  );
+  const ruleCtx = getRuleRuntimeContext(ruleProfileLike);
+  const normalizedRules = ruleCtx.profile;
+  const minClearByOrb = ruleCtx.minClearByOrb;
+  const clearModeByOrb = ruleCtx.clearModeByOrb;
 
   const totalCells = TOTAL_ROWS * COLS;
   const isH = new Uint8Array(totalCells);
@@ -3634,10 +3657,11 @@ const evaluateBoard = (
   tempBoard,
   skyfall,
   initialResult = null,
-  ruleProfile = null
+  ruleProfileLike = null
 ) => {
+  const ruleCtx = getRuleRuntimeContext(ruleProfileLike);
   const result =
-    initialResult ?? findMatches(tempBoard, "initial", ruleProfile);
+    initialResult ?? findMatches(tempBoard, "initial", ruleCtx);
 
   const initialCombos = result.combos;
   const initialH = result.hC;
@@ -3685,7 +3709,7 @@ const evaluateBoard = (
       firstCascade = false;
     }
 
-    loopResult = findMatches(currentBoard, "skyfall", ruleProfile);
+    loopResult = findMatches(currentBoard, "skyfall", ruleCtx);
 
     if (loopResult.combos > 0) {
       totalCombos += loopResult.combos;
@@ -3716,7 +3740,7 @@ const evaluateBoard = (
   };
 };
 const getBoardKey = (b) => {
-  // ?拙?32-bit hash ?? BigInt 摮葡 key嚗?蝣唳??ap key ?哨?
+  // 兩個 32-bit hash 組成固定長度字串 key，避免 BigInt toString 開銷
   let h1 = 2166136261 >>> 0; // FNV-ish
   let h2 = 16777619 >>> 0;
 
@@ -3741,8 +3765,10 @@ const getBoardKey = (b) => {
     h2 = Math.imul(h2, 2246822507) >>> 0;
   }
 
-  const key = (BigInt(h1) << 32n) ^ BigInt(h2);
-  return key.toString();
+  return (
+    h1.toString(16).padStart(8, "0") +
+    h2.toString(16).padStart(8, "0")
+  );
 };
 const calcScore = (
   ev,
@@ -4153,7 +4179,8 @@ const beamSolve = async (
   const hasInitSensitiveSpecial =
     hasInitClearCountSpecial || hasInitEqualSpecial;
 
-  const normalizedRuleProfile = normalizeRuleProfile(ruleProfile);
+  const ruleRuntimeCtx = getRuleRuntimeContext(ruleProfile);
+  const normalizedRuleProfile = ruleRuntimeCtx.profile;
   const compiledRuleRequirements = normalizedRuleProfile.requirements.map(
     (req) => ({
       orb: clampIntRange(req.orb, 0, 5, 0),
@@ -4201,6 +4228,14 @@ const beamSolve = async (
   const dirsPlay = diagonal ? DIRS_8 : DIRS_4;
   const maxNodesEffective = cfg.maxNodes;
   const baseBeamWidth = Math.max(32, Number(cfg.beamWidth) || 32);
+  const requestedEvalWorkers = Math.max(1, Number(cfg.evalWorkers) || 1);
+  const maxHwWorkers =
+    typeof navigator !== "undefined" && Number(navigator.hardwareConcurrency) > 0
+      ? Number(navigator.hardwareConcurrency)
+      : 1;
+  const evalWorkerCount = Math.min(requestedEvalWorkers, maxHwWorkers);
+  const enableParallelEval =
+    evalWorkerCount > 1 && typeof Worker !== "undefined";
 
   const IS_STEP_MODE = priority === "steps";
   const IS_COMBO_MODE = priority !== "steps";
@@ -5123,15 +5158,26 @@ const beamSolve = async (
     return true;
   };
 
-  const evalState = (
+  const computeEvalPrimitives = (evalBoard) => {
+    const { initial, violatesN2 } = getInitialMatchCheck(evalBoard, ruleRuntimeCtx);
+    const evRaw = evaluateBoard(evalBoard, skyfall, initial, ruleRuntimeCtx);
+    const pot = combinedPotentialScore(evalBoard, mode);
+    return { initial, violatesN2, evRaw, pot };
+  };
+
+  const buildEvalStateFromPrimitives = (
     evalBoard,
     node,
     steps,
     scoreBias = 0,
-    parentExtraCtx = null
+    parentExtraCtx = null,
+    primitives = null
   ) => {
-    const { initial, violatesN2 } = getInitialMatchCheck(evalBoard, ruleProfile);
-    const evRaw = evaluateBoard(evalBoard, skyfall, initial, ruleProfile);
+    const source = primitives || computeEvalPrimitives(evalBoard);
+    const initial = source.initial;
+    const violatesN2 = !!source.violatesN2;
+    const evRaw = source.evRaw || {};
+    const pot = Number(source.pot || 0);
 
     const initInfo = extractInitialInfo(initial, evRaw);
 
@@ -5160,12 +5206,15 @@ const beamSolve = async (
     ev.initTargetCombo = initComboInfo.target;
     ev.initialComboExact = initComboInfo.exact;
 
-    const pot = combinedPotentialScore(evalBoard, mode);
-
     let rectGuide = 0;
     if (hasRectSpecial) {
       const prevRectGuide = parentExtraCtx?.rectGuide;
-      rectGuide = shouldRefreshRectGuide(steps, prevRectGuide, hasRectSpecial)
+      const needRefreshRectGuide = shouldRefreshRectGuide(
+        steps,
+        prevRectGuide,
+        hasRectSpecial
+      );
+      rectGuide = needRefreshRectGuide
         ? getCheapRectGuideScoreFromCompiledSpecialList(
             evalBoard,
             compiledSpecials,
@@ -5214,8 +5263,6 @@ const beamSolve = async (
     score += ev.initialClearedCount * SEARCH_PROFILE.initClearedBonus;
     if (ev.initialAllEqual) score += SEARCH_PROFILE.initAllEqualBonus;
 
-    // ??蝯曹?頝?脩蔑
-    // target 頞餈?憟踝?銝?銝剝′??
     if (initComboInfo.enabled) {
       score -= initComboInfo.distance * SEARCH_PROFILE.initTargetPenalty;
       if (initComboInfo.exact) {
@@ -5318,6 +5365,212 @@ const beamSolve = async (
     };
   };
 
+  const evalState = (
+    evalBoard,
+    node,
+    steps,
+    scoreBias = 0,
+    parentExtraCtx = null
+  ) =>
+    buildEvalStateFromPrimitives(
+      evalBoard,
+      node,
+      steps,
+      scoreBias,
+      parentExtraCtx,
+      null
+    );
+
+  const evalPrimitiveCache = new Map();
+  const EVAL_PRIMITIVE_CACHE_CAP = 120000;
+  const getEvalPrimitiveCacheKey = (boardKey, hole, held) =>
+    `${boardKey}|${hole ? `${hole.r},${hole.c}` : "none"}|${held}`;
+
+  const getCachedEvalPrimitives = (cacheKey) => {
+    if (!cacheKey) return null;
+    const hit = evalPrimitiveCache.get(cacheKey);
+    if (!hit) return null;
+    // touch for simple LRU behavior
+    evalPrimitiveCache.delete(cacheKey);
+    evalPrimitiveCache.set(cacheKey, hit);
+    return hit;
+  };
+
+  const putCachedEvalPrimitives = (cacheKey, primitives) => {
+    if (!cacheKey || !primitives) return;
+    if (evalPrimitiveCache.size >= EVAL_PRIMITIVE_CACHE_CAP) {
+      const oldest = evalPrimitiveCache.keys().next().value;
+      if (oldest !== undefined) evalPrimitiveCache.delete(oldest);
+    }
+    evalPrimitiveCache.set(cacheKey, primitives);
+  };
+
+  let evalWorkerScriptURL = null;
+  let parallelEvalFailed = false;
+
+  const buildEvalWorkerScript = () => {
+    const fn = (name, value) => `const ${name} = ${value.toString()};`;
+    return `
+const TOTAL_ROWS = ${TOTAL_ROWS};
+const COLS = ${COLS};
+const PLAY_ROWS_START = ${PLAY_ROWS_START};
+const ORB_IDS = ${JSON.stringify(ORB_IDS)};
+const RULE_CLEAR_MODE_LINE = ${JSON.stringify(RULE_CLEAR_MODE_LINE)};
+const RULE_CLEAR_MODE_CONNECTED = ${JSON.stringify(RULE_CLEAR_MODE_CONNECTED)};
+const RECT_M_OPTIONS = ${JSON.stringify(RECT_M_OPTIONS)};
+const RECT_N_OPTIONS = ${JSON.stringify(RECT_N_OPTIONS)};
+const SHAPE_KIND = ${JSON.stringify(SHAPE_KIND)};
+const SHAPE_TEMPLATES = ${JSON.stringify(SHAPE_TEMPLATES)};
+${fn("clampIntRange", clampIntRange)}
+${fn("normalizeOrbRule", normalizeOrbRule)}
+${fn("normalizeRuleRequirement", normalizeRuleRequirement)}
+${fn("normalizeRuleProfile", normalizeRuleProfile)}
+${fn("buildRuleRuntimeContext", buildRuleRuntimeContext)}
+${fn("getRuleRuntimeContext", getRuleRuntimeContext)}
+${fn("orbOf", orbOf)}
+${fn("xMarkOf", xMarkOf)}
+${fn("qMarkOf", qMarkOf)}
+${fn("nMarkOf", nMarkOf)}
+${fn("withMarks", withMarks)}
+${fn("setNMark", setNMark)}
+${fn("getOrbForMatchPhase", getOrbForMatchPhase)}
+${fn("clone2D", clone2D)}
+${fn("boardWithHeldFilled", boardWithHeldFilled)}
+${fn("compactnessScore", compactnessScore)}
+${fn("edgePotentialScore", edgePotentialScore)}
+${fn("applyGravity", applyGravity)}
+${fn("potentialScore", potentialScore)}
+${fn("normalizeCells", normalizeCells)}
+${fn("transformCells8", transformCells8)}
+${fn("canonicalShapeKey", canonicalShapeKey)}
+${fn("makePatternCounter", makePatternCounter)}
+${fn("makeRectCounter", makeRectCounter)}
+${fn("makeRectCounts", makeRectCounts)}
+${fn("makePatternCounts", makePatternCounts)}
+${fn("makeComboCountsByOrb", makeComboCountsByOrb)}
+${fn("makeComboSizeCountsByOrb", makeComboSizeCountsByOrb)}
+${fn("detectExact5Shape", detectExact5Shape)}
+${fn("findMatches", findMatches)}
+${fn("hasInitialN2Clear", hasInitialN2Clear)}
+${fn("getInitialMatchCheck", getInitialMatchCheck)}
+${fn("unlockN2Board", unlockN2Board)}
+${fn("evaluateBoard", evaluateBoard)}
+${fn("combinedPotentialScore", combinedPotentialScore)}
+const SHAPE_CANONICAL = Object.fromEntries(
+  Object.entries(SHAPE_TEMPLATES).map(([k, cells]) => [k, canonicalShapeKey(cells)])
+);
+self.onmessage = (e) => {
+  const { type, payload } = e.data || {};
+  if (type !== "evalBatch") return;
+  try {
+    const { moves, mode, skyfall, ruleRuntimeCtx } = payload || {};
+    const out = new Array(moves.length);
+    for (let i = 0; i < moves.length; i++) {
+      const mv = moves[i];
+      const evalBoard = boardWithHeldFilled(mv.nextBoard, mv.hole, mv.held);
+      const { initial, violatesN2 } = getInitialMatchCheck(evalBoard, ruleRuntimeCtx);
+      const evRaw = evaluateBoard(evalBoard, skyfall, initial, ruleRuntimeCtx);
+      const pot = combinedPotentialScore(evalBoard, mode);
+      out[i] = {
+        index: mv.index,
+        primitives: {
+          initial,
+          violatesN2,
+          evRaw,
+          pot,
+        },
+      };
+    }
+    self.postMessage({ type: "evalBatchDone", payload: { out } });
+  } catch (err) {
+    self.postMessage({
+      type: "evalBatchError",
+      payload: { message: err?.message || String(err), stack: err?.stack || "" },
+    });
+  }
+};
+`;
+  };
+
+  const ensureEvalWorkerScriptURL = () => {
+    if (!evalWorkerScriptURL) {
+      const src = buildEvalWorkerScript();
+      evalWorkerScriptURL = URL.createObjectURL(
+        new Blob([src], { type: "text/javascript" })
+      );
+    }
+    return evalWorkerScriptURL;
+  };
+
+  const runParallelPrimitiveEval = async (jobs) => {
+    if (!enableParallelEval || parallelEvalFailed) return null;
+    if (!Array.isArray(jobs) || jobs.length === 0) return [];
+
+    const workerN = Math.max(1, Math.min(evalWorkerCount, jobs.length));
+    if (workerN <= 1) return null;
+
+    const chunks = [];
+    const chunkSize = Math.ceil(jobs.length / workerN);
+    for (let i = 0; i < jobs.length; i += chunkSize) {
+      chunks.push(jobs.slice(i, i + chunkSize));
+    }
+
+    const workerURL = ensureEvalWorkerScriptURL();
+    const workers = [];
+    const collected = [];
+
+    try {
+      const promises = chunks.map((chunk) => {
+        return new Promise((resolve, reject) => {
+          const w = new Worker(workerURL);
+          workers.push(w);
+
+          w.onmessage = (evt) => {
+            const { type, payload } = evt.data || {};
+            if (type === "evalBatchDone") {
+              if (Array.isArray(payload?.out)) {
+                collected.push(...payload.out);
+              }
+              resolve();
+              return;
+            }
+            if (type === "evalBatchError") {
+              reject(new Error(payload?.message || "evalBatchError"));
+            }
+          };
+
+          w.onerror = (err) => {
+            reject(err?.error || new Error(err?.message || "worker error"));
+          };
+
+          w.postMessage({
+            type: "evalBatch",
+            payload: {
+              moves: chunk,
+              mode,
+              skyfall,
+              ruleRuntimeCtx,
+            },
+          });
+        });
+      });
+
+      await Promise.all(promises);
+      return collected;
+    } catch (_err) {
+      parallelEvalFailed = true;
+      return null;
+    } finally {
+      for (const w of workers) {
+        try {
+          w.terminate();
+        } catch (_e) {
+          // noop
+        }
+      }
+    }
+  };
+
   const tryPushState = ({
     nextBoard,
     held,
@@ -5330,10 +5583,36 @@ const beamSolve = async (
     outCandidates,
     parentExtraCtx = null,
     familySig = null,
+    precomputedBoardKey = null,
+    precomputedPrimitives = null,
   }) => {
     const steps = stepsOf(node);
-    const evalBoard = boardWithHeldFilled(nextBoard, hole, held);
-    const res = evalState(evalBoard, node, steps, scoreBias, parentExtraCtx);
+    const boardKey = precomputedBoardKey || getBoardKey(nextBoard);
+    const primitiveCacheKey = getEvalPrimitiveCacheKey(boardKey, hole, held);
+    let primitives = precomputedPrimitives || getCachedEvalPrimitives(primitiveCacheKey);
+    let evalBoard = null;
+    const needEvalBoardForRectGuide =
+      hasRectSpecial &&
+      shouldRefreshRectGuide(steps, parentExtraCtx?.rectGuide, hasRectSpecial);
+
+    if (!primitives) {
+      evalBoard = boardWithHeldFilled(nextBoard, hole, held);
+      primitives = computeEvalPrimitives(evalBoard);
+      putCachedEvalPrimitives(primitiveCacheKey, primitives);
+    }
+
+    if (!evalBoard && needEvalBoardForRectGuide) {
+      evalBoard = boardWithHeldFilled(nextBoard, hole, held);
+    }
+
+    const res = buildEvalStateFromPrimitives(
+      evalBoard,
+      node,
+      steps,
+      scoreBias,
+      parentExtraCtx,
+      primitives
+    );
     if (!res) return;
 
     const {
@@ -5345,10 +5624,8 @@ const beamSolve = async (
       visitedTuple,
       finalRankTuple,
       initExact,
-      initInfo,
     } = res;
 
-    const boardKey = getBoardKey(nextBoard);
     const holeKey = hole ? `${hole.r},${hole.c}` : "none";
     const key = `${boardKey}|${holeKey}|${held}|${steps}`;
     const resolvedFamilySig =
@@ -6131,19 +6408,74 @@ const beamSolve = async (
         ? pendingPushMoves
         : pickCheapTopMoves(pendingPushMoves, evalBudget, 2);
 
-    for (const mv of selectedPushMoves) {
+    const selectedMoveMeta = selectedPushMoves.map((mv, idx) => {
+      const boardKey = getBoardKey(mv.nextBoard);
+      const primitiveCacheKey = getEvalPrimitiveCacheKey(boardKey, mv.hole, mv.held);
+      const cached = getCachedEvalPrimitives(primitiveCacheKey);
+      return {
+        mv,
+        idx,
+        boardKey,
+        primitiveCacheKey,
+        primitives: cached,
+      };
+    });
+
+    const pendingParallelJobs = selectedMoveMeta
+      .filter((it) => !it.primitives)
+      .map((it) => ({
+        index: it.idx,
+        nextBoard: it.mv.nextBoard,
+        hole: it.mv.hole,
+        held: it.mv.held,
+      }));
+
+    const parallelOut =
+      pendingParallelJobs.length > 0
+        ? await runParallelPrimitiveEval(pendingParallelJobs)
+        : [];
+
+    if (Array.isArray(parallelOut)) {
+      const byIndex = new Map();
+      for (const item of parallelOut) {
+        if (item && Number.isInteger(item.index) && item.primitives) {
+          byIndex.set(item.index, item.primitives);
+        }
+      }
+      for (const meta of selectedMoveMeta) {
+        if (meta.primitives) continue;
+        const fromWorker = byIndex.get(meta.idx);
+        if (!fromWorker) continue;
+        meta.primitives = fromWorker;
+        putCachedEvalPrimitives(meta.primitiveCacheKey, fromWorker);
+      }
+    }
+
+    for (const meta of selectedMoveMeta) {
+      if (!meta.primitives) {
+        const evalBoard = boardWithHeldFilled(
+          meta.mv.nextBoard,
+          meta.mv.hole,
+          meta.mv.held
+        );
+        meta.primitives = computeEvalPrimitives(evalBoard);
+        putCachedEvalPrimitives(meta.primitiveCacheKey, meta.primitives);
+      }
+
       tryPushState({
-        nextBoard: mv.nextBoard,
-        held: mv.held,
-        hole: mv.hole,
-        r: mv.r,
-        c: mv.c,
-        node: mv.node,
-        locked: mv.locked,
+        nextBoard: meta.mv.nextBoard,
+        held: meta.mv.held,
+        hole: meta.mv.hole,
+        r: meta.mv.r,
+        c: meta.mv.c,
+        node: meta.mv.node,
+        locked: meta.mv.locked,
         scoreBias: 0,
         outCandidates: candidates,
-        parentExtraCtx: mv.parentExtraCtx,
-        familySig: mv.familySig || mv.cheapSig || null,
+        parentExtraCtx: meta.mv.parentExtraCtx,
+        familySig: meta.mv.familySig || meta.mv.cheapSig || null,
+        precomputedBoardKey: meta.boardKey,
+        precomputedPrimitives: meta.primitives,
       });
     }
 
@@ -6195,6 +6527,15 @@ const beamSolve = async (
   bestGlobal.path = bestGlobal.node ? buildPath(bestGlobal.node) : [];
   bestGlobal.nodesExpanded = nodesExpanded;
   delete bestGlobal.node;
+
+  if (evalWorkerScriptURL) {
+    try {
+      URL.revokeObjectURL(evalWorkerScriptURL);
+    } catch (_e) {
+      // noop
+    }
+    evalWorkerScriptURL = null;
+  }
 
   return {
     ...bestGlobal,

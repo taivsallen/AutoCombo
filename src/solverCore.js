@@ -77,8 +77,10 @@ const getBoardKey = (b) => {
     h2 = Math.imul(h2, 2246822507) >>> 0;
   }
 
-  const key = (BigInt(h1) << 32n) ^ BigInt(h2);
-  return key.toString();
+  return (
+    h1.toString(16).padStart(8, "0") +
+    h2.toString(16).padStart(8, "0")
+  );
 };
 
 const orbOf = (v) => (v < 0 ? -1 : v % 10);                    // 0~5
