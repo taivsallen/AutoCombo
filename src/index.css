@@ -3,6 +3,1079 @@
 /* 可選：你想要的全域底色（也可全部用 App 裡的 bg-neutral-950） */
 html, body, #root {
   height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  background: #0a0a0a;
+}
+
+.solver-app-shell {
+  height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.solver-panels-contents {
+  display: contents;
+}
+
+.solver-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.solver-mode-bar,
+.solver-results-panel,
+.solver-stats-panel,
+.solver-settings-panel,
+.solver-timer-panel,
+.solver-board-panel,
+.solver-actions-panel,
+.solver-export-panel,
+.solver-help-panel {
+  min-width: 0;
+}
+
+.solver-results-panel,
+.solver-settings-panel {
+  flex: 0 0 auto;
+}
+
+.solver-stats-panel {
+  order: 0;
+}
+
+.solver-timer-panel {
+  order: 1;
+}
+
+.solver-board-panel {
+  order: 2;
+}
+
+.solver-actions-panel {
+  order: 3;
+}
+
+.solver-export-panel {
+  order: 4;
+}
+
+.solver-mode-bar {
+  order: 5;
+}
+
+.solver-results-panel {
+  order: 6;
+}
+
+.solver-settings-panel {
+  order: 7;
+}
+
+.solver-help-panel {
+  order: 8;
+}
+
+.solver-settings-panel {
+  --settings-accent-rgb: 96 165 250;
+  border-color: rgb(var(--settings-accent-rgb) / 0.5);
+  background:
+    linear-gradient(
+      180deg,
+      rgb(var(--settings-accent-rgb) / 0.16),
+      rgb(10 10 10 / 0.94) 45%
+    );
+  box-shadow:
+    inset 0 1px 0 rgb(var(--settings-accent-rgb) / 0.22),
+    0 16px 36px rgb(0 0 0 / 0.24);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.solver-settings-panel--search,
+.solver-settings-content--search {
+  --settings-accent-rgb: 96 165 250;
+}
+
+.solver-settings-panel--rules,
+.solver-settings-content--rules {
+  --settings-accent-rgb: 34 211 238;
+}
+
+.solver-settings-panel--shield,
+.solver-settings-content--shield {
+  --settings-accent-rgb: 236 72 153;
+}
+
+.solver-settings-panel--manual,
+.solver-settings-content--manual {
+  --settings-accent-rgb: 129 140 248;
+}
+
+.solver-settings-tabs {
+  gap: 0.35rem;
+  padding: 0.35rem 0.4rem 0;
+  background: #050505;
+}
+
+.solver-settings-tab {
+  --tab-accent-rgb: 96 165 250;
+  min-width: 0;
+  border: 1px solid rgb(var(--tab-accent-rgb) / 0.22);
+  border-bottom: 0;
+  border-radius: 0.75rem 0.75rem 0 0;
+  padding: 0.65rem 0.45rem 0.6rem;
+  background: rgb(23 23 23 / 0.9);
+  color: rgb(var(--tab-accent-rgb) / 0.62);
+  font-size: 0.875rem;
+  font-weight: 900;
+  box-shadow: inset 0 3px 0 rgb(var(--tab-accent-rgb) / 0.64);
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.solver-settings-tab--rules {
+  --tab-accent-rgb: 34 211 238;
+}
+
+.solver-settings-tab--shield {
+  --tab-accent-rgb: 236 72 153;
+}
+
+.solver-settings-tab:hover {
+  color: rgb(var(--tab-accent-rgb) / 0.92);
+  background: rgb(var(--tab-accent-rgb) / 0.1);
+}
+
+.solver-settings-tab.is-active {
+  z-index: 1;
+  border-color: rgb(var(--tab-accent-rgb) / 0.7);
+  background: rgb(var(--tab-accent-rgb) / 0.24);
+  color: rgb(var(--tab-accent-rgb));
+  box-shadow:
+    inset 0 3px 0 rgb(var(--tab-accent-rgb)),
+    0 8px 22px rgb(var(--tab-accent-rgb) / 0.12);
+  transform: translateY(1px);
+}
+
+.solver-settings-content {
+  border-top: 2px solid rgb(var(--settings-accent-rgb) / 0.82);
+  background:
+    linear-gradient(
+      180deg,
+      rgb(var(--settings-accent-rgb) / 0.17),
+      rgb(var(--settings-accent-rgb) / 0.07) 42%,
+      rgb(10 10 10 / 0.82)
+    );
+}
+
+.solver-settings-content--shield {
+  padding: 0.4rem;
+}
+
+.solver-settings-content--rules {
+  padding: 0.4rem;
+}
+
+.solver-rule-panel {
+  min-height: 0;
+  padding: 0.35rem;
+}
+
+.solver-rule-panel :is(button, select, span) {
+  font-size: 0.78rem;
+  line-height: 1rem;
+}
+
+.solver-rule-content {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.solver-orb-rules-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+
+.solver-orb-rule-card {
+  display: grid;
+  grid-template-rows: 1rem 1.75rem;
+  min-width: 0;
+  min-height: 3.45rem;
+  padding: 0.3rem 0.25rem;
+}
+
+.solver-orb-rule-stock {
+  min-width: 0;
+  margin-bottom: 0.2rem;
+  white-space: nowrap;
+}
+
+.solver-orb-rule-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  gap: 0.35rem;
+}
+
+.solver-orb-rule-icon {
+  min-width: 1.35rem;
+}
+
+.solver-orb-rule-controls select {
+  width: 100%;
+  min-width: 0;
+  height: 1.75rem;
+  padding-top: 0.2rem;
+  padding-bottom: 0.2rem;
+  text-overflow: ellipsis;
+}
+
+.solver-rule-requirements {
+  min-height: 0;
+  padding: 0.35rem 0.45rem;
+}
+
+.solver-rule-requirements-title,
+.solver-rule-add-title {
+  margin-bottom: 0.25rem;
+  font-size: 0.84rem !important;
+}
+
+.solver-rule-empty {
+  min-height: 2.15rem;
+  display: flex;
+  align-items: center;
+}
+
+.solver-rule-requirement-grid,
+.solver-rule-add-grid {
+  gap: 0.25rem;
+}
+
+.solver-rule-requirement-grid {
+  min-height: 2.15rem;
+}
+
+.solver-rule-requirement-item {
+  padding: 0.25rem 0.35rem;
+  gap: 0.25rem;
+}
+
+.solver-rule-requirement-item > span {
+  padding: 0.2rem 0.35rem;
+}
+
+.solver-rule-requirement-item select {
+  min-width: 2.25rem;
+  padding-top: 0.2rem;
+  padding-bottom: 0.2rem;
+  padding-left: 0.35rem;
+}
+
+.solver-rule-remove {
+  min-width: 1.5rem;
+}
+
+.solver-rule-divider {
+  margin: 0.3rem 0;
+}
+
+.solver-rule-add-grid button {
+  min-width: 0;
+  padding: 0.25rem 0.35rem;
+}
+
+.solver-shield-requirements {
+  --shield-text-size: 0.875rem;
+  --shield-line-height: 1.1rem;
+}
+
+.solver-shield-requirements :is(button, span, label, input, select) {
+  font-size: var(--shield-text-size) !important;
+  line-height: var(--shield-line-height) !important;
+}
+
+.solver-shield-requirements .space-y-2 > * + * {
+  margin-top: 0.3rem;
+}
+
+.solver-shield-card {
+  padding: 0.18rem;
+  border-radius: 0.75rem;
+}
+
+.solver-shield-card > div:first-child {
+  min-height: 1.8rem;
+  gap: 0.5rem;
+  padding: 0 0.6rem;
+  border-radius: 0.6rem;
+}
+
+.solver-shield-card > div:first-child > div:last-child {
+  gap: 0.4rem;
+}
+
+.solver-shield-card > div:first-child button {
+  min-height: 1.55rem;
+  padding: 0 0.45rem;
+}
+
+.solver-shield-card > div:first-child span {
+  min-width: 0;
+}
+
+.solver-shield-card-body {
+  height: 14.75rem;
+  margin-top: 0.2rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.solver-shield-card-body > .grid {
+  flex: 0 0 auto;
+  gap: 0.35rem;
+}
+
+.solver-shield-card-body > .grid button {
+  min-height: 1.85rem;
+  padding: 0.25rem 0.25rem;
+  border-radius: 0.55rem;
+}
+
+.solver-shield-card-body > :not(.grid) {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 0.3rem;
+  align-content: center;
+}
+
+.solver-shield-card-body > .flex-col {
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.solver-shield-inline-control {
+  width: 100%;
+  gap: 0.45rem;
+}
+
+.solver-shield-inline-control input[type="number"] {
+  flex: 0 0 4.5rem;
+}
+
+.solver-shield-inline-control input[type="range"] {
+  width: 66.666%;
+  max-width: 66.666%;
+  flex: 1 1 66.666%;
+}
+
+.solver-shield-equal {
+  gap: 0.5rem;
+  justify-content: flex-start;
+}
+
+.solver-shield-orb-options {
+  flex: 0 0 auto;
+  gap: 0.25rem;
+}
+
+.solver-shield-description {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.solver-shield-card-body input[type="number"],
+.solver-shield-card-body select {
+  min-height: 2rem;
+}
+
+.solver-shield-card-body input[type="range"] {
+  min-height: auto;
+}
+
+.solver-result-card .text-sm {
+  font-size: 0.95rem;
+  line-height: 1.15rem;
+}
+
+.solver-result-card .text-xs {
+  font-size: 0.78rem;
+  line-height: 1rem;
+}
+
+.solver-result-card .text-\[11px\] {
+  font-size: 0.72rem;
+  line-height: 0.95rem;
+}
+
+.solver-stats-panel > div {
+  padding-top: 0.35rem !important;
+  padding-bottom: 0.35rem !important;
+}
+
+.solver-stats-panel > div > * + * {
+  margin-top: 0.15rem !important;
+}
+
+.solver-character-orb-bar {
+  min-height: 0;
+  margin-bottom: 0.35rem;
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+}
+
+.solver-character-orb-toggle {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.solver-actions-panel button,
+.solver-export-control-button {
+  height: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.65rem !important;
+  border-radius: 0.75rem;
+}
+
+.solver-export-panel {
+  gap: 0.35rem;
+}
+
+.solver-export-controls {
+  width: 100%;
+}
+
+.solver-export-control-button {
+  width: 7.75rem;
+  min-width: 7.75rem;
+}
+
+.solver-export-progress-row {
+  min-height: 1rem;
+}
+
+.solver-export-progress-track {
+  width: min(20rem, calc(100% - 4.5rem));
+}
+
+.solver-gif-footer {
+  min-height: 28px;
+  line-height: 1;
+}
+
+.solution-preview-tooltip {
+  position: fixed;
+  z-index: 10000;
+  width: min(15.25rem, calc(100vw - 1rem));
+  pointer-events: none;
+  border: 1px solid rgb(255 255 255 / 0.22);
+  border-radius: 0.9rem;
+  padding: 0.45rem;
+  background: rgb(10 10 10 / 0.96);
+  box-shadow:
+    0 18px 50px rgb(0 0 0 / 0.72),
+    inset 0 1px 0 rgb(255 255 255 / 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.solution-preview-title {
+  margin-bottom: 0.35rem;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1rem;
+}
+
+.solution-preview-board {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  overflow: hidden;
+  border: 2px solid #525252;
+  border-radius: 0.65rem;
+  background: #404040;
+}
+
+.solution-preview-separator {
+  grid-column: 1 / -1;
+  height: 0.28rem;
+  background: #fff;
+  box-shadow: 0 0 8px rgb(255 255 255 / 0.55);
+}
+
+.solution-preview-cell {
+  position: relative;
+  display: flex;
+  aspect-ratio: 1;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.solution-preview-orb,
+.solution-preview-layer {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+
+.solution-preview-orb {
+  position: relative;
+  z-index: 1;
+}
+
+.solution-preview-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+}
+
+.solution-preview-row0-box {
+  transform: scale(1.02);
+}
+
+.solution-preview-n-mark {
+  z-index: 2;
+}
+
+.solution-preview-path-mark {
+  position: absolute;
+  z-index: 4;
+  top: 0.08rem;
+  left: 0.08rem;
+  border: 1px solid rgb(0 0 0 / 0.3);
+  border-radius: 0.2rem;
+  padding: 0 0.12rem;
+  color: #000;
+  font-size: 0.4rem;
+  font-weight: 900;
+  line-height: 0.65rem;
+}
+
+.solution-preview-path-mark--start {
+  background: rgb(6 182 212 / 0.92);
+}
+
+.solution-preview-path-mark--end {
+  background: rgb(217 70 239 / 0.92);
+}
+
+.solver-editor-overlay {
+  padding: 0;
+}
+
+.solver-editor-dialog {
+  max-height: none !important;
+}
+
+.solver-editor-body {
+  min-height: 0;
+  overflow: hidden !important;
+  padding: 0.35rem;
+}
+
+.solver-editor-layout {
+  height: 100%;
+  display: grid !important;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0.35rem;
+}
+
+.solver-editor-board {
+  width: min(100%, 390px, calc(100dvh - 300px));
+  margin: 0 auto !important;
+}
+
+.solver-editor-tools {
+  min-height: 0;
+}
+
+.solver-editor-orb-heading {
+  margin-bottom: 0.2rem;
+}
+
+.solver-editor-orbs {
+  display: grid !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.25rem !important;
+  margin-bottom: 0 !important;
+}
+
+.solver-editor-state-heading {
+  margin: 0.25rem 0 !important;
+}
+
+.solver-editor-state-heading p {
+  margin-top: 0.1rem;
+  font-size: 0.78rem;
+}
+
+.solver-editor-states {
+  display: grid !important;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.25rem !important;
+  max-width: none !important;
+}
+
+.solver-editor-orbs button,
+.solver-editor-states button {
+  width: 2.5rem !important;
+  height: 2.5rem !important;
+  justify-self: center;
+  border-radius: 0.65rem;
+}
+
+.solver-editor-states button span {
+  font-size: 0.78rem;
+}
+
+.solver-editor-footer {
+  position: static !important;
+  padding: 0.35rem;
+}
+
+.solver-editor-footer > div {
+  gap: 0.25rem;
+}
+
+.solver-editor-footer button {
+  min-width: 0;
+  padding: 0.55rem 0.2rem !important;
+  border-radius: 0.75rem;
+  font-size: 0.8rem;
+}
+
+.solver-editor-footer button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+@media (max-width: 640px) {
+  .solver-app-header-row {
+    padding: 0.4rem 0.55rem;
+  }
+
+  .solver-app-header-row > div:first-child {
+    gap: 0.4rem;
+    min-width: 0;
+  }
+
+  .solver-app-header-row img {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  .solver-brand-title {
+    white-space: nowrap;
+    font-size: 1rem;
+    letter-spacing: 0;
+  }
+
+  .solver-brand-title span {
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+    margin-left: 0.2rem;
+    margin-right: 0.2rem;
+  }
+
+  .solver-mode-toggle {
+    flex: 0 0 auto;
+    padding: 0.2rem;
+  }
+
+  .solver-mode-toggle button {
+    padding: 0.3rem 0.55rem;
+  }
+
+  .solver-mode-bar {
+    gap: 0.35rem;
+  }
+
+  .solver-mode-bar > div {
+    padding: 0.2rem;
+  }
+
+  .solver-mode-bar button {
+    min-height: 2rem;
+    padding-top: 0.3rem;
+    padding-bottom: 0.3rem;
+  }
+
+  .solver-export-panel {
+    margin-top: -0.25rem;
+    padding: 0.35rem;
+    border: 1px solid rgb(64 64 64 / 0.9);
+    border-radius: 0.85rem;
+    background: rgb(23 23 23 / 0.72);
+  }
+
+  .solver-export-progress-track {
+    width: min(14rem, calc(100% - 3.5rem));
+  }
+
+  .solver-export-control-button {
+    width: min(7.5rem, calc((100% - 0.5rem) / 2));
+    min-width: 0;
+  }
+
+  .solver-settings-content--shield {
+    padding: 0.3rem;
+  }
+
+  .solver-shield-requirements .space-y-2 > * + * {
+    margin-top: 0.25rem;
+  }
+
+  .solver-shield-card {
+    padding: 0.12rem;
+  }
+
+  .solver-shield-card > div:first-child {
+    min-height: 1.7rem;
+    padding: 0 0.4rem;
+  }
+
+  .solver-shield-card-body {
+    height: 13.5rem;
+    margin-top: 0.15rem;
+  }
+
+  .solver-shield-card-body > .grid {
+    gap: 0.25rem;
+  }
+
+  .solver-shield-card-body > .grid button {
+    min-height: 1.75rem;
+    padding: 0.2rem;
+  }
+
+  .solver-shield-card-body > :not(.grid) {
+    margin-top: 0.2rem;
+  }
+
+  .solver-shield-description {
+    display: none !important;
+  }
+
+  .solver-shield-inline-control {
+    gap: 0.35rem;
+  }
+
+  .solver-shield-inline-control input[type="number"] {
+    flex-basis: 3.4rem;
+  }
+
+  .solver-shield-inline-control input[type="range"] {
+    width: auto;
+    flex-basis: 0;
+  }
+
+  .solver-shield-equal {
+    gap: 0.25rem;
+  }
+
+  .solver-shield-orb-options {
+    gap: 0.2rem;
+  }
+
+  .solver-shield-orb-options button {
+    padding: 0.35rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .solver-app-header {
+    flex: 0 0 auto;
+  }
+
+  .solver-workspace {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-width: 1600px;
+    display: grid;
+    grid-template-columns: minmax(390px, 520px) minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "stats modes"
+      "board results"
+      "board settings"
+      "actions settings"
+      "export help";
+    gap: 0.65rem 0.8rem;
+    overflow: hidden;
+  }
+
+  .solver-mode-bar {
+    grid-area: modes;
+    align-self: start;
+  }
+
+  .solver-results-panel {
+    grid-area: results;
+    align-self: start;
+    height: 10.75rem;
+    max-height: none;
+    overflow: hidden;
+    padding: 0.35rem 0.5rem;
+  }
+
+  .solver-results-grid {
+    height: 100%;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 0.3rem;
+  }
+
+  .solver-result-card {
+    min-height: 0;
+    overflow: hidden;
+    padding: 0.4rem 0.55rem;
+    border-radius: 0.55rem;
+  }
+
+  .solver-result-card .mt-1 {
+    margin-top: 0.12rem;
+  }
+
+  .solver-result-card .text-sm {
+    font-size: 0.9rem;
+    line-height: 1.05rem;
+  }
+
+  .solver-result-card .text-xs {
+    font-size: 0.73rem;
+    line-height: 0.95rem;
+  }
+
+  .solver-result-card .text-\[11px\] {
+    font-size: 0.68rem;
+    line-height: 0.9rem;
+  }
+
+  .solver-stats-panel {
+    grid-area: stats;
+    align-self: stretch;
+  }
+
+  .solver-settings-panel {
+    grid-area: settings;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .solver-settings-panel--shield {
+    overflow-y: hidden;
+    scrollbar-gutter: auto;
+  }
+
+  .solver-settings-panel--rules {
+    overflow-y: hidden;
+    scrollbar-gutter: auto;
+  }
+
+  .solver-rule-requirement-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .solver-orb-rules-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .solver-orb-rule-stock {
+    align-items: center;
+    gap: 0.15rem;
+  }
+
+  .solver-orb-rule-stock > span:last-child {
+    white-space: nowrap;
+    text-align: right;
+    font-size: 0.68rem !important;
+    line-height: 0.85rem;
+    letter-spacing: -0.02em;
+  }
+
+  .solver-orb-rule-controls select {
+    width: 100%;
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+    font-size: 0.78rem;
+  }
+
+  .solver-shield-card-body {
+    height: 6.55rem;
+  }
+
+  .solver-settings-panel,
+  .solver-help-panel {
+    scrollbar-width: thin;
+    scrollbar-color: #525252 transparent;
+  }
+
+  .solver-settings-panel::-webkit-scrollbar,
+  .solver-help-panel::-webkit-scrollbar {
+    width: 7px;
+  }
+
+  .solver-settings-panel::-webkit-scrollbar-thumb,
+  .solver-help-panel::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: #525252;
+  }
+
+  .solver-settings-panel::-webkit-scrollbar-track,
+  .solver-help-panel::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .solver-timer-panel {
+    grid-area: results;
+    align-self: start;
+  }
+
+  .solver-board-panel {
+    grid-area: board;
+    align-self: center;
+    justify-self: center;
+    width: min(100%, 500px, calc(100dvh - 340px));
+    max-width: 500px !important;
+    margin: 0;
+  }
+
+  .solver-actions-panel {
+    grid-area: actions;
+    align-self: end;
+  }
+
+  .solver-actions-panel button {
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+  }
+
+  .solver-export-panel {
+    grid-area: export;
+    align-self: end;
+    margin: 0;
+  }
+
+  .solver-help-panel {
+    grid-area: help;
+    align-self: end;
+    max-height: 5.25rem;
+    overflow-y: auto;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.6rem;
+    line-height: 1.15;
+  }
+
+  .solver-help-panel strong.text-base,
+  .solver-help-panel a {
+    font-size: 0.65rem;
+  }
+
+  .solver-help-panel a {
+    margin-top: 0.2rem;
+  }
+
+  .solver-editor-overlay {
+    align-items: center;
+    padding: 0.5rem;
+  }
+
+  .solver-editor-dialog {
+    width: min(900px, calc(100vw - 1rem));
+    height: calc(100dvh - 1rem) !important;
+    max-width: 900px !important;
+    padding-top: 0.5rem;
+  }
+
+  .solver-editor-body {
+    padding: 0.75rem;
+  }
+
+  .solver-editor-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+    grid-template-rows: minmax(0, 1fr);
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .solver-editor-board {
+    width: min(100%, 430px, calc(100dvh - 190px));
+  }
+
+  .solver-editor-tools {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .solver-editor-orb-heading {
+    margin-bottom: 0.4rem;
+    font-size: 0.82rem;
+  }
+
+  .solver-editor-orbs {
+    width: fit-content;
+    grid-template-columns: repeat(3, 3.25rem);
+    gap: 0.65rem !important;
+    margin-bottom: 0.4rem !important;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .solver-editor-state-heading {
+    margin: 0.4rem 0 !important;
+  }
+
+  .solver-editor-state-heading p {
+    margin-top: 0.2rem;
+    font-size: 0.9rem;
+  }
+
+  .solver-editor-states {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.4rem !important;
+  }
+
+  .solver-editor-orbs button,
+  .solver-editor-states button {
+    width: 3.25rem !important;
+    height: 3.25rem !important;
+    border-radius: 0.9rem;
+  }
+
+  .solver-editor-footer {
+    padding: 0.6rem;
+  }
+
+  .solver-editor-footer > div {
+    gap: 0.5rem;
+  }
+
+  .solver-editor-footer button {
+    padding: 0.65rem 0.5rem !important;
+    border-radius: 0.8rem;
+    font-size: 0.88rem;
+  }
 }
 
 @keyframes neonFlicker {
@@ -22,4 +1095,3 @@ html, body, #root {
 .neon-link {
   animation: neonFlicker 2.5s infinite;
 }
-

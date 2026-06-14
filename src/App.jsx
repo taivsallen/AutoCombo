@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
+import { createPortal } from "react-dom";
 import { toCanvas } from "html-to-image";
 import ImportCropModal from "./ImportCropModal";
 import { convertTemplateBoardTo2D } from "./activeSkillTemplateData";
@@ -6,7 +7,7 @@ import ActiveSkillTemplateModal from "./ActiveSkillTemplateModal";
 import GIF from "gif.js.optimized";
 import gifWorkerUrl from "gif.js.optimized/dist/gif.worker.js?url";
 import gifsicle from "gifsicle-wasm-browser";
-import { Route, Sparkles, FileDown, Wrench, Play, Pause, Square, Zap, RefreshCw, Database, Activity, Target, BrainCircuit, Settings2, Sliders, Layers, Microscope, Binary, Timer, Unlink, AlignJustify, AlignCenterVertical, Columns, Rows, RotateCcw, Footprints, Trophy, Edit3, Check, X, Palette, Clock, Settings, Hourglass, Ruler, CloudLightning, MoveUpRight, Move, Lightbulb } from 'lucide-react';
+import { Sparkles, FileDown, Wrench, Play, Pause, Square, Zap, RefreshCw, Database, Activity, Target, BrainCircuit, Settings2, Sliders, Layers, Microscope, Binary, Timer, Unlink, AlignJustify, AlignCenterVertical, Footprints, Trophy, Edit3, Check, X, Palette, Clock, Hourglass, Ruler, CloudLightning, MoveUpRight, Move, Lightbulb } from 'lucide-react';
 
 import wImg from './assets/w.png';
 import fImg from './assets/f.png';
@@ -214,7 +215,7 @@ const DIRS_8 = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1,
 const BFS_DRS = [0, 0, 1, -1];
 const BFS_DCS = [1, -1, 0, 0];
 
-const EVAL_WORKER_SCRIPT_VERSION = "eval-worker-v4";
+const EVAL_WORKER_SCRIPT_VERSION = "eval-worker-v5";
 const EVAL_PARALLEL_SHARED = {
   scriptURL: null,
   scriptVersion: "",
@@ -287,6 +288,15 @@ const DEFAULT_CONFIG = {
   maxSteps: 30,      
   maxNodes: 50000,  
   evalWorkers: 1,
+  humanPlanner: true,
+  reversePlanner: true,
+  reverseMaxSteps: 60,
+  searchSeed: 0,
+  deferMoveMaterialization: true,
+  cheapLocalGuidance: true,
+  cheapLegacyReserve: 0.25,
+  cheapEvalScale: 2,
+  cheapEvalConstraintScale: 2.5,
   stepPenalty: 0,  
   potentialWeight: 10, 
   clearedWeight: 300,
@@ -361,7 +371,6 @@ function topKByScore(items, K, getScore) {
 
 const App = () => {
 
-const [specialPriorityGroupExpanded, setSpecialPriorityGroupExpanded] = useState(true);
 const ghostIdRef = useRef(0);
 
 const [hiddenBCell, setHiddenBCell] = useState(null);
@@ -405,6 +414,8 @@ const [solveProgress, setSolveProgress] = useState({
   max: 1,
   elapsedSec: 0,
 });
+const [devBenchRunning, setDevBenchRunning] = useState(false);
+const [devBenchOutput, setDevBenchOutput] = useState("");
 
 const solveProgressRawRef = useRef({
   current: 0,
@@ -414,7 +425,6 @@ const solveProgressRawRef = useRef({
 const solveStartTimeRef = useRef(0);
 const solveProgressTimerRef = useRef(null);
 
-const [pathsExpanded, setPathsExpanded] = useState(true);
 const [showTemplateBrowser, setShowTemplateBrowser] = useState(false);
 
 const [showTopBar, setShowTopBar] = useState(true);
@@ -485,7 +495,6 @@ const [specialPriorities, setSpecialPriorities] = useState([
 const [ruleProfile, setRuleProfile] = useState(() =>
   makeDefaultRuleProfile()
 );
-const [rulePanelExpanded, setRulePanelExpanded] = useState(false);
 
 const [specialPriorityExpanded, setSpecialPriorityExpanded] = useState([
   false,
@@ -502,9 +511,10 @@ const updateSpecialPriorityAt = (idx, patch) => {
 };
 
 const toggleSpecialPriorityExpanded = (idx) => {
-  setSpecialPriorityExpanded((prev) =>
-    prev.map((v, i) => (i === idx ? !v : v))
-  );
+  setSpecialPriorityExpanded((prev) => {
+    const shouldOpen = !prev[idx];
+    return prev.map((_, i) => i === idx && shouldOpen);
+  });
 };
 
 const markRuleProfileDirty = () => {
@@ -641,7 +651,6 @@ const [timeLeft, setTimeLeft] = useState(10); // ?拚???
 const [maxTime, setMaxTime] = useState(10); // 雿輻?身摰?蝮賣???
 const [manualActive, setManualActive] = useState(false); // 頧??臬撌脤?憪?
 	
-  const svgRectRef = useRef(null);
   const [stableCellSize, setStableCellSize] = useState(64);
   const exportTokenRef = useRef({ id: 0, cancelled: false });
   const [gifStage, setGifStage] = useState("capture"); // "capture" | "render"
@@ -912,11 +921,7 @@ const endEditorPaint = useCallback(() => {
 
   const measureCells = useCallback(() => {
 	  const root = boardInnerRef.current;
-	  const svg = overlayRef.current;
 	  if (!root) return;
-
-	  // ??cache svg rect嚗?閬?甈?getCellCenterPx ?賣銝甈∴?
-	  if (svg) svgRectRef.current = svg.getBoundingClientRect();
 
 	  const rects = Array.from({ length: TOTAL_ROWS }, () => Array(COLS).fill(null));
 
@@ -974,14 +979,14 @@ const endEditorPaint = useCallback(() => {
     verticalCombos: 0, 
     horizontalCombos: 0
   });
-  const GIF_FOOTER_H = 40;
+  const GIF_FOOTER_H = 28;
   const FLY_SPEED = 50;
   const [isReplaying, setIsReplaying] = useState(false);
   
   const [showConfig, setShowConfig] = useState(false);
-  const [showBasicSettings, setShowBasicSettings] = useState(true);
+  const [settingsTab, setSettingsTab] = useState("search");
 
-  const [solverMode, setSolverMode] = useState('vertical'); 
+  const solverMode = "vertical";
   const [priorityMode, setPriorityMode] = useState('steps'); 
   useEffect(() => {
   setConfig((prev) => {
@@ -1116,6 +1121,20 @@ const updateParam = (key, val) =>
 
   const solverConfig = React.useMemo(() => {
 	  const { replaySpeed, ...rest } = config; // ???播放?漲
+    const params =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search)
+        : null;
+    if (params?.get("solverBaseline") === "1") {
+      return {
+        ...rest,
+        deferMoveMaterialization: false,
+        cheapLocalGuidance: false,
+        cheapLegacyReserve: 0,
+        cheapEvalScale: 3.8,
+        cheapEvalConstraintScale: 4.6,
+      };
+    }
 	  return rest;
 	}, [config]);
 	
@@ -1451,13 +1470,14 @@ const getCellFromClientPoint = useCallback(
 
 // ?????潔葉敹???摨扳?嚗策頝臬?/ghost ?梁嚗?
 const getCellCenterPx = useCallback((r, c) => {
-	  const rc = cellRectsRef.current?.[r]?.[c];
-	  const svgRect = svgRectRef.current || overlayRef.current?.getBoundingClientRect();
-	  if (!rc || !svgRect) return { x: 0, y: 0 };
+	  const root = boardInnerRef.current;
+	  const cell = root?.querySelector(`[data-cell="${r}-${c}"]`);
+	  if (!root || !cell) return { x: 0, y: 0 };
 
-	  // ??頧? SVG ?批漣璅?
-	  const x = (rc.left + rc.right) / 2 - svgRect.left;
-	  const y = (rc.top + rc.bottom) / 2 - svgRect.top;
+	  const rootRect = root.getBoundingClientRect();
+	  const cellRect = cell.getBoundingClientRect();
+	  const x = (cellRect.left + cellRect.right) / 2 - rootRect.left;
+	  const y = (cellRect.top + cellRect.bottom) / 2 - rootRect.top;
 
 	  // ????撠?嚗?交?皛?subpixel ??
 	  return { x: Math.round(x), y: Math.round(y) };
@@ -2316,14 +2336,8 @@ if (allowDiagonal) {
 	  setShowImportCrop(true);
 	};
 
-  const resetBasic = () => {
-    setTargetCombos(stats.theoreticalMax);
-    setConfig(prev => ({ ...prev, replaySpeed: DEFAULT_CONFIG.replaySpeed, maxSteps: DEFAULT_CONFIG.maxSteps }));
-	solverCache.current.clear();
-  };
-
   const resetAdvanced = () => {
-    setConfig(prev => ({ ...prev, beamWidth: DEFAULT_CONFIG.beamWidth, maxNodes: DEFAULT_CONFIG.maxNodes, stepPenalty: DEFAULT_CONFIG.stepPenalty, potentialWeight: DEFAULT_CONFIG.potentialWeight, clearedWeight: DEFAULT_CONFIG.clearedWeight}));
+    setConfig(prev => ({ ...prev, beamWidth: DEFAULT_CONFIG.beamWidth, maxNodes: DEFAULT_CONFIG.maxNodes, humanPlanner: DEFAULT_CONFIG.humanPlanner, reversePlanner: DEFAULT_CONFIG.reversePlanner, reverseMaxSteps: DEFAULT_CONFIG.reverseMaxSteps, searchSeed: DEFAULT_CONFIG.searchSeed, deferMoveMaterialization: DEFAULT_CONFIG.deferMoveMaterialization, cheapLocalGuidance: DEFAULT_CONFIG.cheapLocalGuidance, cheapLegacyReserve: DEFAULT_CONFIG.cheapLegacyReserve, cheapEvalScale: DEFAULT_CONFIG.cheapEvalScale, cheapEvalConstraintScale: DEFAULT_CONFIG.cheapEvalConstraintScale, stepPenalty: DEFAULT_CONFIG.stepPenalty, potentialWeight: DEFAULT_CONFIG.potentialWeight, clearedWeight: DEFAULT_CONFIG.clearedWeight}));
     solverCache.current.clear();
   };
 
@@ -3411,8 +3425,17 @@ const hasInitialN2Clear = (board, toClear1D) => {
   }
   return false;
 };
-const getInitialMatchCheck = (board, ruleProfileLike = null) => {
-  const initial = findMatches(board, "initial", ruleProfileLike);
+const getInitialMatchCheck = (
+  board,
+  ruleProfileLike = null,
+  collectGroups = false
+) => {
+  const initial = findMatches(
+    board,
+    "initial",
+    ruleProfileLike,
+    collectGroups
+  );
   return {
     initial,
     violatesN2: hasInitialN2Clear(board, initial?.toClearMap),
@@ -3520,7 +3543,12 @@ const getFindMatchesScratch = (totalCells) => {
   return scratch;
 };
 
-const findMatches = (tempBoard, phase = "initial", ruleProfileLike = null) => {
+const findMatches = (
+  tempBoard,
+  phase = "initial",
+  ruleProfileLike = null,
+  collectGroups = false
+) => {
   let combos = 0,
     clearedCount = 0,
     vC = 0,
@@ -3538,6 +3566,7 @@ const findMatches = (tempBoard, phase = "initial", ruleProfileLike = null) => {
   const patternCounts = makePatternCounts();
   const comboCountsByOrb = makeComboCountsByOrb();
   const comboSizeCountsByOrb = makeComboSizeCountsByOrb();
+  const comboGroups = [];
 
   for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
     for (let c = 0; c < COLS; ) {
@@ -3676,6 +3705,10 @@ const findMatches = (tempBoard, phase = "initial", ruleProfileLike = null) => {
       visited[idx0] = 1;
 
       let groupSize = 0;
+      let minR = Infinity;
+      let maxR = -Infinity;
+      let minC = Infinity;
+      let maxC = -Infinity;
       const shapeCells = scratch.shapeCells;
       const groupCells = scratch.groupCells;
       const shapeCellPool = scratch.shapeCellPool;
@@ -3692,6 +3725,10 @@ const findMatches = (tempBoard, phase = "initial", ruleProfileLike = null) => {
 
         clearedCount++;
         groupSize++;
+        if (cr < minR) minR = cr;
+        if (cr > maxR) maxR = cr;
+        if (cc < minC) minC = cc;
+        if (cc > maxC) maxC = cc;
         let groupCell = groupCellPool[groupWrite];
         if (!groupCell) {
           groupCell = [0, 0];
@@ -3746,8 +3783,10 @@ const findMatches = (tempBoard, phase = "initial", ruleProfileLike = null) => {
           (comboSizeCountsByOrb[type][sizeKey] || 0) + 1;
       }
 
+      let exactShape = null;
       if (groupSize === 5) {
         const shape = detectExact5Shape(shapeCells);
+        exactShape = shape;
         if (shape === SHAPE_KIND.CROSS) {
           patternCounts.cross.total++;
           patternCounts.cross.byOrb[type]++;
@@ -3769,6 +3808,40 @@ const findMatches = (tempBoard, phase = "initial", ruleProfileLike = null) => {
           }
         }
       }
+
+      if (collectGroups) {
+        const cellIds = new Array(groupCells.length);
+        for (let i = 0; i < groupCells.length; i++) {
+          const cell = groupCells[i];
+          cellIds[i] = cell[0] * COLS + cell[1];
+        }
+        cellIds.sort((a, b) => a - b);
+        const relKey = cellIds
+          .map((id) => {
+            const r = Math.floor(id / COLS);
+            const c = id % COLS;
+            return `${r - minR},${c - minC}`;
+          })
+          .sort()
+          .join("|");
+
+        comboGroups.push({
+          orb: type,
+          size: groupSize,
+          cellIds,
+          cellMask: cellIds.join("."),
+          relKey,
+          minR,
+          maxR,
+          minC,
+          maxC,
+          centerR2: minR + maxR,
+          centerC2: minC + maxC,
+          hasH: hasHM,
+          hasV: hasVM,
+          shape: exactShape,
+        });
+      }
     }
   }
 
@@ -3781,6 +3854,7 @@ const findMatches = (tempBoard, phase = "initial", ruleProfileLike = null) => {
     patternCounts,
     comboCountsByOrb,
     comboSizeCountsByOrb,
+    groups: comboGroups,
   };
 };
 
@@ -4378,13 +4452,16 @@ const beamSolve = async (
 
     for (const req of compiledRuleRequirements) {
       const got = Number(countsByOrb?.[req.orb]?.[String(req.size)] || 0);
-      const missing = Math.max(0, req.count - got);
-      const done = missing <= 0 ? 1 : 0;
+      const distance =
+        req.match === "atLeast"
+          ? Math.max(0, req.count - got)
+          : Math.abs(req.count - got);
+      const done = distance === 0 ? 1 : 0;
 
       if (!done) allDone = 0;
       totalDone += Math.min(got, req.count);
-      totalMissing += missing;
-      tuple.push(done, -missing, Math.min(got, req.count));
+      totalMissing += distance;
+      tuple.push(done, -distance, Math.min(got, req.count));
     }
 
     return [allDone, totalDone, -totalMissing, ...tuple];
@@ -4395,7 +4472,11 @@ const beamSolve = async (
     const countsByOrb = ev?.initialComboSizeCountsByOrb;
     for (const req of compiledRuleRequirements) {
       const got = Number(countsByOrb?.[req.orb]?.[String(req.size)] || 0);
-      if (got < req.count) return false;
+      if (req.match === "atLeast") {
+        if (got < req.count) return false;
+      } else if (got !== req.count) {
+        return false;
+      }
     }
     return true;
   };
@@ -4411,9 +4492,120 @@ const beamSolve = async (
   const evalWorkerCount = Math.min(requestedEvalWorkers, maxHwWorkers);
   const enableParallelEval =
     evalWorkerCount > 1 && typeof Worker !== "undefined";
+  const hasMarkedBoardCells = originalBoard.some((row) =>
+    row.some(
+      (cell) =>
+        xMarkOf(cell) !== 0 || qMarkOf(cell) !== 0 || nMarkOf(cell) !== 0
+    )
+  );
+  const hasNonStandardMinClear = ruleRuntimeCtx.minClearByOrb.some(
+    (minClear) => minClear !== 3
+  );
+  const REVERSE_PLAN_ENABLED =
+    cfg.reversePlanner !== false &&
+    !useRow0 &&
+    !hasMarkedBoardCells &&
+    !hasSpecial &&
+    !hasRuleRequirements &&
+    !hasNonStandardMinClear;
+  const REVERSE_MAX_STEPS = Math.max(
+    1,
+    Math.min(60, Math.floor(Number(cfg.reverseMaxSteps) || 60))
+  );
+  const solverMaxSteps = Math.max(1, Math.floor(Number(cfg.maxSteps) || 1));
+  const REVERSE_TARGET_LIMIT = REVERSE_PLAN_ENABLED ? 10 : 0;
+  const DEFER_MOVE_MATERIALIZATION =
+    cfg.deferMoveMaterialization !== false;
+  const CHEAP_EVAL_SCALE = Math.max(
+    1,
+    Number(cfg.cheapEvalScale) || 3.8
+  );
+  const CHEAP_EVAL_CONSTRAINT_SCALE = Math.max(
+    1,
+    Number(cfg.cheapEvalConstraintScale) || 4.6
+  );
+  const CHEAP_LOCAL_GUIDANCE =
+    cfg.cheapLocalGuidance === true && priority !== "steps";
+  const rawCheapLegacyReserve = Number(cfg.cheapLegacyReserve);
+  const CHEAP_LEGACY_RESERVE = Math.max(
+    0,
+    Math.min(
+      0.6,
+      Number.isFinite(rawCheapLegacyReserve) ? rawCheapLegacyReserve : 0.25
+    )
+  );
+  const SHOULD_YIELD_TO_BROWSER = cfg.browserYield !== false;
+  const boardSeed = Number.parseInt(getBoardKey(originalBoard).slice(0, 8), 16);
+  let searchRandomState =
+    ((Number(cfg.searchSeed) >>> 0) ^ (boardSeed >>> 0) ^ 0x9e3779b9) >>> 0;
+  if (searchRandomState === 0) searchRandomState = 0x6d2b79f5;
+  const searchRandom = () => {
+    searchRandomState ^= searchRandomState << 13;
+    searchRandomState ^= searchRandomState >>> 17;
+    searchRandomState ^= searchRandomState << 5;
+    return (searchRandomState >>> 0) / 4294967296;
+  };
 
   const IS_STEP_MODE = priority === "steps";
   const IS_COMBO_MODE = priority !== "steps";
+
+  const getCheapTerminalMovePotential = (state, nr, nc) => {
+    if (!state?.board) return 0;
+
+    const destVal = state.board[nr]?.[nc];
+    if (!Number.isFinite(destVal) || destVal < 0) return 0;
+
+    const holeR = state.hole?.r ?? -1;
+    const holeC = state.hole?.c ?? -1;
+    const enteringFromRow0 = state.r === 0;
+    const virtualCell = (r, c) => {
+      if (r < PLAY_ROWS_START || r >= TOTAL_ROWS || c < 0 || c >= COLS) {
+        return -1;
+      }
+      if (r === nr && c === nc) return state.held;
+      if (!enteringFromRow0 && r === holeR && c === holeC) return destVal;
+      return state.board[r][c];
+    };
+    const scoreCell = (r, c) => {
+      if (r < PLAY_ROWS_START || r >= TOTAL_ROWS || c < 0 || c >= COLS) {
+        return 0;
+      }
+      const orb = getOrbForMatchPhase(virtualCell(r, c), "initial");
+      if (orb < 0) return 0;
+
+      let score = 0;
+      for (const [dr, dc] of [
+        [0, 1],
+        [1, 0],
+      ]) {
+        let run = 1;
+        for (const sign of [-1, 1]) {
+          let rr = r + dr * sign;
+          let cc = c + dc * sign;
+          while (
+            rr >= PLAY_ROWS_START &&
+            rr < TOTAL_ROWS &&
+            cc >= 0 &&
+            cc < COLS &&
+            getOrbForMatchPhase(virtualCell(rr, cc), "initial") === orb
+          ) {
+            run++;
+            rr += dr * sign;
+            cc += dc * sign;
+          }
+        }
+        if (run >= 3) score += 360 + (run - 3) * 90;
+        else if (run === 2) score += 55;
+      }
+      return score;
+    };
+
+    let score = scoreCell(nr, nc);
+    if (!enteringFromRow0 && (holeR !== nr || holeC !== nc)) {
+      score += scoreCell(holeR, holeC);
+    }
+    return score;
+  };
 
   // Progressive beam schedule: early fast -> middle balanced -> late wider.
   const beamSchedule = (() => {
@@ -4459,10 +4651,16 @@ const beamSolve = async (
     s += (ev.clearedCount || 0) * 8;
     s -= (ev.initialComboDistance || 0) * 70;
     s -= nextLocked ? 220 : 0;
-
     if (q2Pos) {
       const d = Math.abs(nr - q2Pos.r) + Math.abs(nc - q2Pos.c);
       s -= d * 16;
+    }
+
+    if (HUMAN_PLAN_ENABLED && state?.humanPlan) {
+      s += getHumanCheapMoveBias(
+        state.humanPlan,
+        makeHumanMoveCtx(state.r, state.c, nr, nc, "cheap")
+      );
     }
 
     // Small step bias: earlier layers keep slightly broader exploration.
@@ -4470,6 +4668,18 @@ const beamSolve = async (
 
     return s;
   };
+
+  const getGuidedMoveCheapScore = (
+    state,
+    nr,
+    nc,
+    nextLocked,
+    step
+  ) =>
+    getMoveCheapScore(state, nr, nc, nextLocked, step) +
+    (CHEAP_LOCAL_GUIDANCE
+      ? getCheapTerminalMovePotential(state, nr, nc)
+      : 0);
 
   const pickCheapTopMoves = (moves, limit, perSigCap = 2) => {
     if (!Array.isArray(moves) || moves.length === 0) return [];
@@ -4491,7 +4701,7 @@ const beamSolve = async (
       for (let i = 0; i < sorted.length && out.length < limit; i++) {
         const mv = sorted[i];
         if (out.includes(mv)) continue;
-        if (Math.random() < 0.03) out.push(mv);
+        if (searchRandom() < 0.03) out.push(mv);
       }
     }
 
@@ -4499,7 +4709,7 @@ const beamSolve = async (
   };
 
   const depthMilestones = (() => {
-    const maxSteps = Math.max(1, Number(cfg.maxSteps) || 1);
+    const maxSteps = solverMaxSteps;
     const d1 = Math.max(1, Math.min(maxSteps, Math.ceil(maxSteps * 0.35)));
     const d2 = Math.max(d1, Math.min(maxSteps, Math.ceil(maxSteps * 0.7)));
 
@@ -4530,7 +4740,16 @@ const beamSolve = async (
 
     let budget = Math.max(
       beamWidth + 48,
-      Math.floor(beamWidth * (specialDriven ? 4.6 : 3.8))
+      Math.floor(
+        beamWidth *
+          (priority === "steps"
+            ? specialDriven
+              ? 4.6
+              : 3.8
+            : specialDriven
+              ? CHEAP_EVAL_CONSTRAINT_SCALE
+              : CHEAP_EVAL_SCALE)
+      )
     );
 
     if (stagnantRounds >= 2) budget = Math.floor(budget * 1.35);
@@ -4601,6 +4820,43 @@ const beamSolve = async (
     return out;
   };
 
+  const pickCheapPortfolioMoves = (moves, limit) => {
+    if (!CHEAP_LOCAL_GUIDANCE || CHEAP_LEGACY_RESERVE <= 0) {
+      return pickCheapTopMoves(moves, limit, 2);
+    }
+
+    const guidedLimit = Math.max(
+      1,
+      Math.min(limit, Math.round(limit * (1 - CHEAP_LEGACY_RESERVE)))
+    );
+    const out = pickCheapTopMoves(moves, guidedLimit, 2);
+    const picked = new Set(out);
+    const legacySorted = [...moves].sort(
+      (a, b) => b.legacyCheapScore - a.legacyCheapScore
+    );
+
+    for (const mv of legacySorted) {
+      if (out.length >= limit) break;
+      if (picked.has(mv)) continue;
+      out.push(mv);
+      picked.add(mv);
+    }
+
+    if (out.length < limit) {
+      const guidedSorted = [...moves].sort(
+        (a, b) => b.cheapScore - a.cheapScore
+      );
+      for (const mv of guidedSorted) {
+        if (out.length >= limit) break;
+        if (picked.has(mv)) continue;
+        out.push(mv);
+        picked.add(mv);
+      }
+    }
+
+    return out;
+  };
+
   const stepsOf = (node) => Math.max(0, (node?.len || 0) - 1);
 
   const toNum = (v, d = 0) => {
@@ -4622,6 +4878,923 @@ const beamSolve = async (
     cfg.comboStepSlack ?? cfg.comboSlack,
     1
   );
+
+  const HUMAN_PLAN_ENABLED = cfg.humanPlanner !== false;
+  const HUMAN_TOTAL_PLAY_CELLS = Math.max(
+    1,
+    (TOTAL_ROWS - PLAY_ROWS_START) * COLS
+  );
+  const HUMAN_MAX_LOCKED_GROUPS = Math.max(
+    1,
+    Math.min(12, Math.max(Number(target) || 1, Number(initTargetCombo) || 1))
+  );
+  const HUMAN_GROUP_MATCH_MIN_SCORE = 90;
+  const HUMAN_RECOVERY_GRACE_STEPS = 2;
+
+  const humanCellId = (r, c) => r * COLS + c;
+
+  const humanCellIdsInclude = (ids, id) => {
+    if (!Array.isArray(ids)) return false;
+    for (let i = 0; i < ids.length; i++) {
+      if (ids[i] === id) return true;
+    }
+    return false;
+  };
+
+  const countHumanCellOverlap = (aIds, bIds) => {
+    if (!Array.isArray(aIds) || !Array.isArray(bIds)) return 0;
+    let i = 0;
+    let j = 0;
+    let count = 0;
+
+    while (i < aIds.length && j < bIds.length) {
+      const a = aIds[i];
+      const b = bIds[j];
+      if (a === b) {
+        count++;
+        i++;
+        j++;
+      } else if (a < b) {
+        i++;
+      } else {
+        j++;
+      }
+    }
+
+    return count;
+  };
+
+  const normalizeHumanGroup = (rawGroup, id = "", lockedAtStep = 0) => {
+    if (
+      rawGroup &&
+      Array.isArray(rawGroup.cellIds) &&
+      rawGroup.cellIds.length >= 3 &&
+      typeof rawGroup.cellMask === "string" &&
+      typeof rawGroup.relKey === "string"
+    ) {
+      return {
+        id,
+        orb: clampIntRange(rawGroup.orb, 0, 7, 0),
+        size: rawGroup.size || rawGroup.cellIds.length,
+        cellIds: rawGroup.cellIds,
+        cellMask: rawGroup.cellMask,
+        relKey: rawGroup.relKey,
+        minR: rawGroup.minR,
+        maxR: rawGroup.maxR,
+        minC: rawGroup.minC,
+        maxC: rawGroup.maxC,
+        centerR2: rawGroup.centerR2,
+        centerC2: rawGroup.centerC2,
+        hasH: !!rawGroup.hasH,
+        hasV: !!rawGroup.hasV,
+        shape: rawGroup.shape || null,
+        lockedAtStep,
+        missingAge: 0,
+        carryAge: 0,
+      };
+    }
+
+    if (!rawGroup || !Array.isArray(rawGroup.cells)) return null;
+
+    const cells = [];
+    for (const cell of rawGroup.cells) {
+      if (!Array.isArray(cell) || cell.length < 2) continue;
+      const r = Number(cell[0]);
+      const c = Number(cell[1]);
+      if (
+        !Number.isInteger(r) ||
+        !Number.isInteger(c) ||
+        r < PLAY_ROWS_START ||
+        r >= TOTAL_ROWS ||
+        c < 0 ||
+        c >= COLS
+      ) {
+        continue;
+      }
+      cells.push([r, c]);
+    }
+
+    if (cells.length < 3) return null;
+
+    cells.sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
+
+    let minR = Infinity;
+    let maxR = -Infinity;
+    let minC = Infinity;
+    let maxC = -Infinity;
+    for (const [r, c] of cells) {
+      if (r < minR) minR = r;
+      if (r > maxR) maxR = r;
+      if (c < minC) minC = c;
+      if (c > maxC) maxC = c;
+    }
+
+    const cellIds = cells.map(([r, c]) => humanCellId(r, c)).sort((a, b) => a - b);
+    const relKey = cells
+      .map(([r, c]) => `${r - minR},${c - minC}`)
+      .sort()
+      .join("|");
+    const cellMask = cellIds.join(".");
+    const orb = clampIntRange(rawGroup.orb, 0, 7, 0);
+
+    return {
+      id,
+      orb,
+      size: cells.length,
+      cells,
+      cellIds,
+      cellMask,
+      relKey,
+      minR,
+      maxR,
+      minC,
+      maxC,
+      centerR2: minR + maxR,
+      centerC2: minC + maxC,
+      hasH: !!rawGroup.hasH,
+      hasV: !!rawGroup.hasV,
+      shape: rawGroup.shape || null,
+      lockedAtStep,
+      missingAge: 0,
+      carryAge: 0,
+    };
+  };
+
+  const scoreHumanGroupBuild = (group) => {
+    if (!group) return -Infinity;
+
+    const width = group.maxC - group.minC + 1;
+    const height = group.maxR - group.minR + 1;
+    const area = width * height;
+    let score = 0;
+
+    score += group.size === 3 ? 130 : Math.min(group.size, 8) * 20;
+    score -= Math.max(0, group.size - 3) * 8;
+    score -= Math.max(0, area - group.size) * 12;
+    score += (group.maxR - PLAY_ROWS_START) * 13;
+    score += group.maxR === TOTAL_ROWS - 1 ? 18 : 0;
+    score += group.minC === 0 || group.maxC === COLS - 1 ? 10 : 0;
+
+    if (mode === "vertical") {
+      score += group.hasV ? 30 : 0;
+      score += height * 3;
+    } else if (mode === "horizontal") {
+      score += group.hasH ? 30 : 0;
+      score += width * 3;
+    } else {
+      score += group.hasH || group.hasV ? 18 : 0;
+    }
+
+    if (group.shape) score += 16;
+    return score;
+  };
+
+  const getInitialHumanGroups = (initial) => {
+    if (!HUMAN_PLAN_ENABLED || !Array.isArray(initial?.groups)) return [];
+
+    const groups = [];
+    for (let i = 0; i < initial.groups.length; i++) {
+      const group = normalizeHumanGroup(initial.groups[i], "", 0);
+      if (!group) continue;
+      group.buildScore = scoreHumanGroupBuild(group);
+      groups.push(group);
+    }
+
+    groups.sort((a, b) => b.buildScore - a.buildScore);
+    return groups;
+  };
+
+  const scoreHumanGroupMatch = (locked, candidate) => {
+    if (!locked || !candidate || locked.orb !== candidate.orb) return -Infinity;
+
+    const overlap = countHumanCellOverlap(locked.cellIds, candidate.cellIds);
+    const sameShape = locked.relKey === candidate.relKey;
+    const sameCells = locked.cellMask === candidate.cellMask;
+    const sizeDiff = Math.abs((locked.size || 0) - (candidate.size || 0));
+    const dist2 =
+      Math.abs((locked.centerR2 || 0) - (candidate.centerR2 || 0)) +
+      Math.abs((locked.centerC2 || 0) - (candidate.centerC2 || 0));
+
+    let score = overlap * 58;
+    if (sameShape) score += 150;
+    if (sameCells) score += 120;
+    if (locked.shape && locked.shape === candidate.shape) score += 24;
+    if (overlap >= Math.min(3, locked.size || 0, candidate.size || 0)) {
+      score += 56;
+    }
+    score -= sizeDiff * 18;
+    score -= dist2 * 10;
+
+    return score;
+  };
+
+  const makeHumanGroupId = (group, steps) =>
+    `${steps}:${group.orb}:${group.relKey}:${group.cellMask}`;
+
+  const matchHumanLockedGroups = (previousGroups, currentGroups, steps) => {
+    const usedCurrent = new Set();
+    const nextGroups = [];
+    const metrics = {
+      preserved: 0,
+      moved: 0,
+      damaged: 0,
+      dropped: 0,
+    };
+
+    for (const locked of previousGroups || []) {
+      if (!locked) continue;
+
+      let bestIdx = -1;
+      let bestScore = -Infinity;
+
+      for (let i = 0; i < currentGroups.length; i++) {
+        if (usedCurrent.has(i)) continue;
+        const score = scoreHumanGroupMatch(locked, currentGroups[i]);
+        if (score > bestScore) {
+          bestScore = score;
+          bestIdx = i;
+        }
+      }
+
+      if (bestIdx >= 0 && bestScore >= HUMAN_GROUP_MATCH_MIN_SCORE) {
+        const matched = currentGroups[bestIdx];
+        const moved = matched.cellMask !== locked.cellMask;
+        usedCurrent.add(bestIdx);
+        nextGroups.push({
+          ...matched,
+          id: locked.id || makeHumanGroupId(matched, steps),
+          lockedAtStep: locked.lockedAtStep ?? steps,
+          missingAge: 0,
+          carryAge: moved ? Math.min(99, (locked.carryAge || 0) + 1) : 0,
+          matchScore: bestScore,
+        });
+        metrics.preserved++;
+        if (moved) metrics.moved++;
+        continue;
+      }
+
+      const missingAge = Math.min(99, (locked.missingAge || 0) + 1);
+      metrics.damaged++;
+
+      if (missingAge <= HUMAN_RECOVERY_GRACE_STEPS) {
+        nextGroups.push({
+          ...locked,
+          missingAge,
+          carryAge: Math.min(99, (locked.carryAge || 0) + 1),
+        });
+      } else {
+        metrics.dropped++;
+      }
+    }
+
+    return { groups: nextGroups, usedCurrent, metrics };
+  };
+
+  const humanGroupOverlapsAny = (group, groups) => {
+    for (const other of groups || []) {
+      if (!other || other.missingAge > 0) continue;
+      if (countHumanCellOverlap(group.cellIds, other.cellIds) > 0) return true;
+    }
+    return false;
+  };
+
+  const pickNewHumanGroups = (
+    currentGroups,
+    usedCurrent,
+    lockedGroups,
+    steps,
+    limit
+  ) => {
+    if (limit <= 0) return [];
+
+    const out = [];
+    const existing = lockedGroups || [];
+
+    for (let i = 0; i < currentGroups.length && out.length < limit; i++) {
+      if (usedCurrent.has(i)) continue;
+      const group = currentGroups[i];
+      if (!group || group.size < 3) continue;
+      if (humanGroupOverlapsAny(group, existing)) continue;
+      if (humanGroupOverlapsAny(group, out)) continue;
+
+      out.push({
+        ...group,
+        id: makeHumanGroupId(group, steps),
+        lockedAtStep: steps,
+        missingAge: 0,
+        carryAge: 0,
+      });
+    }
+
+    return out;
+  };
+
+  const collectHumanProtectedCellIds = (groups) => {
+    const set = new Set();
+    for (const group of groups || []) {
+      if (!group || group.missingAge > 0) continue;
+      for (const id of group.cellIds || []) set.add(id);
+    }
+    return [...set].sort((a, b) => a - b);
+  };
+
+  const makeHumanMoveCtx = (fromR, fromC, toR, toC, kind = "move") => ({
+    fromR,
+    fromC,
+    toR,
+    toC,
+    fromId:
+      Number.isInteger(fromR) && Number.isInteger(fromC)
+        ? humanCellId(fromR, fromC)
+        : -1,
+    toId:
+      Number.isInteger(toR) && Number.isInteger(toC)
+        ? humanCellId(toR, toC)
+        : -1,
+    kind,
+  });
+
+  const countHumanProtectedMoveTouches = (plan, moveCtx) => {
+    if (!plan || !moveCtx || !Array.isArray(plan.protectedCellIds)) return 0;
+    const seen = new Set();
+    if (moveCtx.fromId >= 0) seen.add(moveCtx.fromId);
+    if (moveCtx.toId >= 0) seen.add(moveCtx.toId);
+
+    let touches = 0;
+    for (const id of seen) {
+      if (humanCellIdsInclude(plan.protectedCellIds, id)) touches++;
+    }
+    return touches;
+  };
+
+  const buildHumanPlanSignature = (lockedGroups, protectedCellIds) => {
+    const groupPart = (lockedGroups || [])
+      .map(
+        (group) =>
+          `${group.orb}:${group.relKey}:${group.cellMask}:${group.missingAge || 0}`
+      )
+      .sort()
+      .join(";");
+    return `${protectedCellIds.join(".")}|${groupPart}`;
+  };
+
+  const advanceHumanPlan = (parentPlan, initial, moveCtx, steps) => {
+    const currentGroups = getInitialHumanGroups(initial);
+    const previousGroups = Array.isArray(parentPlan?.lockedGroups)
+      ? parentPlan.lockedGroups
+      : [];
+    const matched = matchHumanLockedGroups(previousGroups, currentGroups, steps);
+    const presentBeforeAdd = matched.groups.filter(
+      (group) => group && group.missingAge <= 0
+    ).length;
+    const addLimit = Math.max(
+      0,
+      Math.min(
+        previousGroups.length === 0 ? 2 : 1,
+        HUMAN_MAX_LOCKED_GROUPS - presentBeforeAdd
+      )
+    );
+    const newGroups = pickNewHumanGroups(
+      currentGroups,
+      matched.usedCurrent,
+      matched.groups,
+      steps,
+      addLimit
+    );
+    let lockedGroups = [...matched.groups, ...newGroups];
+
+    lockedGroups.sort((a, b) => {
+      const am = a.missingAge || 0;
+      const bm = b.missingAge || 0;
+      if (am !== bm) return am - bm;
+      const al = a.lockedAtStep ?? 0;
+      const bl = b.lockedAtStep ?? 0;
+      if (al !== bl) return al - bl;
+      return (b.buildScore || 0) - (a.buildScore || 0);
+    });
+
+    if (lockedGroups.length > HUMAN_MAX_LOCKED_GROUPS) {
+      lockedGroups = lockedGroups.slice(0, HUMAN_MAX_LOCKED_GROUPS);
+    }
+
+    const protectedCellIds = collectHumanProtectedCellIds(lockedGroups);
+    const presentCount = lockedGroups.filter(
+      (group) => group && group.missingAge <= 0
+    ).length;
+    const missingCount = lockedGroups.length - presentCount;
+    const protectedTouches = countHumanProtectedMoveTouches(parentPlan, moveCtx);
+    const toProtected =
+      moveCtx?.toId >= 0 &&
+      humanCellIdsInclude(parentPlan?.protectedCellIds, moveCtx.toId);
+    const activeCells = Math.max(
+      0,
+      HUMAN_TOTAL_PLAY_CELLS - protectedCellIds.length
+    );
+
+    let scoreBias = 0;
+    scoreBias += presentCount * 115000;
+    scoreBias += newGroups.length * 165000;
+    scoreBias += matched.metrics.preserved * 46000;
+    scoreBias += matched.metrics.moved * 42000;
+    scoreBias += Math.min(18, protectedCellIds.length) * 8500;
+    scoreBias -= missingCount * 170000;
+    scoreBias -= matched.metrics.damaged * 210000;
+    scoreBias -= matched.metrics.dropped * 340000;
+
+    if (protectedTouches > 0) {
+      const brokeGroup = matched.metrics.damaged > 0 || missingCount > 0;
+      scoreBias -= protectedTouches * (brokeGroup ? 230000 : 52000);
+      if (!brokeGroup && matched.metrics.moved > 0) scoreBias += 76000;
+    } else if (presentCount > 0 && moveCtx) {
+      scoreBias += Math.min(72000, presentCount * 13000);
+    }
+
+    if (toProtected) scoreBias -= 42000;
+
+    const rankTuple = [
+      presentCount,
+      -missingCount,
+      newGroups.length,
+      matched.metrics.preserved,
+      matched.metrics.moved,
+      -protectedTouches,
+      protectedCellIds.length,
+      -activeCells,
+      Math.floor(scoreBias / 1000),
+    ];
+    const sig = buildHumanPlanSignature(lockedGroups, protectedCellIds);
+
+    return {
+      lockedGroups,
+      protectedCellIds,
+      presentCount,
+      missingCount,
+      activeCells,
+      protectedTouches,
+      scoreBias,
+      rankTuple,
+      searchSig: sig || "empty",
+      familySig: `${presentCount}:${missingCount}:${protectedCellIds.join(".")}`,
+    };
+  };
+
+  const applyHumanPlanToEvalResult = (
+    res,
+    parentHumanPlan,
+    moveCtx,
+    steps
+  ) => {
+    if (!res) return null;
+    if (!HUMAN_PLAN_ENABLED) return { ...res, humanPlan: null };
+
+    const humanPlan = advanceHumanPlan(
+      parentHumanPlan,
+      res.extraCtx?.initial,
+      moveCtx,
+      steps
+    );
+    const ev = {
+      ...res.ev,
+      humanLockedGroups: humanPlan.presentCount,
+      humanProtectedCells: humanPlan.protectedCellIds.length,
+      humanPlanScore: humanPlan.scoreBias,
+    };
+
+    return {
+      ...res,
+      ev,
+      score: res.score + humanPlan.scoreBias,
+      visitedTuple: res.visitedTuple,
+      finalRankTuple: res.finalRankTuple,
+      humanPlan,
+    };
+  };
+
+  const getHumanCheapMoveBias = (plan, moveCtx) => {
+    if (!HUMAN_PLAN_ENABLED || !plan || !moveCtx) return 0;
+    const touches = countHumanProtectedMoveTouches(plan, moveCtx);
+    if (touches > 0) return -190 * touches;
+    if ((plan.presentCount || 0) <= 0) return 0;
+    return Math.min(90, (plan.presentCount || 0) * 18);
+  };
+
+  const cloneBoardOrbsOnly = (boardLike) => {
+    const out = clone2D(boardLike);
+    for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const orb = orbOf(out[r][c]);
+        out[r][c] = orb >= 0 ? orb : -1;
+      }
+    }
+    return out;
+  };
+
+  const getReverseOrbStock = () => {
+    const counts = Array(6).fill(0);
+    for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const orb = orbOf(originalBoard[r]?.[c]);
+        if (orb >= 0 && orb < counts.length) counts[orb]++;
+      }
+    }
+    return counts;
+  };
+
+  const getReverseFillPositions = (variant = 0) => {
+    const rows = [];
+    for (let r = TOTAL_ROWS - 1; r >= PLAY_ROWS_START; r--) rows.push(r);
+    if (variant % 2 === 1) rows.reverse();
+
+    const cols = [];
+    for (let c = 0; c < COLS; c++) cols.push(c);
+    if (variant % 3 === 1) cols.reverse();
+    if (variant % 3 === 2 && cols.length > 0) {
+      const first = cols.shift();
+      cols.push(first);
+    }
+
+    const positions = [];
+    for (const r of rows) {
+      for (const c of cols) positions.push([r, c]);
+    }
+    return positions;
+  };
+
+  const getReverseGroupSlots = (orientation, variant = 0) => {
+    const slots = [];
+
+    if (orientation === "vertical") {
+      const cols = [];
+      for (let c = 0; c < COLS; c++) cols.push(c);
+      if (variant % 2 === 1) cols.reverse();
+
+      for (const c of cols) {
+        for (let r = TOTAL_ROWS - 3; r >= PLAY_ROWS_START; r -= 3) {
+          slots.push([
+            [r, c],
+            [r + 1, c],
+            [r + 2, c],
+          ]);
+        }
+      }
+      return slots;
+    }
+
+    if (orientation === "horizontal") {
+      const rows = [];
+      for (let r = TOTAL_ROWS - 1; r >= PLAY_ROWS_START; r--) rows.push(r);
+      if (variant % 2 === 1) rows.reverse();
+
+      for (const r of rows) {
+        for (let c = 0; c <= COLS - 3; c += 3) {
+          slots.push([
+            [r, c],
+            [r, c + 1],
+            [r, c + 2],
+          ]);
+        }
+      }
+      return slots;
+    }
+
+    const first =
+      variant % 2 === 0
+        ? getReverseGroupSlots("horizontal", variant)
+        : getReverseGroupSlots("vertical", variant);
+    const second =
+      variant % 2 === 0
+        ? getReverseGroupSlots("vertical", variant + 1)
+        : getReverseGroupSlots("horizontal", variant + 1);
+    return [...first, ...second];
+  };
+
+  const getReverseNeighborPenalty = (board, cells, orb) => {
+    let penalty = 0;
+    const own = new Set(cells.map(([r, c]) => `${r},${c}`));
+
+    for (const [r, c] of cells) {
+      for (let i = 0; i < 4; i++) {
+        const nr = r + BFS_DRS[i];
+        const nc = c + BFS_DCS[i];
+        if (
+          nr < PLAY_ROWS_START ||
+          nr >= TOTAL_ROWS ||
+          nc < 0 ||
+          nc >= COLS ||
+          own.has(`${nr},${nc}`)
+        ) {
+          continue;
+        }
+        if (orbOf(board[nr][nc]) === orb) penalty++;
+      }
+    }
+
+    return penalty;
+  };
+
+  const pickReverseGroupOrb = (board, counts, cells, orbOrder) => {
+    let bestOrb = -1;
+    let bestScore = -Infinity;
+
+    for (const orb of orbOrder) {
+      if ((counts[orb] || 0) < 3) continue;
+      const neighborPenalty = getReverseNeighborPenalty(board, cells, orb);
+      const score = counts[orb] * 12 - neighborPenalty * 18;
+      if (score > bestScore) {
+        bestScore = score;
+        bestOrb = orb;
+      }
+    }
+
+    return bestOrb;
+  };
+
+  const placeReverseGroups = (board, counts, slots, orbOrder, maxGroups) => {
+    let placed = 0;
+
+    for (const cells of slots) {
+      if (placed >= maxGroups) break;
+      let open = true;
+      for (const [r, c] of cells) {
+        if (board[r][c] !== -1) {
+          open = false;
+          break;
+        }
+      }
+      if (!open) continue;
+
+      const orb = pickReverseGroupOrb(board, counts, cells, orbOrder);
+      if (orb < 0) continue;
+
+      for (const [r, c] of cells) board[r][c] = orb;
+      counts[orb] -= 3;
+      placed++;
+    }
+
+    return placed;
+  };
+
+  const scoreReverseRemainderOrb = (board, r, c, orb, counts) => {
+    let score = counts[orb] || 0;
+
+    if (c >= 2 && orbOf(board[r][c - 1]) === orb && orbOf(board[r][c - 2]) === orb) {
+      score -= 80;
+    }
+    if (
+      r >= PLAY_ROWS_START + 2 &&
+      orbOf(board[r - 1][c]) === orb &&
+      orbOf(board[r - 2][c]) === orb
+    ) {
+      score -= 80;
+    }
+    if (c >= 1 && orbOf(board[r][c - 1]) === orb) score -= 8;
+    if (r >= PLAY_ROWS_START + 1 && orbOf(board[r - 1][c]) === orb) score -= 8;
+
+    return score;
+  };
+
+  const fillReverseRemainders = (board, counts, positions) => {
+    for (const [r, c] of positions) {
+      if (board[r][c] !== -1) continue;
+
+      let bestOrb = -1;
+      let bestScore = -Infinity;
+      for (let orb = 0; orb < counts.length; orb++) {
+        if ((counts[orb] || 0) <= 0) continue;
+        const score = scoreReverseRemainderOrb(board, r, c, orb, counts);
+        if (score > bestScore) {
+          bestScore = score;
+          bestOrb = orb;
+        }
+      }
+
+      if (bestOrb < 0) break;
+      board[r][c] = bestOrb;
+      counts[bestOrb]--;
+    }
+  };
+
+  const makeReverseTargetPlanFromBoard = (targetBoard, variantKey) => {
+    const { initial, violatesN2 } = getInitialMatchCheck(
+      targetBoard,
+      ruleRuntimeCtx,
+      false
+    );
+    const evRaw = evaluateBoard(targetBoard, skyfall, initial, ruleRuntimeCtx);
+    const initInfo = extractInitialInfo(initial, evRaw);
+    const ev = {
+      ...evRaw,
+      initialCombos: toNum(
+        evRaw?.initialCombos ?? evRaw?.initCombos ?? initInfo.combos,
+        initInfo.combos
+      ),
+      initialClearedCount: toNum(
+        evRaw?.initialClearedCount ??
+          evRaw?.initClearedCount ??
+          evRaw?.initialCleared ??
+          initInfo.cleared,
+        initInfo.cleared
+      ),
+      initialMatchSizes: initInfo.matchSizes,
+      initialComboSizes: initInfo.matchSizes,
+      initialAllEqual: initInfo.allEqual,
+      initialDistinctSizeCount: initInfo.distinctSizeCount,
+    };
+    ev.ruleRequirementTuple = getRuleRequirementTuple(ev);
+
+    const extraCtx = {
+      initial,
+      initialCombos: ev.initialCombos,
+      initialClearedCount: ev.initialClearedCount,
+      initialMatchSizes: ev.initialMatchSizes,
+      initialComboSizes: ev.initialComboSizes,
+      initialAllEqual: ev.initialAllEqual,
+      initialDistinctSizeCount: ev.initialDistinctSizeCount,
+    };
+    const specialTuple = hasSpecial
+      ? getSpecialPriorityTupleCompiled(ev, compiledSpecials, extraCtx)
+      : EMPTY_SPECIAL_TUPLE;
+    const initComboInfo = getInitialComboInfo(ev);
+    const solved = !violatesN2 && isSolvedGoal(ev, extraCtx);
+    const comboGap = Math.max(0, target - (ev.combos || 0));
+    const clearMap = initial?.toClearMap || null;
+    const targetCells = [];
+    const targetWeights = new Uint8Array(TOTAL_ROWS * COLS);
+
+    for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const idx = r * COLS + c;
+        const orb = orbOf(targetBoard[r][c]);
+        targetCells.push({ r, c, orb, idx });
+        targetWeights[idx] = clearMap?.[idx] ? 3 : 1;
+      }
+    }
+
+    let quality = 0;
+    quality += solved ? 6000000 : 0;
+    quality += (ev.initialCombos || 0) * 900000;
+    quality += (ev.combos || 0) * 340000;
+    quality += (ev.initialClearedCount || 0) * 18000;
+    quality -= comboGap * comboGap * 720000;
+    quality -= initComboInfo.distance * 360000;
+    quality += specialPriorityTupleToScore(specialTuple) / 1e9;
+    if (violatesN2) quality -= 3000000;
+
+    return {
+      board: targetBoard,
+      key: `${variantKey}:${getBoardKey(targetBoard)}`,
+      ev,
+      extraCtx,
+      specialTuple,
+      solved,
+      violatesN2,
+      quality,
+      targetCells,
+      targetWeights,
+    };
+  };
+
+  const buildReverseTargetPlans = () => {
+    if (!REVERSE_PLAN_ENABLED || REVERSE_TARGET_LIMIT <= 0) return [];
+
+    const stock = getReverseOrbStock();
+    const maxPossibleGroups = stock.reduce((sum, count) => sum + Math.floor(count / 3), 0);
+    if (maxPossibleGroups <= 0) return [];
+    const desiredGroups = Math.max(
+      1,
+      Math.min(maxPossibleGroups, Math.max(Number(target) || 1, Number(initTargetCombo) || 1))
+    );
+    const baseOrbOrder = stock
+      .map((count, orb) => ({ orb, count }))
+      .sort((a, b) => b.count - a.count)
+      .map((x) => x.orb);
+    const orientations =
+      mode === "vertical"
+        ? ["vertical", "mixed", "horizontal"]
+        : mode === "horizontal"
+        ? ["horizontal", "mixed", "vertical"]
+        : ["mixed", "horizontal", "vertical"];
+    const plans = [];
+    const seen = new Set();
+
+    for (let v = 0; v < 6; v++) {
+      const orbOrder = [
+        ...baseOrbOrder.slice(v % Math.max(1, baseOrbOrder.length)),
+        ...baseOrbOrder.slice(0, v % Math.max(1, baseOrbOrder.length)),
+      ];
+
+      for (const orientation of orientations) {
+        const board = cloneBoardOrbsOnly(originalBoard);
+        for (let r = PLAY_ROWS_START; r < TOTAL_ROWS; r++) {
+          for (let c = 0; c < COLS; c++) board[r][c] = -1;
+        }
+
+        const counts = stock.slice();
+        const slots = getReverseGroupSlots(orientation, v);
+        const groupLimit = Math.min(maxPossibleGroups, desiredGroups + (v % 3));
+        placeReverseGroups(board, counts, slots, orbOrder, groupLimit);
+        fillReverseRemainders(board, counts, getReverseFillPositions(v));
+
+        const key = getBoardKey(board);
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const plan = makeReverseTargetPlanFromBoard(board, `${orientation}:${v}`);
+        plans.push(plan);
+      }
+    }
+
+    plans.sort((a, b) => b.quality - a.quality);
+    return plans.slice(0, REVERSE_TARGET_LIMIT);
+  };
+
+  const scoreReverseTargetAlignment = (evalBoard, steps) => {
+    if (
+      !REVERSE_PLAN_ENABLED ||
+      !evalBoard ||
+      !Array.isArray(reverseTargetPlans) ||
+      reverseTargetPlans.length === 0 ||
+      steps > REVERSE_MAX_STEPS
+    ) {
+      return {
+        enabled: false,
+        exact: false,
+        distance: 0,
+        scoreBias: 0,
+        rankTuple: EMPTY_REQUIREMENT_TUPLE,
+      };
+    }
+
+    let best = null;
+
+    for (const plan of reverseTargetPlans) {
+      let distance = 0;
+      let weightedDistance = 0;
+      let matched = 0;
+      let weightedMatched = 0;
+
+      for (const cell of plan.targetCells) {
+        const actual = orbOf(evalBoard[cell.r][cell.c]);
+        const weight = plan.targetWeights[cell.idx] || 1;
+        if (actual === cell.orb) {
+          matched++;
+          weightedMatched += weight;
+        } else {
+          distance++;
+          weightedDistance += weight;
+        }
+      }
+
+      const exact = distance === 0;
+      let scoreBias = 0;
+      scoreBias += weightedMatched * 11500;
+      scoreBias -= weightedDistance * 24000;
+      scoreBias += Math.floor(plan.quality / 90);
+      scoreBias -= steps * 3400;
+      if (distance <= 6) scoreBias += (7 - distance) * 85000;
+      if (exact) scoreBias += 2600000;
+      if (plan.solved) scoreBias += 240000;
+
+      const candidate = {
+        enabled: true,
+        plan,
+        exact,
+        distance,
+        weightedDistance,
+        matched,
+        weightedMatched,
+        scoreBias,
+        rankTuple: [
+          exact ? 1 : 0,
+          -weightedDistance,
+          -distance,
+          plan.solved ? 1 : 0,
+          plan.ev?.initialCombos || 0,
+          plan.ev?.combos || 0,
+          Math.floor(scoreBias / 1000),
+        ],
+      };
+
+      if (
+        !best ||
+        candidate.scoreBias > best.scoreBias ||
+        (candidate.scoreBias === best.scoreBias &&
+          candidate.weightedDistance < best.weightedDistance)
+      ) {
+        best = candidate;
+      }
+    }
+
+    return (
+      best || {
+        enabled: false,
+        exact: false,
+        distance: 0,
+        scoreBias: 0,
+        rankTuple: EMPTY_REQUIREMENT_TUPLE,
+      }
+    );
+  };
 
   // ??蝯曹???擐? target 鞈?
   // 銝???cap / 銝???0 ?孵??????
@@ -4959,6 +6132,9 @@ const beamSolve = async (
     );
   };
 
+  const reverseTargetPlans = buildReverseTargetPlans();
+  const hasReverseTargets = reverseTargetPlans.length > 0;
+
   let bestGlobal = {
     combos: -1,
     skyfallCombos: 0,
@@ -5179,7 +6355,7 @@ const beamSolve = async (
         };
       }
 
-      const solved = ev.combos >= target;
+      const solved = isSolvedGoal(ev, extraCtx);
       if (!violatesN2 && solved && curSteps > 0) {
         if (curSteps < bestReachedSteps) bestReachedSteps = curSteps;
       }
@@ -5348,7 +6524,11 @@ const beamSolve = async (
   };
 
   const computeEvalPrimitives = (evalBoard) => {
-    const { initial, violatesN2 } = getInitialMatchCheck(evalBoard, ruleRuntimeCtx);
+    const { initial, violatesN2 } = getInitialMatchCheck(
+      evalBoard,
+      ruleRuntimeCtx,
+      HUMAN_PLAN_ENABLED
+    );
     const evRaw = evaluateBoard(evalBoard, skyfall, initial, ruleRuntimeCtx);
     const pot = combinedPotentialScore(evalBoard, mode);
     return { initial, violatesN2, evRaw, pot };
@@ -5427,6 +6607,17 @@ const beamSolve = async (
       initTargetCombo: initComboInfo.target,
     };
 
+    const reverseGuide = scoreReverseTargetAlignment(evalBoard, steps);
+    if (reverseGuide.enabled) {
+      ev.reverseTargetDistance = reverseGuide.distance;
+      ev.reverseTargetWeightedDistance = reverseGuide.weightedDistance;
+      ev.reverseTargetExact = !!reverseGuide.exact;
+      ev.reverseTargetCombos = reverseGuide.plan?.ev?.combos || 0;
+      ev.reverseTargetInitialCombos =
+        reverseGuide.plan?.ev?.initialCombos || 0;
+      extraCtx.reverseGuide = reverseGuide;
+    }
+
     const specialTuple = hasSpecial
       ? getSpecialPriorityTupleCompiled(ev, compiledSpecials, extraCtx)
       : EMPTY_SPECIAL_TUPLE;
@@ -5470,6 +6661,10 @@ const beamSolve = async (
       steps
     );
 
+    if (reverseGuide.enabled) {
+      score += reverseGuide.scoreBias;
+    }
+
     if (hasInitSensitiveSpecial) {
       score += getFreeMajor(ev) * SEARCH_PROFILE.freeMajorBonus;
       score -=
@@ -5490,7 +6685,7 @@ const beamSolve = async (
     const initExact = initComboInfo.exact;
     const initDistance = initComboInfo.distance;
 
-    const visitedTuple = hasSpecial
+    const baseVisitedTuple = hasSpecial
       ? [
           violatesN2 ? 0 : 1,
           ...requirementTuple,
@@ -5515,7 +6710,7 @@ const beamSolve = async (
           getNoSpecialAnchors(steps, ev.combos || 0)
         );
 
-    const finalRankTuple = hasSpecial
+    const baseFinalRankTuple = hasSpecial
       ? [
           violatesN2 ? 0 : 1,
           ...requirementTuple,
@@ -5539,6 +6734,8 @@ const beamSolve = async (
           initDistance,
           getNoSpecialAnchors(steps, ev.combos || 0)
         );
+    const visitedTuple = baseVisitedTuple;
+    const finalRankTuple = baseFinalRankTuple;
 
     return {
       ev,
@@ -5573,7 +6770,9 @@ const beamSolve = async (
   const evalPrimitiveCache = new Map();
   const EVAL_PRIMITIVE_CACHE_CAP = 120000;
   const getEvalPrimitiveCacheKey = (boardKey, hole, held) =>
-    `${boardKey}|${hole ? `${hole.r},${hole.c}` : "none"}|${held}`;
+    `${boardKey}|${hole ? `${hole.r},${hole.c}` : "none"}|${held}|g:${
+      HUMAN_PLAN_ENABLED ? 1 : 0
+    }`;
 
   const getCachedEvalPrimitives = (cacheKey) => {
     if (!cacheKey) return null;
@@ -5758,7 +6957,7 @@ self.onmessage = (e) => {
   if (type !== "evalBatch") return;
   let out = null;
   try {
-    const { moves, mode, skyfall, ruleRuntimeCtx } = payload || {};
+    const { moves, mode, skyfall, ruleRuntimeCtx, collectGroups } = payload || {};
     const moveCount = Array.isArray(moves) ? moves.length : 0;
     out = new Array(moveCount);
     const returnedBuffers = new Array(moveCount);
@@ -5767,7 +6966,11 @@ self.onmessage = (e) => {
       const nextBoard = boardFromBuffer(mv.boardBuffer);
       const hole = mv.holeR >= 0 && mv.holeC >= 0 ? { r: mv.holeR, c: mv.holeC } : null;
       const evalBoard = boardWithHeldFilled(nextBoard, hole, mv.held);
-      const { initial, violatesN2 } = getInitialMatchCheck(evalBoard, ruleRuntimeCtx);
+      const { initial, violatesN2 } = getInitialMatchCheck(
+        evalBoard,
+        ruleRuntimeCtx,
+        !!collectGroups
+      );
       const evRaw = evaluateBoard(evalBoard, skyfall, initial, ruleRuntimeCtx);
       const pot = combinedPotentialScore(evalBoard, mode);
       const item = acquireResultItem();
@@ -5983,10 +7186,11 @@ self.onmessage = (e) => {
             requestId,
             payload: {
               moves: packedMoves,
-              mode,
-              skyfall,
-              ruleRuntimeCtx,
-            },
+               mode,
+               skyfall,
+               ruleRuntimeCtx,
+               collectGroups: HUMAN_PLAN_ENABLED,
+             },
           },
           transferList
         );
@@ -6088,6 +7292,8 @@ self.onmessage = (e) => {
     scoreBias = 0,
     outCandidates,
     parentExtraCtx = null,
+    parentHumanPlan = null,
+    moveCtx = null,
     familySig = null,
     precomputedBoardKey = null,
     precomputedPrimitives = null,
@@ -6100,6 +7306,8 @@ self.onmessage = (e) => {
     const needEvalBoardForRectGuide =
       hasRectSpecial &&
       shouldRefreshRectGuide(steps, parentExtraCtx?.rectGuide, hasRectSpecial);
+    const needEvalBoardForReverseGuide =
+      hasReverseTargets && steps <= REVERSE_MAX_STEPS;
 
     if (!primitives) {
       evalBoard = boardWithHeldFilled(nextBoard, hole, held);
@@ -6107,11 +7315,11 @@ self.onmessage = (e) => {
       putCachedEvalPrimitives(primitiveCacheKey, primitives);
     }
 
-    if (!evalBoard && needEvalBoardForRectGuide) {
+    if (!evalBoard && (needEvalBoardForRectGuide || needEvalBoardForReverseGuide)) {
       evalBoard = boardWithHeldFilled(nextBoard, hole, held);
     }
 
-    const res = buildEvalStateFromPrimitives(
+    const rawRes = buildEvalStateFromPrimitives(
       evalBoard,
       node,
       steps,
@@ -6119,7 +7327,14 @@ self.onmessage = (e) => {
       parentExtraCtx,
       primitives
     );
-    if (!res) return;
+    if (!rawRes) return;
+
+    const res = applyHumanPlanToEvalResult(
+      rawRes,
+      parentHumanPlan,
+      moveCtx,
+      steps
+    );
 
     const {
       ev,
@@ -6133,9 +7348,13 @@ self.onmessage = (e) => {
     } = res;
 
     const holeKey = hole ? `${hole.r},${hole.c}` : "none";
-    const key = `${boardKey}|${holeKey}|${held}|${steps}`;
+    const key = `${boardKey}|${holeKey}|${held}|${r},${c}|l:${
+      locked ? 1 : 0
+    }`;
     const resolvedFamilySig =
-      familySig || `${getNodeDirectionSignature(node)}|${boardKey}`;
+      `${familySig || `${getNodeDirectionSignature(node)}|${boardKey}`}|h:${
+        res.humanPlan?.familySig || "0"
+      }`;
 
     if (
       !betterThanVisited(
@@ -6173,6 +7392,7 @@ self.onmessage = (e) => {
       specialTuple,
       visitedTuple,
       finalRankTuple,
+      humanPlan: res.humanPlan,
       familySig: resolvedFamilySig,
       _poolRankCached: [],
     });
@@ -6379,9 +7599,15 @@ self.onmessage = (e) => {
       const comboTier = st.ev.combos || 0;
       const clearTier = st.ev.clearedCount || 0;
       const initDistTier = Math.min(12, getInitComboDistance(st.ev));
+      const requirementTier = (
+        st.ev?.ruleRequirementTuple || EMPTY_REQUIREMENT_TUPLE
+      )
+        .slice(0, 6)
+        .join(",");
 
       const key = [
         st.violatesN2 ? 0 : 1,
+        requirementTier,
         doneCount,
         initDistTier,
         st.ev.initialAllEqual ? 1 : 0,
@@ -6537,7 +7763,7 @@ self.onmessage = (e) => {
 
         if (pass === 0) {
           if (usedPos.has(pc)) continue;
-          if (explore && usedRegion.has(rg) && Math.random() < regionSkipProb) {
+          if (explore && usedRegion.has(rg) && searchRandom() < regionSkipProb) {
             continue;
           }
         } else if (pass === 1) {
@@ -6546,7 +7772,7 @@ self.onmessage = (e) => {
           if (
             explore &&
             usedRegion.has(rg) &&
-            Math.random() < regionSkipProb * 0.6
+            searchRandom() < regionSkipProb * 0.6
           ) {
             continue;
           }
@@ -6567,7 +7793,7 @@ self.onmessage = (e) => {
 
         const sig = getStateFamilySignature(st);
         const rarity = familyFreq.get(sig) || 1;
-        if (rarity > 1 && Math.random() < 0.08) continue;
+        if (rarity > 1 && searchRandom() < 0.08) continue;
 
         out.push(st);
         picked.add(st);
@@ -6740,7 +7966,33 @@ self.onmessage = (e) => {
     return out.slice(0, BW);
   };
 
-  for (let step = 0; step < cfg.maxSteps; step++) {
+  const materializePendingPushMove = (mv) => {
+    if (!mv) return null;
+    if (mv.nextBoard && mv.hole) return mv;
+    if (!mv.parentBoard) return null;
+
+    const nextBoard = clone2D(mv.parentBoard);
+    let nextHole;
+
+    if (mv.transitionKind === "enter") {
+      nextBoard[mv.r][mv.c] = -1;
+      nextHole = { r: mv.r, c: mv.c };
+    } else {
+      if (!mv.parentHole) return null;
+      nextHole = holeStepInPlace(nextBoard, mv.parentHole, {
+        r: mv.r,
+        c: mv.c,
+      });
+    }
+
+    mv.nextBoard = nextBoard;
+    mv.hole = nextHole;
+    mv.parentBoard = null;
+    mv.parentHole = null;
+    return mv;
+  };
+
+  for (let step = 0; step < solverMaxSteps; step++) {
     let candidates = [];
     const pendingPushMoves = [];
     const pendingTerminalMoves = [];
@@ -6754,7 +8006,7 @@ self.onmessage = (e) => {
         Math.round(
           getAdaptiveBeamWidth(
             step,
-            cfg.maxSteps,
+            solverMaxSteps,
             stagnantRounds,
             diversityRatio
           ) * phaseScale
@@ -6801,20 +8053,42 @@ self.onmessage = (e) => {
           if (!chk.ok) continue;
 
           const nextLocked = chk.locked || isAtQ2(nr, nc);
-          const nextBoard = clone2D(state.board);
-          nextBoard[nr][nc] = -1;
-          const nextHole = { r: nr, c: nc };
+          let nextBoard = null;
+          let nextHole = null;
+          if (!DEFER_MOVE_MATERIALIZATION) {
+            nextBoard = clone2D(state.board);
+            nextBoard[nr][nc] = -1;
+            nextHole = { r: nr, c: nc };
+          }
 
           pendingPushMoves.push({
             nextBoard,
             held: state.held,
             hole: nextHole,
+            parentBoard: DEFER_MOVE_MATERIALIZATION ? state.board : null,
+            parentHole: null,
+            transitionKind: "enter",
             r: nr,
             c: nc,
             node: newNode,
             locked: nextLocked,
             parentExtraCtx: state.extraCtx,
-            cheapScore: getMoveCheapScore(state, nr, nc, nextLocked, step),
+            parentHumanPlan: state.humanPlan,
+            moveCtx: makeHumanMoveCtx(state.r, state.c, nr, nc, "enter"),
+            cheapScore: getGuidedMoveCheapScore(
+              state,
+              nr,
+              nc,
+              nextLocked,
+              step
+            ),
+            legacyCheapScore: getMoveCheapScore(
+              state,
+              nr,
+              nc,
+              nextLocked,
+              step
+            ),
             cheapSig,
             familySig: `${cheapSig}|enter`,
           });
@@ -6836,8 +8110,10 @@ self.onmessage = (e) => {
             evalBoard,
             node: newNode,
             parentExtraCtx: state.extraCtx,
+            parentHumanPlan: state.humanPlan,
+            moveCtx: makeHumanMoveCtx(state.r, state.c, nr, nc, "exit"),
             cheapScore:
-              getMoveCheapScore(
+              getGuidedMoveCheapScore(
                 state,
                 nr,
                 nc,
@@ -6857,22 +8133,47 @@ self.onmessage = (e) => {
 
         const destVal = state.board[nr][nc];
         const chk = stepConstraint(destVal);
-        if (!chk.ok) continue;
+          if (!chk.ok) continue;
 
-        const nextLocked = chk.locked || isAtQ2(nr, nc);
-        const nextBoard = clone2D(state.board);
-        const nextHole = holeStepInPlace(nextBoard, state.hole, { r: nr, c: nc });
+          const nextLocked = chk.locked || isAtQ2(nr, nc);
+          let nextBoard = null;
+          let nextHole = null;
+          if (!DEFER_MOVE_MATERIALIZATION) {
+            nextBoard = clone2D(state.board);
+            nextHole = holeStepInPlace(nextBoard, state.hole, {
+              r: nr,
+              c: nc,
+            });
+          }
 
-        pendingPushMoves.push({
-          nextBoard,
-          held: state.held,
-          hole: nextHole,
-          r: nr,
+          pendingPushMoves.push({
+            nextBoard,
+            held: state.held,
+            hole: nextHole,
+            parentBoard: DEFER_MOVE_MATERIALIZATION ? state.board : null,
+            parentHole: DEFER_MOVE_MATERIALIZATION ? state.hole : null,
+            transitionKind: "move",
+            r: nr,
           c: nc,
           node: newNode,
           locked: nextLocked,
           parentExtraCtx: state.extraCtx,
-          cheapScore: getMoveCheapScore(state, nr, nc, nextLocked, step),
+          parentHumanPlan: state.humanPlan,
+          moveCtx: makeHumanMoveCtx(state.r, state.c, nr, nc, "move"),
+          cheapScore: getGuidedMoveCheapScore(
+            state,
+            nr,
+            nc,
+            nextLocked,
+            step
+          ),
+          legacyCheapScore: getMoveCheapScore(
+            state,
+            nr,
+            nc,
+            nextLocked,
+            step
+          ),
           cheapSig,
           familySig: `${cheapSig}|${nr},${nc}`,
         });
@@ -6885,12 +8186,18 @@ self.onmessage = (e) => {
     if (!pendingPushMoves.length && !pendingTerminalMoves.length) break;
 
     for (const mv of pendingTerminalMoves) {
-      const res = evalState(
+      const rawRes = evalState(
         mv.evalBoard,
         mv.node,
         stepsOf(mv.node),
         0,
         mv.parentExtraCtx
+      );
+      const res = applyHumanPlanToEvalResult(
+        rawRes,
+        mv.parentHumanPlan,
+        mv.moveCtx,
+        stepsOf(mv.node)
       );
       if (!res) continue;
 
@@ -6916,13 +8223,13 @@ self.onmessage = (e) => {
       pendingPushMoves.length,
       adaptiveBeamWidth,
       stagnantRounds,
-      hasSpecial
+      hasSpecial || hasRuleRequirements
     );
 
     const selectedPushMoves =
       evalBudget >= pendingPushMoves.length
         ? pendingPushMoves
-        : pickCheapTopMoves(pendingPushMoves, evalBudget, 2);
+        : pickCheapPortfolioMoves(pendingPushMoves, evalBudget);
 
     const selectedMoveMeta = acquireArrayFromPool(
       EVAL_PARALLEL_SHARED.moveMetaArrayPool
@@ -6935,13 +8242,15 @@ self.onmessage = (e) => {
     try {
       for (let idx = 0; idx < selectedPushMoves.length; idx++) {
         const mv = selectedPushMoves[idx];
+        if (!materializePendingPushMove(mv)) continue;
         const boardKey = getBoardKey(mv.nextBoard);
         const primitiveCacheKey = getEvalPrimitiveCacheKey(boardKey, mv.hole, mv.held);
         const cached = getCachedEvalPrimitives(primitiveCacheKey);
 
         const meta = acquireMoveMeta();
+        const materializedIndex = selectedMoveMeta.length;
         meta.mv = mv;
-        meta.idx = idx;
+        meta.idx = materializedIndex;
         meta.boardKey = boardKey;
         meta.primitiveCacheKey = primitiveCacheKey;
         meta.primitives = cached;
@@ -6949,7 +8258,7 @@ self.onmessage = (e) => {
 
         if (!cached) {
           const job = acquireParallelJob();
-          job.index = idx;
+          job.index = materializedIndex;
           job.nextBoard = mv.nextBoard;
           job.hole = mv.hole;
           job.held = mv.held;
@@ -6997,6 +8306,8 @@ self.onmessage = (e) => {
           scoreBias: 0,
           outCandidates: candidates,
           parentExtraCtx: meta.mv.parentExtraCtx,
+          parentHumanPlan: meta.mv.parentHumanPlan,
+          moveCtx: meta.mv.moveCtx,
           familySig: meta.mv.familySig || meta.mv.cheapSig || null,
           precomputedBoardKey: meta.boardKey,
           precomputedPrimitives: meta.primitives,
@@ -7080,9 +8391,10 @@ self.onmessage = (e) => {
     const shouldYieldByStride = step - lastYieldStep >= adaptiveYieldStride;
     const shouldYieldByTime = stepNow - lastYieldAt >= 16;
     if (
-      nodesExpanded > maxNodesEffective ||
-      shouldYieldByStride ||
-      shouldYieldByTime
+      SHOULD_YIELD_TO_BROWSER &&
+      (nodesExpanded > maxNodesEffective ||
+        shouldYieldByStride ||
+        shouldYieldByTime)
     ) {
       await yieldToBrowser();
       lastYieldAt = nowMs();
@@ -7099,30 +8411,331 @@ self.onmessage = (e) => {
   bestGlobal.path = bestGlobal.node ? buildPath(bestGlobal.node) : [];
   bestGlobal.nodesExpanded = nodesExpanded;
   delete bestGlobal.node;
+  const finalExtraCtx = {
+    rectGuide: bestGlobal.rectGuide || 0,
+    initialCombos: bestGlobal.initialCombos || 0,
+    initialClearedCount: bestGlobal.initialClearedCount || 0,
+    initialMatchSizes: bestGlobal.initialMatchSizes || [],
+    initialComboSizes: bestGlobal.initialComboSizes || [],
+    initialAllEqual: !!bestGlobal.initialAllEqual,
+    initialDistinctSizeCount: bestGlobal.initialDistinctSizeCount || 0,
+    initialComboDistance: bestGlobal.initialComboDistance,
+    initialComboExact: !!bestGlobal.initialComboExact,
+    initTargetCombo:
+      Number.isFinite(Number(initTargetCombo)) && Number(initTargetCombo) >= 0
+        ? Number(initTargetCombo)
+        : null,
+  };
 
   return {
     ...bestGlobal,
     topSteps: topStepCandidates,
     topCombos: topComboCandidates,
-    success: hasSpecial
-      ? isAllSpecialSatisfiedCompiled(bestGlobal, compiledSpecials, {
-          rectGuide: bestGlobal.rectGuide || 0,
-          initialCombos: bestGlobal.initialCombos || 0,
-          initialClearedCount: bestGlobal.initialClearedCount || 0,
-          initialMatchSizes: bestGlobal.initialMatchSizes || [],
-          initialComboSizes: bestGlobal.initialComboSizes || [],
-          initialAllEqual: !!bestGlobal.initialAllEqual,
-          initialDistinctSizeCount: bestGlobal.initialDistinctSizeCount || 0,
-          initialComboDistance: bestGlobal.initialComboDistance,
-          initialComboExact: !!bestGlobal.initialComboExact,
-          initTargetCombo:
-            Number.isFinite(Number(initTargetCombo)) &&
-            Number(initTargetCombo) >= 0
-              ? Number(initTargetCombo)
-              : null,
-        })
-      : undefined,
+    success:
+      !bestGlobal.violatesN2 && isSolvedGoal(bestGlobal, finalExtraCtx),
   };
+};
+
+const isDevSolverBench =
+  import.meta.env.DEV &&
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("solverBench") === "1";
+
+const runDevSolverBenchmark = async () => {
+  if (!isDevSolverBench || devBenchRunning) return;
+
+  const boards = [
+    [
+      [0, 2, 3, 4, 2, 1],
+      [2, 0, 0, 2, 4, 1],
+      [0, 5, 2, 5, 0, 1],
+      [2, 1, 2, 5, 1, 2],
+      [5, 4, 1, 0, 3, 1],
+      [1, 1, 4, 3, 5, 0],
+    ],
+    [
+      [1, 1, 5, 1, 5, 0],
+      [3, 4, 2, 3, 3, 3],
+      [0, 1, 3, 2, 2, 5],
+      [3, 3, 2, 5, 1, 2],
+      [0, 1, 3, 1, 2, 0],
+      [0, 4, 2, 4, 3, 0],
+    ],
+    [
+      [1, 1, 3, 2, 2, 3],
+      [2, 0, 3, 3, 3, 4],
+      [4, 0, 0, 3, 3, 0],
+      [3, 4, 4, 5, 0, 4],
+      [0, 3, 1, 3, 3, 0],
+      [0, 1, 2, 3, 3, 1],
+    ],
+    [
+      [5, 4, 1, 3, 4, 5],
+      [1, 3, 1, 4, 0, 4],
+      [4, 3, 5, 3, 5, 1],
+      [0, 2, 2, 1, 2, 2],
+      [1, 1, 0, 1, 3, 5],
+      [2, 0, 1, 5, 5, 4],
+    ],
+    [
+      [4, 2, 0, 1, 3, 2],
+      [2, 5, 4, 0, 1, 3],
+      [0, 0, 3, 4, 4, 5],
+      [1, 2, 5, 5, 0, 2],
+      [3, 4, 1, 2, 3, 1],
+      [5, 3, 2, 0, 4, 1],
+    ],
+    [
+      [3, 0, 5, 2, 4, 1],
+      [1, 4, 0, 5, 2, 3],
+      [2, 1, 3, 0, 5, 4],
+      [4, 5, 2, 1, 3, 0],
+      [0, 3, 4, 2, 1, 5],
+      [5, 2, 1, 4, 0, 3],
+    ],
+  ];
+
+  const defaultRules = makeDefaultRuleProfile();
+  const requirementRules = {
+    ...makeDefaultRuleProfile(),
+    requirements: [
+      {
+        orb: 0,
+        size: 3,
+        count: 1,
+        match: "exact",
+      },
+      {
+        orb: 1,
+        size: 3,
+        count: 1,
+        match: "exact",
+      },
+    ],
+  };
+  const scenarios = [
+    {
+      name: "combo",
+      target: 7,
+      mode: "horizontal",
+      priority: "combo",
+      ruleProfile: defaultRules,
+    },
+    {
+      name: "steps",
+      target: 6,
+      mode: "horizontal",
+      priority: "steps",
+      ruleProfile: defaultRules,
+    },
+    {
+      name: "requirement",
+      target: 6,
+      mode: "horizontal",
+      priority: "combo",
+      ruleProfile: requirementRules,
+    },
+  ];
+  const baseConfig = {
+    beamWidth: 120,
+    maxSteps: 30,
+    maxNodes: 8000,
+    evalWorkers: 1,
+    humanPlanner: false,
+    reversePlanner: false,
+    reverseMaxSteps: 30,
+    searchSeed: 20260613,
+    stepPenalty: 0,
+    potentialWeight: 10,
+    clearedWeight: 300,
+    browserYield: false,
+  };
+
+  const variants = {
+    baseline: {
+      deferMoveMaterialization: false,
+      cheapLocalGuidance: false,
+    },
+    candidate: {
+      deferMoveMaterialization: true,
+      cheapLocalGuidance: true,
+      cheapLegacyReserve: 0.25,
+      cheapEvalScale: 2,
+      cheapEvalConstraintScale: 2.5,
+    },
+  };
+
+  const runOne = async (
+    variant,
+    flags,
+    boardIndex,
+    scenario,
+    repetition = -1
+  ) => {
+    const startedAt = performance.now();
+    const result = await beamSolve(
+      boards[boardIndex].map((row) => row.slice()),
+      { ...baseConfig, ...flags },
+      scenario.target,
+      scenario.mode,
+      scenario.priority,
+      true,
+      true,
+      [],
+      -1,
+      false,
+      scenario.ruleProfile,
+      null
+    );
+    const elapsedMs = performance.now() - startedAt;
+    return {
+      variant,
+      repetition,
+      boardIndex,
+      scenario: scenario.name,
+      elapsedMs,
+      success: !!result.success,
+      requirementSatisfied:
+        scenario.name !== "requirement" ||
+        Number(result?.ruleRequirementTuple?.[0] || 0) === 1,
+      combos: Number(result.combos || 0),
+      steps: Math.max(0, (result.path?.length || 1) - 1),
+      nodes: Number(result.nodesExpanded || 0),
+    };
+  };
+
+  const summarize = (rows) => {
+    const sortedTimes = rows
+      .map((row) => row.elapsedMs)
+      .sort((a, b) => a - b);
+    const successful = rows.filter((row) => row.success);
+    const requirementRows = rows.filter(
+      (row) => row.scenario === "requirement"
+    );
+    const avg = (values) =>
+      values.length
+        ? values.reduce((sum, value) => sum + value, 0) / values.length
+        : 0;
+
+    return {
+      cases: rows.length,
+      avgMs: avg(rows.map((row) => row.elapsedMs)),
+      p95Ms:
+        sortedTimes[
+          Math.min(
+            sortedTimes.length - 1,
+            Math.floor(sortedTimes.length * 0.95)
+          )
+        ] || 0,
+      successRate: avg(rows.map((row) => (row.success ? 1 : 0))),
+      requirementRate: avg(
+        requirementRows.map((row) => (row.requirementSatisfied ? 1 : 0))
+      ),
+      avgCombos: avg(rows.map((row) => row.combos)),
+      avgStepsOnSuccess: avg(successful.map((row) => row.steps)),
+      avgNodes: avg(rows.map((row) => row.nodes)),
+    };
+  };
+
+  setDevBenchRunning(true);
+  setDevBenchOutput("warming up");
+  try {
+    const variantNames = Object.keys(variants);
+    for (const variant of variantNames) {
+      await runOne(variant, variants[variant], 0, scenarios[0]);
+    }
+
+    const rowsByVariant = Object.fromEntries(
+      variantNames.map((variant) => [variant, []])
+    );
+    let caseIndex = 0;
+    const repetitions = 3;
+    const totalCases = boards.length * scenarios.length * repetitions;
+    for (let repetition = 0; repetition < repetitions; repetition++) {
+      for (let boardIndex = 0; boardIndex < boards.length; boardIndex++) {
+        for (const scenario of scenarios) {
+          const rotateBy = caseIndex % variantNames.length;
+          const order = [
+            ...variantNames.slice(rotateBy),
+            ...variantNames.slice(0, rotateBy),
+          ];
+          for (const variant of order) {
+            const row = await runOne(
+              variant,
+              variants[variant],
+              boardIndex,
+              scenario,
+              repetition
+            );
+            rowsByVariant[variant].push(row);
+          }
+          caseIndex++;
+          setDevBenchOutput(`running ${caseIndex}/${totalCases}`);
+        }
+      }
+    }
+    const summaries = Object.fromEntries(
+      variantNames.map((variant) => [
+        variant,
+        summarize(rowsByVariant[variant]),
+      ])
+    );
+    const baseline = summaries.baseline;
+    const deltas = Object.fromEntries(
+      variantNames
+        .filter((variant) => variant !== "baseline")
+        .map((variant) => {
+          const summary = summaries[variant];
+          return [
+            variant,
+            {
+              avgMs: summary.avgMs - baseline.avgMs,
+              p95Ms: summary.p95Ms - baseline.p95Ms,
+              successRate: summary.successRate - baseline.successRate,
+              requirementRate:
+                summary.requirementRate - baseline.requirementRate,
+              avgCombos: summary.avgCombos - baseline.avgCombos,
+              avgStepsOnSuccess:
+                summary.avgStepsOnSuccess - baseline.avgStepsOnSuccess,
+              avgNodes: summary.avgNodes - baseline.avgNodes,
+            },
+          ];
+        })
+    );
+    setDevBenchOutput(
+      JSON.stringify(
+        {
+          protocol: {
+            warmupCasesPerVariant: 1,
+            repetitions,
+            interleaved: variantNames,
+            browserYield: false,
+            maxNodes: baseConfig.maxNodes,
+            beamWidth: baseConfig.beamWidth,
+            searchSeed: baseConfig.searchSeed,
+          },
+          summaries,
+          deltas,
+          rowsByVariant,
+        },
+        null,
+        2
+      )
+    );
+  } catch (error) {
+    setDevBenchOutput(
+      JSON.stringify(
+        {
+          error: error?.message || String(error),
+          stack: error?.stack || "",
+        },
+        null,
+        2
+      )
+    );
+  } finally {
+    setDevBenchRunning(false);
+  }
 };
 
 //536244441114
@@ -7151,6 +8764,7 @@ const [solutionPools, setSolutionPools] = useState({
   combo: [],
 });
 const [selectedPoolIndex, setSelectedPoolIndex] = useState(0);
+const [solutionPreview, setSolutionPreview] = useState(null);
 
 const solutionPoolsRef = useRef({
   steps: [],
@@ -7512,12 +9126,15 @@ const makePoolRank = (
       const size = clampIntRange(req.size, 1, 5, 3);
       const count = Math.max(1, clampIntRange(req.count, 1, 999, 1));
       const got = Number(countsByOrb?.[orb]?.[String(size)] || 0);
-      const missing = Math.max(0, count - got);
-      const done = missing <= 0 ? 1 : 0;
+      const distance =
+        req.match === "atLeast"
+          ? Math.max(0, count - got)
+          : Math.abs(count - got);
+      const done = distance === 0 ? 1 : 0;
       if (!done) allDone = 0;
       totalDone += Math.min(got, count);
-      totalMissing += missing;
-      requirementTuple.push(done, -missing, Math.min(got, count));
+      totalMissing += distance;
+      requirementTuple.push(done, -distance, Math.min(got, count));
     }
     requirementTuple.unshift(-totalMissing);
     requirementTuple.unshift(totalDone);
@@ -8057,6 +9674,15 @@ const stopSolveProgressTicker = useCallback((forceComplete = false) => {
     solverConfig?.maxSteps,
     solverConfig?.maxNodes,
     solverConfig?.evalWorkers,
+    solverConfig?.humanPlanner ?? true,
+    solverConfig?.reversePlanner ?? true,
+    solverConfig?.reverseMaxSteps ?? 60,
+    solverConfig?.searchSeed ?? 0,
+    solverConfig?.deferMoveMaterialization ?? true,
+    solverConfig?.cheapLocalGuidance ?? true,
+    solverConfig?.cheapLegacyReserve ?? 0.25,
+    solverConfig?.cheapEvalScale ?? 2,
+    solverConfig?.cheapEvalConstraintScale ?? 2.5,
     solverConfig?.stepPenalty,
     solverConfig?.potentialWeight,
     solverConfig?.clearedWeight,
@@ -8339,6 +9965,99 @@ const stopSolveProgressTicker = useCallback((forceComplete = false) => {
 };
 
 const activeSolutions = priorityMode === "steps" ? solutionPools.steps : solutionPools.combo;
+
+const buildSolutionPreviewBoard = useCallback((solution) => {
+  const base = baseBoardRef.current?.length ? baseBoardRef.current : board;
+  const solutionPath = solution?.path;
+
+  if (!Array.isArray(base) || !base.length) {
+    return null;
+  }
+
+  const previewBoard = base.map((row) => [...row]);
+  if (!Array.isArray(solutionPath) || !solutionPath.length) {
+    return previewBoard;
+  }
+
+  const start = solutionPath[0];
+  const held = previewBoard?.[start.r]?.[start.c];
+  if (held == null) return previewBoard;
+
+  let hole = null;
+  if (start.r >= PLAY_ROWS_START) {
+    hole = { r: start.r, c: start.c };
+    previewBoard[start.r][start.c] = -1;
+  }
+
+  for (let i = 1; i < solutionPath.length; i += 1) {
+    const current = solutionPath[i];
+
+    if (current.r === 0) {
+      if (hole) {
+        previewBoard[hole.r][hole.c] = previewBoard[0][current.c];
+      }
+      return previewBoard;
+    }
+
+    if (!hole) {
+      hole = { r: current.r, c: current.c };
+      previewBoard[current.r][current.c] = -1;
+    } else {
+      hole = holeStepInPlace(previewBoard, hole, current);
+    }
+  }
+
+  if (hole) {
+    previewBoard[hole.r][hole.c] = held;
+  }
+
+  return previewBoard;
+}, [board]);
+
+const getSolutionPreviewPosition = useCallback((clientX, clientY) => {
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const margin = 8;
+  const offset = 16;
+  const previewWidth = Math.min(244, viewportWidth - margin * 2);
+  const previewHeight = Math.min(
+    autoRow0Expanded ? 290 : 244,
+    viewportHeight - margin * 2
+  );
+
+  let left = clientX + offset;
+  if (left + previewWidth > viewportWidth - margin) {
+    left = clientX - previewWidth - offset;
+  }
+
+  let top = clientY + offset;
+  if (top + previewHeight > viewportHeight - margin) {
+    top = clientY - previewHeight - offset;
+  }
+
+  return {
+    left: Math.max(margin, Math.min(left, viewportWidth - previewWidth - margin)),
+    top: Math.max(margin, Math.min(top, viewportHeight - previewHeight - margin)),
+  };
+}, [autoRow0Expanded]);
+
+const showSolutionPreview = useCallback((event, solution, index) => {
+  const previewBoard = buildSolutionPreviewBoard(solution);
+  if (!previewBoard) return;
+
+  setSolutionPreview({
+    board: previewBoard,
+    index,
+    ...getSolutionPreviewPosition(event.clientX, event.clientY),
+  });
+}, [buildSolutionPreviewBoard, getSolutionPreviewPosition]);
+
+const moveSolutionPreview = useCallback((event) => {
+  const nextPosition = getSolutionPreviewPosition(event.clientX, event.clientY);
+  setSolutionPreview((current) =>
+    current ? { ...current, ...nextPosition } : current
+  );
+}, [getSolutionPreviewPosition]);
 
 ///////////////////////////////
 
@@ -9761,6 +11480,8 @@ const specialPriority2 = specialPriorities[1];
 const specialPriority3 = specialPriorities[2];
 const ruleProfileView = ruleValidation.normalizedProfile;
 const ruleAddOptions = ruleValidation.addOptions || [];
+const getSpecialShapeLabel = (type) =>
+  type === "cross" ? "十字" : type === "l" ? "L字" : type === "t" ? "T字" : "指定";
 
 // 皜脫??孵???憿??怎??閬?蝐歹???
 const renderPriorityHeaderLabel = (title, sp) => {
@@ -9827,49 +11548,67 @@ const renderSpecialOrbPicker = (
 };
 
 return (
-  <div className="min-h-screen bg-neutral-950 text-white font-sans">
-    <div className="w-full bg-neutral-900/95 backdrop-blur border-b border-white/10">
-  <div className="mx-auto max-w-5xl w-full px-4 py-3 flex items-center justify-between gap-1">
+  <div className="solver-app-shell bg-neutral-950 text-white font-sans">
+    {isDevSolverBench && (
+      <div className="fixed inset-x-2 top-2 z-[9999] max-h-[45vh] overflow-auto rounded-xl border border-cyan-500/50 bg-black/95 p-3 text-xs shadow-2xl">
+        <div className="mb-2 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={devBenchRunning}
+            onClick={runDevSolverBenchmark}
+            className="rounded-lg bg-cyan-500 px-3 py-1.5 font-black text-black disabled:opacity-50"
+          >
+            {devBenchRunning ? "Benchmark running" : "Run solver benchmark"}
+          </button>
+          <span className="text-cyan-300">
+            Same App.jsx solver, fixed boards and seed
+          </span>
+        </div>
+        <pre data-testid="solver-benchmark-output" className="whitespace-pre-wrap text-[11px] text-neutral-200">
+          {devBenchOutput || "idle"}
+        </pre>
+      </div>
+    )}
+    <div className="solver-app-header w-full bg-neutral-900/95 backdrop-blur border-b border-white/10">
+  <div className="solver-app-header-row mx-auto max-w-[1600px] w-full px-4 py-2 flex items-center justify-between gap-1">
     <div className="flex items-center gap-3">
       <img src={logoImg} className="w-8 h-8" alt="" />
-      <h1 className="text-lg md:text-xl font-black tracking-wide">
-        Tower of Saviors 神魔之塔
+      <h1 className="solver-brand-title text-lg md:text-xl font-black tracking-wide">
+        Tower of Saviors
         {isManual ? (
           <span className="bg-orange-600 text-white px-2 py-0.5 rounded-md mx-1 shadow-sm">
-            手轉 Manual
+            手動
           </span>
         ) : (
           <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-md mx-1 shadow-sm">
-            自動 Auto
+            自動
           </span>
         )}
-        轉珠模擬器
+        轉珠
       </h1>
     </div>
 
-    <div className="flex flex-col md:flex-row bg-neutral-800 p-1 rounded-xl border border-white/10">
+    <div className="solver-mode-toggle flex flex-row bg-neutral-800 p-1 rounded-xl border border-white/10">
       <button
         onClick={() => handleToggleMode(false)}
-        className={`w-8 h-8 md:w-auto md:h-auto px-0 md:px-4 py-0 md:py-1.5 rounded-lg text-[11px] md:text-xs font-black transition-all flex items-center justify-center ${
+        className={`px-3 md:px-4 py-1.5 rounded-lg text-[11px] md:text-xs font-black transition-all flex items-center justify-center ${
           !isManual
             ? "bg-indigo-600 text-white"
             : "text-neutral-500 hover:bg-neutral-700"
         }`}
       >
-        <span className="md:hidden">自</span>
-        <span className="hidden md:inline">自動</span>
+        自動
       </button>
 
       <button
         onClick={() => handleToggleMode(true)}
-        className={`w-8 h-8 md:w-auto md:h-auto px-0 md:px-4 py-0 md:py-1.5 rounded-lg text-[11px] md:text-xs font-black transition-all flex items-center justify-center ${
+        className={`px-3 md:px-4 py-1.5 rounded-lg text-[11px] md:text-xs font-black transition-all flex items-center justify-center ${
           isManual
             ? "bg-orange-600 text-white"
             : "text-neutral-500 hover:bg-neutral-700"
         }`}
       >
-        <span className="md:hidden">手</span>
-        <span className="hidden md:inline">手動</span>
+        手動
       </button>
     </div>
   </div>
@@ -9882,33 +11621,13 @@ return (
   />
 </div>
 
-    <div className="mx-auto max-w-5xl w-full px-0 sm:px-4 pt-3 sm:pt-6 pb-4 flex-col items-center">
+    <div
+      data-testid="solver-workspace"
+      className="solver-workspace mx-auto w-full"
+    >
       {!isManual ? (
   <>
-    <div className="grid grid-cols-6 gap-1.5 mb-3 mt-0 text-[14px]">
-      <div className="col-span-2 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
-        <button
-          onClick={() => setSolverMode("horizontal")}
-          className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${
-            solverMode === "horizontal"
-              ? "bg-blue-600 text-white"
-              : "text-neutral-500 hover:bg-neutral-800"
-          }`}
-        >
-          <Rows size={14} /> 橫排
-        </button>
-        <button
-          onClick={() => setSolverMode("vertical")}
-          className={`flex-1 flex items-center justify-center gap-1 px-1 py-2 rounded-lg font-black transition-all ${
-            solverMode === "vertical"
-              ? "bg-indigo-600 text-white"
-              : "text-neutral-500 hover:bg-neutral-800"
-          }`}
-        >
-          直排 <Columns size={14} />
-        </button>
-      </div>
-
+    <div className="solver-mode-bar grid grid-cols-4 gap-1.5 text-[14px]">
       <div className="col-span-2 flex bg-neutral-900 p-1 rounded-xl border border-neutral-800 shadow-xl overflow-hidden">
         <button
           onClick={() => {
@@ -9966,35 +11685,11 @@ return (
       </div>
     </div>
 
-    <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/70 px-3 py-2 shadow-xl">
-  <div className="mb-3 flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
-    <div className="flex items-center gap-2">
-  <Route size={16} className="text-yellow-300" />
-
-  <span className="text-sm font-black text-yellow-300">
-    路徑 Top 10
-  </span>
-
-  <span className="text-xs text-white/50">
-    {pathsExpanded ? "展開中" : "已收合"}
-  </span>
-</div>
-
-    <button
-      type="button"
-      onClick={() => setPathsExpanded((v) => !v)}
-      className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
-        pathsExpanded
-          ? "bg-yellow-400 text-black hover:bg-yellow-300"
-          : "bg-neutral-800 text-white hover:bg-neutral-700"
-      }`}
+    <div
+      data-testid="solver-results-panel"
+      className="solver-results-panel rounded-2xl border border-neutral-800 bg-neutral-900/70 px-3 py-2 shadow-xl"
     >
-      {pathsExpanded ? "收起" : "展開"}
-    </button>
-  </div>
-
-  {pathsExpanded && (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+    <div className="solver-results-grid grid grid-cols-2 md:grid-cols-5 gap-2">
       {(activeSolutions || []).map((sol, idx) => {
         const steps = getPathSteps(sol.path);
         const initCombo = sol.initialCombos || 0;
@@ -10018,11 +11713,26 @@ return (
   <button
     key={`${priorityMode}-${idx}-${getSolutionGroupKey(sol)}-${steps}`}
     type="button"
+    onMouseEnter={(event) => showSolutionPreview(event, sol, idx)}
+    onMouseMove={moveSolutionPreview}
+    onMouseLeave={() => setSolutionPreview(null)}
+    onFocus={(event) => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      showSolutionPreview(
+        {
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.top + rect.height / 2,
+        },
+        sol,
+        idx
+      );
+    }}
+    onBlur={() => setSolutionPreview(null)}
     onClick={() => {
       setSelectedPoolIndex(idx);
       applySolvedCandidate(sol);
     }}
-    className={`rounded-xl border px-3 py-2 text-left transition-all ${
+    className={`solver-result-card rounded-xl border px-3 py-2 text-left transition-all ${
       isActive
         ? specialSat
           ? "border-emerald-400 bg-emerald-400/15 shadow-[0_0_18px_rgba(74,222,128,0.35)]"
@@ -10077,7 +11787,7 @@ return (
         Array.from({ length: 10 }).map((_, idx) => (
           <div
             key={`empty-${priorityMode}-${idx}`}
-            className="rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-left opacity-50"
+            className="solver-result-card rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-2 text-left opacity-70"
           >
             <div className="flex items-center justify-between">
               <span className="text-sm font-black text-white">
@@ -10098,15 +11808,17 @@ return (
           </div>
         ))}
     </div>
-  )}
 </div>
   </>
 ) : (
   <div />
 )}
 	  
-      <div className="max-w-5xl w-full">
-        <div className={`flex flex-row gap-2 mb-4 w-full items-stretch ${isManual ? "mt-3" : ""}`}>
+      <div className="solver-panels-contents">
+        <div
+          data-testid="solver-stats-panel"
+          className={`solver-stats-panel flex flex-row gap-2 w-full items-stretch ${isManual ? "mt-3" : ""}`}
+        >
 			<div className="flex-[0.7] min-w-0 bg-neutral-900/50 p-1.5 sm:p-2.5 rounded-xl border border-neutral-800 flex flex-col items-center justify-center space-y-1">
 			  <span className="text-xs text-neutral-500 font-bold uppercase truncate w-full text-center leading-none">
 				理論
@@ -10167,38 +11879,50 @@ return (
   </div>
 </div>
 
-        <div className="mb-3 bg-neutral-900/80 rounded-2xl border border-neutral-800 overflow-hidden shadow-xl">
-          <div className="w-full p-3 flex items-center justify-between bg-blue-900/10 border-b border-neutral-800">
-            <button
-              onClick={() => setShowBasicSettings(!showBasicSettings)}
-              className="flex items-center gap-2 text-[14px] font-bold text-blue-300 pl-2"
+        <div
+          data-testid="solver-settings-panel"
+          className={`solver-settings-panel solver-settings-panel--${
+            isManual ? "manual" : settingsTab
+          } rounded-2xl border overflow-hidden shadow-xl`}
+        >
+          {!isManual && (
+            <div
+              className="solver-settings-tabs grid grid-cols-3"
+              role="tablist"
+              aria-label="求解設定分類"
             >
-              <Settings size={18} /> {isManual ? "手轉設定" : "自動設定"}
-            </button>
-
-            <div className="flex items-center gap-3 pr-2">
-              <button
-                onClick={resetBasic}
-                className="flex items-center gap-1.5 px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg text-xs font-bold transition-all border border-neutral-700 shadow-sm"
-              >
-                <RotateCcw size={14} /> 重設
-              </button>
-              <span
-                className="text-xs text-neutral-600 uppercase font-bold cursor-pointer"
-                onClick={() => setShowBasicSettings(!showBasicSettings)}
-              >
-                {showBasicSettings ? "收起" : "展開"}
-              </span>
+              {[
+                { id: "search", label: "基本設定" },
+                { id: "rules", label: "優先消除設定" },
+                { id: "shield", label: "解盾設定" },
+              ].map((tab) => {
+                const active = settingsTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setSettingsTab(tab.id)}
+                    className={`solver-settings-tab solver-settings-tab--${tab.id} ${
+                      active ? "is-active" : ""
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
-          </div>
+          )}
 
-          {showBasicSettings && (
   <div
-    className={`p-4 grid grid-cols-1 gap-3 bg-neutral-900/40 ${
+    className={`solver-settings-content solver-settings-content--${
+      isManual ? "manual" : settingsTab
+    } p-4 grid grid-cols-1 gap-3 ${
       isManual ? "md:grid-cols-2" : "md:grid-cols-3"
     }`}
   >
-    {!isManual && (
+    {!isManual && settingsTab === "search" && (
       <>
         <ParamSlider
   label="目標首消 Combo"
@@ -10230,6 +11954,7 @@ return (
       />
     )}
 
+    {(isManual || settingsTab === "search") && (
     <div>
       <ParamSlider
         label="回放速度"
@@ -10242,7 +11967,8 @@ return (
         onChange={(n) => updateParam("replaySpeed", n * 1000)}
       />
     </div>
-	{!isManual && (
+    )}
+	{!isManual && settingsTab === "search" && (
   <div className="rounded-2xl border border-neutral-800 bg-neutral-950/40 p-3 flex flex-col justify-between">
     
     {/* 璅? */}
@@ -10284,22 +12010,10 @@ return (
   </div>
 )}
 
-    {!isManual && (
-  <div className="md:col-span-3 rounded-2xl border border-neutral-800 bg-neutral-950/50 p-4">
-    <div className="flex items-center justify-between rounded-xl border border-cyan-400/20 bg-neutral-900/70 px-3 py-2">
-      <span className="text-sm font-black text-cyan-300">符石需求（消除規則）</span>
-      <button
-        type="button"
-        onClick={() => setRulePanelExpanded((v) => !v)}
-        className="rounded-xl px-3 py-1.5 text-xs font-black transition-all bg-neutral-800 text-white hover:bg-neutral-700"
-      >
-        {rulePanelExpanded ? "收起" : "展開"}
-      </button>
-    </div>
-
-    {rulePanelExpanded && (
-      <div className="mt-4 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+    {!isManual && settingsTab === "rules" && (
+  <div className="solver-rule-panel md:col-span-3 rounded-2xl border border-neutral-800 bg-neutral-950/50">
+      <div className="solver-rule-content">
+        <div className="solver-orb-rules-grid grid grid-cols-1 md:grid-cols-3">
           {ORB_IDS.map((orb) => {
             const rule = ruleProfileView.orbRules[orb] || normalizeOrbRule(null);
             const stock = Number(ruleValidation.stockByOrb?.[orb] || 0);
@@ -10309,19 +12023,23 @@ return (
             return (
               <div
                 key={`orb-rule-${orb}`}
-                className="rounded-xl border border-neutral-800 bg-neutral-900/50 px-3 py-2"
+                className="solver-orb-rule-card rounded-xl border border-neutral-800 bg-neutral-900/50"
               >
-                <div className="mb-2 flex items-center justify-between text-xs">
-                  <span className="inline-flex h-5 w-5 items-center justify-center">
-                    {renderOrbIcon(orb, "h-5 w-5")}
+                <div className="solver-orb-rule-stock flex items-center justify-between text-xs">
+                  <span
+                    className="solver-orb-rule-icon inline-flex items-center justify-center"
+                    title={`${ORB_LABELS[orb]} 符石消除設定`}
+                    aria-hidden="true"
+                  >
+                    {renderOrbIcon(orb, "h-4 w-4")}
                   </span>
                   <span className={remain < 0 ? "font-black text-red-400" : "font-bold text-neutral-400"}>
-                    版面 {stock} / 已用 {used} / 剩餘 {remain}
+                    版 {stock} / 用 {used} / 剩 {remain}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-bold text-neutral-400">最低消除</label>
+                <div className="solver-orb-rule-controls flex items-center gap-2">
                   <select
+                    aria-label={`${ORB_LABELS[orb]} 符石最低消除數`}
                     value={rule.minClear}
                     onChange={(e) =>
                       updateRuleOrbSetting(orb, {
@@ -10338,6 +12056,7 @@ return (
                   </select>
 
                   <select
+                    aria-label={`${ORB_LABELS[orb]} 符石消除規則`}
                     value={rule.clearMode}
                     onChange={(e) =>
                       updateRuleOrbSetting(orb, {
@@ -10358,13 +12077,15 @@ return (
           })}
         </div>
 
-        <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-3">
-          <div className="mb-2 text-sm font-black text-cyan-300">需求組合（可複數）</div>
+        <div className="solver-rule-requirements rounded-xl border border-neutral-800 bg-neutral-900/50">
+          <div className="solver-rule-requirements-title text-sm font-black text-cyan-300">
+            需求組合（可複數）
+          </div>
 
           {ruleProfileView.requirements.length === 0 ? (
-            <div className="h-5 text-xs font-bold text-neutral-500">❌尚未設定需求。</div>
+            <div className="solver-rule-empty text-xs font-bold text-neutral-500">尚未設定需求。</div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div className="solver-rule-requirement-grid grid grid-cols-2 md:grid-cols-4">
   {ruleProfileView.requirements.map((req, idx) => {
     const maxCount = Math.max(
       1,
@@ -10374,7 +12095,7 @@ return (
     return (
       <div
         key={`req-${idx}`}
-        className="relative flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-950/60 px-2 py-2 min-w-0"
+        className="solver-rule-requirement-item relative flex items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-950/60 min-w-0"
       >
         <span className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm font-black text-cyan-200">
           {renderOrbIcon(req.orb, "h-4 w-4")}
@@ -10402,26 +12123,20 @@ return (
         <button
           type="button"
           onClick={() => removeRuleRequirement(idx)}
-          className={`
-            absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full 
-            md:static md:h-auto md:w-auto md:rounded-lg md:px-2 md:py-1 shrink-0
-            border border-red-400/20 bg-red-500/10 text-xs font-black text-red-300 hover:bg-red-500/20 shadow-lg md:shadow-none
-          `}
+          title="刪除需求"
+          aria-label="刪除需求"
+          className="solver-rule-remove flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-red-400/20 bg-red-500/10 text-xs font-black text-red-300 hover:bg-red-500/20"
         >
-          <span className="md:hidden">✕</span>
-          <span className="hidden md:inline">刪除</span>
+          ✕
         </button>
       </div>
     );
   })}
 </div>
           )}
-<hr className="border-cyan-400/20 my-2" />
-          <div className="mt-3">
-            <div className="mb-2 text-xs font-bold text-neutral-400">
-              快速新增（直到沒有可用選項）
-            </div>
-            <div className="grid grid-cols-7 gap-2">
+<hr className="solver-rule-divider border-cyan-400/20" />
+          <div className="solver-rule-add">
+            <div className="solver-rule-add-grid grid grid-cols-7">
               {ruleAddOptions.length === 0 ? (
                 <span className="col-span-7 text-xs font-bold text-neutral-500">❌無可新增選項。</span>
               ) : (
@@ -10441,46 +12156,14 @@ return (
           </div>
         </div>
       </div>
-    )}
   </div>
 )}
 
-    {!isManual && (
-  <div className="md:col-span-3">
-    {/* 外層總解盾 */}
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-950/50 p-4">
-      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
-        <button
-          type="button"
-          onClick={() =>
-            setSpecialPriorityGroupExpanded((v) => !v)
-          }
-          className="flex items-center gap-2 text-left"
-        >
-          <span className="text-sm font-black text-pink-400">
-            解盾需求（可選三個）
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() =>
-            setSpecialPriorityGroupExpanded((v) => !v)
-          }
-          className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
-            specialPriorityGroupExpanded
-              ? "bg-pink-400 text-black hover:bg-pink-300"
-              : "bg-neutral-800 text-white hover:bg-neutral-700"
-          }`}
-        >
-          {specialPriorityGroupExpanded ? "收起" : "展開"}
-        </button>
-      </div>
-
-      {specialPriorityGroupExpanded && (
-        <div className="mt-4">
+    {!isManual && settingsTab === "shield" && (
+  <div className="solver-shield-requirements md:col-span-3">
+        <div className="space-y-2">
           {/* 解盾 #1 */}
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-950/50 p-2">
+          <div className="solver-shield-card rounded-2xl border border-neutral-800 bg-neutral-950/50 p-2">
             <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-black text-pink-400 flex items-center gap-2">
@@ -10516,7 +12199,7 @@ return (
             </div>
 
             {specialPriorityExpanded[0] && (
-              <div className="mt-4">
+              <div className="solver-shield-card-body mt-4">
                 <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
                   {[
                     { key: "none", label: "無" },
@@ -10543,8 +12226,8 @@ return (
                 </div>
 
                 {specialPriority1.type === "clearCount" && (
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3">
+                  <div className="solver-shield-clear-count flex flex-col">
+                    <div className="solver-shield-inline-control flex items-center">
                       <span className="text-sm font-bold text-neutral-400">總粒數</span>
 
                       <input
@@ -10570,34 +12253,33 @@ return (
                         }}
                         className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                       />
-                    </div>
 
-                    <input
-                      type="range"
-                      min={3}
-                      max={30}
-                      step={1}
-                      value={Math.max(
-                        3,
-                        Math.min(30, Number(specialPriority1.clearCount) || 3)
-                      )}
-                      onChange={(e) =>
-                        updateSpecialPriorityAt(0, {
-                          clearCount: Number(e.target.value),
-                        })
-                      }
-                      className="w-full accent-pink-500 cursor-pointer"
-                    />
+                      <input
+                        type="range"
+                        min={3}
+                        max={30}
+                        step={1}
+                        value={Math.max(
+                          3,
+                          Math.min(30, Number(specialPriority1.clearCount) || 3)
+                        )}
+                        onChange={(e) =>
+                          updateSpecialPriorityAt(0, {
+                            clearCount: Number(e.target.value),
+                          })
+                        }
+                        className="min-w-0 flex-1 accent-pink-500 cursor-pointer"
+                      />
+                      <span className="solver-shield-description text-neutral-500">
+                        首消 {Math.max(3, Math.min(30, Number(specialPriority1.clearCount) || 3))} 顆符石。
+                      </span>
+                    </div>
                   </div>
                 )}
 
                 {specialPriority1.type === "equalFirst" && (
-                  <div className="flex flex-col gap-3">
-                    <span className="text-sm font-bold text-neutral-400">
-                      選擇要比較首消組數的屬性
-                    </span>
-
-                    <div className="flex flex-wrap gap-2">
+                  <div className="solver-shield-equal flex items-center">
+                    <div className="solver-shield-orb-options flex flex-wrap">
                       {EQUAL_FIRST_OPTIONS.map((opt) => {
                         const active = normalizeSelectedEqualOrbs(
                           specialPriority1.equalOrbs
@@ -10621,8 +12303,8 @@ return (
                       })}
                     </div>
 
-                    <span className="text-xs text-neutral-500">
-                      會比較各選擇屬性的首消組數，全部相等且至少 1 組才算達成。
+                    <span className="solver-shield-description text-neutral-500">
+                      所選種類的首消組數需相同且至少1組。
                     </span>
                   </div>
                 )}
@@ -10666,7 +12348,7 @@ return (
                       true
                     )}
 
-                    <span className="text-xs text-neutral-500">
+                    <span className="solver-shield-description text-xs text-neutral-500">
                       首消至少形成 1 組 m*n 的完整矩形。
                     </span>
                   </div>
@@ -10697,8 +12379,9 @@ return (
                       true
                     )}
 
-                    <span className="text-xs text-neutral-500">
-                      至少達成 1 組指定形狀。
+                    <span className="solver-shield-description text-neutral-500">
+                      首消至少形成 {specialPriority1.count} 組
+                      {getSpecialShapeLabel(specialPriority1.type)}形狀。
                     </span>
                   </div>
                 )}
@@ -10707,7 +12390,7 @@ return (
           </div>
 
           {/* 解盾 #2 */}
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-950/50 p-2">
+          <div className="solver-shield-card rounded-2xl border border-neutral-800 bg-neutral-950/50 p-2">
             <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-black text-pink-400 flex items-center gap-2">
@@ -10743,7 +12426,7 @@ return (
             </div>
 
             {specialPriorityExpanded[1] && (
-              <div className="mt-4">
+              <div className="solver-shield-card-body mt-4">
                 <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
                   {[
                     { key: "none", label: "無" },
@@ -10770,8 +12453,8 @@ return (
                 </div>
 
                 {specialPriority2.type === "clearCount" && (
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3">
+                  <div className="solver-shield-clear-count flex flex-col">
+                    <div className="solver-shield-inline-control flex items-center">
                       <span className="text-sm font-bold text-neutral-400">總粒數</span>
 
                       <input
@@ -10797,34 +12480,33 @@ return (
                         }}
                         className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                       />
-                    </div>
 
-                    <input
-                      type="range"
-                      min={3}
-                      max={30}
-                      step={1}
-                      value={Math.max(
-                        3,
-                        Math.min(30, Number(specialPriority2.clearCount) || 3)
-                      )}
-                      onChange={(e) =>
-                        updateSpecialPriorityAt(1, {
-                          clearCount: Number(e.target.value),
-                        })
-                      }
-                      className="w-full accent-pink-500 cursor-pointer"
-                    />
+                      <input
+                        type="range"
+                        min={3}
+                        max={30}
+                        step={1}
+                        value={Math.max(
+                          3,
+                          Math.min(30, Number(specialPriority2.clearCount) || 3)
+                        )}
+                        onChange={(e) =>
+                          updateSpecialPriorityAt(1, {
+                            clearCount: Number(e.target.value),
+                          })
+                        }
+                        className="min-w-0 flex-1 accent-pink-500 cursor-pointer"
+                      />
+                      <span className="solver-shield-description text-neutral-500">
+                        首消 {Math.max(3, Math.min(30, Number(specialPriority2.clearCount) || 3))} 顆符石。
+                      </span>
+                    </div>
                   </div>
                 )}
 
                 {specialPriority2.type === "equalFirst" && (
-                  <div className="flex flex-col gap-3">
-                    <span className="text-sm font-bold text-neutral-400">
-                      選擇要比較首消組數的屬性
-                    </span>
-
-                    <div className="flex flex-wrap gap-2">
+                  <div className="solver-shield-equal flex items-center">
+                    <div className="solver-shield-orb-options flex flex-wrap">
                       {EQUAL_FIRST_OPTIONS.map((opt) => {
                         const active = normalizeSelectedEqualOrbs(
                           specialPriority2.equalOrbs
@@ -10848,8 +12530,8 @@ return (
                       })}
                     </div>
 
-                    <span className="text-xs text-neutral-500">
-                      會比較各選擇屬性的首消組數，全部相等且至少 1 組才算達成。
+                    <span className="solver-shield-description text-neutral-500">
+                      所選種類的首消組數需相同且至少1組。
                     </span>
                   </div>
                 )}
@@ -10893,7 +12575,7 @@ return (
                       true
                     )}
 
-                    <span className="text-xs text-neutral-500">
+                    <span className="solver-shield-description text-xs text-neutral-500">
                       首消至少形成 1 組 m*n 的完整矩形。
                     </span>
                   </div>
@@ -10924,8 +12606,9 @@ return (
                       true
                     )}
 
-                    <span className="text-xs text-neutral-500">
-                      至少達成 1 組指定形狀。
+                    <span className="solver-shield-description text-neutral-500">
+                      首消至少形成 {specialPriority2.count} 組
+                      {getSpecialShapeLabel(specialPriority2.type)}形狀。
                     </span>
                   </div>
                 )}
@@ -10934,7 +12617,7 @@ return (
           </div>
 
           {/* 解盾 #3 */}
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-950/50 p-2">
+          <div className="solver-shield-card rounded-2xl border border-neutral-800 bg-neutral-950/50 p-2">
             <div className="flex items-center justify-between rounded-xl border border-white/10 bg-neutral-900/70 px-3 py-2">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-black text-pink-400 flex items-center gap-2">
@@ -10970,7 +12653,7 @@ return (
             </div>
 
             {specialPriorityExpanded[2] && (
-              <div className="mt-4">
+              <div className="solver-shield-card-body mt-4">
                 <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
                   {[
                     { key: "none", label: "無" },
@@ -10997,8 +12680,8 @@ return (
                 </div>
 
                 {specialPriority3.type === "clearCount" && (
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3">
+                  <div className="solver-shield-clear-count flex flex-col">
+                    <div className="solver-shield-inline-control flex items-center">
                       <span className="text-sm font-bold text-neutral-400">總粒數</span>
 
                       <input
@@ -11024,34 +12707,33 @@ return (
                         }}
                         className="w-20 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-pink-300 font-black text-right appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                       />
-                    </div>
 
-                    <input
-                      type="range"
-                      min={3}
-                      max={30}
-                      step={1}
-                      value={Math.max(
-                        3,
-                        Math.min(30, Number(specialPriority3.clearCount) || 3)
-                      )}
-                      onChange={(e) =>
-                        updateSpecialPriorityAt(2, {
-                          clearCount: Number(e.target.value),
-                        })
-                      }
-                      className="w-full accent-pink-500 cursor-pointer"
-                    />
+                      <input
+                        type="range"
+                        min={3}
+                        max={30}
+                        step={1}
+                        value={Math.max(
+                          3,
+                          Math.min(30, Number(specialPriority3.clearCount) || 3)
+                        )}
+                        onChange={(e) =>
+                          updateSpecialPriorityAt(2, {
+                            clearCount: Number(e.target.value),
+                          })
+                        }
+                        className="min-w-0 flex-1 accent-pink-500 cursor-pointer"
+                      />
+                      <span className="solver-shield-description text-neutral-500">
+                        首消 {Math.max(3, Math.min(30, Number(specialPriority3.clearCount) || 3))} 顆符石。
+                      </span>
+                    </div>
                   </div>
                 )}
 
                 {specialPriority3.type === "equalFirst" && (
-                  <div className="flex flex-col gap-3">
-                    <span className="text-sm font-bold text-neutral-400">
-                      選擇要比較首消組數的屬性
-                    </span>
-
-                    <div className="flex flex-wrap gap-2">
+                  <div className="solver-shield-equal flex items-center">
+                    <div className="solver-shield-orb-options flex flex-wrap">
                       {EQUAL_FIRST_OPTIONS.map((opt) => {
                         const active = normalizeSelectedEqualOrbs(
                           specialPriority3.equalOrbs
@@ -11075,8 +12757,8 @@ return (
                       })}
                     </div>
 
-                    <span className="text-xs text-neutral-500">
-                      會比較各選擇屬性的首消組數，全部相等且至少 1 組才算達成。
+                    <span className="solver-shield-description text-neutral-500">
+                      所選種類的首消組數需相同且至少1組。
                     </span>
                   </div>
                 )}
@@ -11120,7 +12802,7 @@ return (
                       true
                     )}
 
-                    <span className="text-xs text-neutral-500">
+                    <span className="solver-shield-description text-xs text-neutral-500">
                       首消至少形成 1 組 m*n 的完整矩形。
                     </span>
                   </div>
@@ -11151,8 +12833,9 @@ return (
                       true
                     )}
 
-                    <span className="text-xs text-neutral-500">
-                      至少達成 1 組指定形狀。
+                    <span className="solver-shield-description text-neutral-500">
+                      首消至少形成 {specialPriority3.count} 組
+                      {getSpecialShapeLabel(specialPriority3.type)}形狀。
                     </span>
                   </div>
                 )}
@@ -11160,16 +12843,13 @@ return (
             )}
           </div>
         </div>
-      )}
-    </div>
   </div>
 )}
 </div>
-)}
 		</div>
 
         {isManual && (
-          <div className="mx-auto w-full max-w-[500px] mb-4 px-2">
+          <div className="solver-timer-panel mx-auto w-full max-w-[500px] px-2">
             <div className="flex justify-between items-end mb-2">
               <span className="text-[10px] font-black text-orange-400 italic tracking-widest">
                 TIME REMAINING
@@ -11196,7 +12876,8 @@ return (
 
         <div
           ref={boardWrapRef}
-          className="relative bg-neutral-700 rounded-3xl shadow-2xl border-2 border-neutral-600 mb-6 mx-auto w-full max-w-none sm:max-w-[500px] overflow-visible"
+          data-testid="solver-board-panel"
+          className="solver-board-panel relative bg-neutral-700 rounded-3xl shadow-2xl border-2 border-neutral-600 mx-auto w-full max-w-none sm:max-w-[500px] overflow-visible"
           style={{
   contain: "layout paint",
   touchAction: isManual ? "none" : "auto",
@@ -11237,7 +12918,7 @@ return (
           <div ref={boardInnerRef} className="relative overflow-visible">
   <div className={isManual ? "pt-3" : ""}>
   {!isManual && (
-    <div className="mb-2 flex items-center justify-between rounded-2xl border border-white/10 bg-neutral-900/70 px-3 py-2">
+    <div className="solver-character-orb-bar mb-2 flex items-center justify-between rounded-2xl border border-white/10 bg-neutral-900/70 px-3 py-2">
       <div className="flex items-center gap-2">
         <div className="flex h-5 w-5 items-center justify-center rounded-xl bg-yellow-400/15 text-yellow-300 ring-1 ring-yellow-300/20">
           <Sparkles size={14} />
@@ -11257,7 +12938,7 @@ return (
       <button
         type="button"
         onClick={toggleAutoRow0Expanded}
-        className={`rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
+      className={`solver-character-orb-toggle rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
           autoRow0Expanded
             ? "bg-yellow-400 text-black hover:bg-yellow-300"
             : "bg-neutral-800 text-white hover:bg-neutral-700"
@@ -11699,21 +13380,22 @@ const visualImg = Object.values(ORB_TYPES).find(
   <div className="absolute inset-0 pointer-events-none z-[9999]">
     {floating?.visible && (
       <div
+        data-testid="floating-orb"
         className="absolute z-[9999] pointer-events-none flex items-center justify-center"
         style={{
           left: floating.x,
           top: floating.y,
           transform: "translate(-50%, -50%)",
-          width: 120,
-          height: 120,
+          width: stableCellSize,
+          height: stableCellSize,
         }}
       >
         <div className="absolute z-0 flex items-center justify-center">
           <div
             className="absolute rounded-full blur-lg opacity-100"
             style={{
-              width: 90,
-              height: 90,
+              width: stableCellSize * 1.12,
+              height: stableCellSize * 1.12,
               background:
                 "radial-gradient(circle, rgba(99,102,241,1) 0%, rgba(99,102,241,0.95) 40%, rgba(99,102,241,0.6) 65%, rgba(0,0,0,0) 80%)",
             }}
@@ -11721,8 +13403,8 @@ const visualImg = Object.values(ORB_TYPES).find(
           <div
             className="absolute rounded-full blur-sm opacity-100"
             style={{
-              width: 75,
-              height: 75,
+              width: stableCellSize * 0.94,
+              height: stableCellSize * 0.94,
               background:
                 "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,255,255,0.95) 50%, rgba(255,255,255,0.5) 75%, rgba(0,0,0,0) 95%)",
             }}
@@ -11735,7 +13417,7 @@ const visualImg = Object.values(ORB_TYPES).find(
               (t) => t.id === floating.orbId
             )?.img
           }
-          className="relative w-16 h-16 md:w-20 md:h-20 block drop-shadow-[0_0_10px_rgba(255,255,255,0.35)]"
+          className="relative block h-full w-full object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.35)]"
           draggable={false}
           alt=""
         />
@@ -11830,7 +13512,7 @@ const visualImg = Object.values(ORB_TYPES).find(
 
   {gifCaptureMode && (
     <div
-      className="w-full flex items-center justify-center text-[12px] font-black tracking-wide"
+      className="solver-gif-footer w-full flex items-center justify-center text-[12px] font-black tracking-wide"
       style={{
         height: GIF_FOOTER_H,
         marginTop: 0,
@@ -11989,7 +13671,7 @@ const visualImg = Object.values(ORB_TYPES).find(
   ];
 
   return (
-    <div className="mt-1 mb-2 flex justify-center">
+    <div className="solver-actions-panel flex justify-center">
       <div
         className="grid gap-2 w-full max-w-4xl"
         style={{
@@ -12004,8 +13686,8 @@ const visualImg = Object.values(ORB_TYPES).find(
   );
 })()}
 
-        <div className="flex flex-col items-center mt-3 gap-2">
-          <div className="flex items-center gap-3">
+        <div className="solver-export-panel flex flex-col items-center gap-2">
+          <div className="solver-export-controls flex items-center justify-center gap-2">
             <button
               onClick={exportGif}
               disabled={
@@ -12017,7 +13699,7 @@ const visualImg = Object.values(ORB_TYPES).find(
                 isPaused
               }
               className={[
-                "flex items-center gap-2 px-8 py-4 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95",
+                "solver-export-control-button flex items-center justify-center gap-2 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95",
                 solving ||
                 exportingGif ||
                 isReplaying ||
@@ -12041,58 +13723,51 @@ const visualImg = Object.values(ORB_TYPES).find(
             {exportingGif && (
               <button
                 onClick={abortGifExport}
-                className="flex items-center gap-2 px-6 py-4 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95 bg-red-600 hover:bg-red-500 border-red-400/30 shadow-red-900/30 text-white"
+                className="solver-export-control-button flex items-center justify-center gap-2 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95 bg-red-600 hover:bg-red-500 border-red-400/30 shadow-red-900/30 text-white"
               >
                 <Square size={20} />
                 中止
               </button>
             )}
+
+            {gifReady.url && (
+              <button
+                onClick={onGifDownloadClick}
+                className={[
+                  "solver-export-control-button flex items-center justify-center gap-2 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95",
+                  "bg-amber-500 hover:bg-amber-400 border-amber-300/30 shadow-amber-900/30 text-white",
+                ].join(" ")}
+              >
+                <FileDown size={20} />
+                下載 GIF
+              </button>
+            )}
           </div>
 
           {exportingGif && (
-            <div className="w-full max-w-xl">
-              <div className="flex justify-between text-xs font-bold text-neutral-400 mb-1">
-                <span>選擇圖片</span>
-                <span className="text-fuchsia-300">
-                  {gifProgress.cur}/{gifProgress.total}
-                </span>
-              </div>
-
-              <div className="w-full h-2 rounded-full bg-neutral-800 overflow-hidden border border-neutral-700">
+            <div className="solver-export-progress-row flex w-full max-w-xl items-center justify-center gap-2">
+              <div className="solver-export-progress-track h-2 rounded-full bg-neutral-800 overflow-hidden border border-neutral-700">
                 <div
                   className="h-full bg-fuchsia-500 transition-all"
                   style={{ width: `${gifProgress.pct || 0}%` }}
                 />
               </div>
-
-              <div className="mt-1 text-[11px] text-neutral-500 text-center">
-                匯出期間請保持頁面開啟，GIF 轉檔較吃 CPU。
-              </div>
+              <span className="shrink-0 text-xs font-bold text-fuchsia-300">
+                {gifProgress.cur}/{gifProgress.total}
+              </span>
             </div>
-          )}
-
-          {gifReady.url && (
-            <button
-              onClick={onGifDownloadClick}
-              className={[
-                "mt-2 inline-flex items-center gap-2 px-8 py-4 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95",
-                "bg-amber-500 hover:bg-amber-400 border-amber-300/30 shadow-amber-900/30 text-white",
-              ].join(" ")}
-            >
-              <FileDown size={20} />
-              下載 GIF
-            </button>
           )}
         </div>
 
         {showEditor && (
-          <div className="fixed inset-0 z-[4000] flex items-start justify-center bg-black/80 md:pt-6">
+          <div className="solver-editor-overlay fixed inset-0 z-[4000] flex items-start justify-center bg-black/80 md:pt-6">
             <div
-              className="pt-5 bg-neutral-900 w-full max-w-2xl rounded-3xl border border-neutral-800 shadow-2xl overflow-hidden max-h-[calc(100vh-2rem)] flex flex-col h-[100dvh] md:h-auto"
+              data-testid="board-editor-dialog"
+              className="solver-editor-dialog pt-5 bg-neutral-900 w-full max-w-2xl rounded-3xl border border-neutral-800 shadow-2xl overflow-hidden max-h-[calc(100vh-2rem)] flex flex-col h-[100dvh] md:h-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div
-  className="p-3 flex-1 overflow-y-auto overscroll-contain"
+  className="solver-editor-body p-3 flex-1 overflow-y-auto overscroll-contain"
   onMouseUp={endEditorPaint}
   onMouseLeave={endEditorPaint}
   onTouchEnd={endEditorPaint}
@@ -12101,8 +13776,11 @@ const visualImg = Object.values(ORB_TYPES).find(
                   contain: "content",
                 }}
               >
-                <div className="flex flex-col items-center">
-                  <div className="relative bg-neutral-900 rounded-3xl shadow-2xl border-2 border-neutral-800 mb-6 mx-auto w-full max-w-[540px] overflow-visible mt-6">
+                <div className="solver-editor-layout flex flex-col items-center">
+                  <div
+                    data-testid="board-editor-board"
+                    className="solver-editor-board relative bg-neutral-900 rounded-3xl shadow-2xl border-2 border-neutral-800 mb-6 mx-auto w-full max-w-[540px] overflow-visible mt-6"
+                  >
                     <div className="grid grid-cols-6 gap-0">
                       {editingBoard.map((row, r) => (
                         <React.Fragment key={r}>
@@ -12220,12 +13898,12 @@ onTouchMove={(e) => {
                     </div>
                   </div>
 
-                  <div className="w-full">
-                    <p className="text-xs font-black text-neutral-500 uppercase tracking-widest text-center mb-4">
+                  <div className="solver-editor-tools w-full">
+                    <p className="solver-editor-orb-heading text-xs font-black text-neutral-500 uppercase tracking-widest text-center mb-4">
                       ORB PALETTE
                     </p>
 
-                    <div className="flex justify-center gap-3 mb-2">
+                    <div className="solver-editor-orbs flex justify-center gap-3 mb-2">
                       {Object.values(ORB_TYPES).map((type) => (
                         <button
                           key={type.id}
@@ -12247,7 +13925,7 @@ onTouchMove={(e) => {
                       ))}
                     </div>
 
-                    <div className="mt-6 mb-4 text-center">
+                    <div className="solver-editor-state-heading mt-6 mb-4 text-center">
   <p className="text-xs font-black text-neutral-500 uppercase tracking-widest">
     STATE PALETTE:
   </p>
@@ -12257,7 +13935,7 @@ onTouchMove={(e) => {
   </p>
 </div>
 
-                    <div className="flex flex-wrap justify-center gap-3 max-w-[450px] mx-auto">
+                    <div className="solver-editor-states flex flex-wrap justify-center gap-3 max-w-[450px] mx-auto">
                       <button
                         onClick={() => setSelectedMark(0)}
                         className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
@@ -12386,7 +14064,7 @@ onTouchMove={(e) => {
                 </div>
               </div>
 
-              <div className="sticky bottom-0 bg-neutral-900 border-t border-neutral-800 p-4">
+              <div className="solver-editor-footer sticky bottom-0 bg-neutral-900 border-t border-neutral-800 p-4">
                 <div className="grid grid-cols-4 gap-2 w-full">
                   <button
                     onClick={() => setShowEditor(false)}
@@ -12451,7 +14129,7 @@ onTouchMove={(e) => {
           </div>
         )}
 
-        <div className="mt-10 flex items-start gap-4 p-5 bg-indigo-500/5 rounded-2xl border border-indigo-500/20 text-xs text-neutral-400 leading-relaxed shadow-inner">
+        <div className="solver-help-panel flex items-start gap-2 p-3 bg-indigo-500/5 rounded-2xl border border-indigo-500/20 text-xs text-neutral-400 leading-relaxed shadow-inner">
           <Wrench size={18} className="text-indigo-500 shrink-0 mt-1" />
           <div>
             <strong className="text-indigo-400 block mb-1 text-base">
@@ -12475,6 +14153,121 @@ onTouchMove={(e) => {
         </div>
       </div>
     </div>
+
+    {solutionPreview && createPortal(
+      <div
+        data-testid="solution-preview-tooltip"
+        className="solution-preview-tooltip"
+        style={{
+          left: `${solutionPreview.left}px`,
+          top: `${solutionPreview.top}px`,
+        }}
+      >
+        <div className="solution-preview-title">
+          #{solutionPreview.index + 1} 終點版面
+        </div>
+        <div className="solution-preview-board">
+          {solutionPreview.board.map((row, r) => {
+            if (!autoRow0Expanded && r === 0) return null;
+
+            return (
+              <React.Fragment key={`preview-row-${r}`}>
+                {autoRow0Expanded && r === 1 && (
+                  <div className="solution-preview-separator" />
+                )}
+                {row.map((orb, c) => {
+                  const orbId = orbOf(orb);
+                  const orbImage = Object.values(ORB_TYPES).find(
+                    (type) => type.id === orbId
+                  )?.img;
+                  const row0Type =
+                    r === 0
+                      ? Object.keys(ORB_TYPES).find(
+                          (key) => ORB_TYPES[key].id === orbId
+                        )
+                      : null;
+                  const row0BoxImg =
+                    r === 0 ? ROW0_BOX_IMG_MAP[row0Type] || null : null;
+
+                  return (
+                    <div
+                      key={`preview-cell-${r}-${c}`}
+                      className={`solution-preview-cell ${
+                        (r + c) % 2 === 0 ? "bg-neutral-700" : "bg-neutral-900"
+                      }`}
+                    >
+                      {orbId === -1 ? (
+                        <div className="h-full w-full border border-white/10 bg-black/20" />
+                      ) : (
+                        <>
+                          {row0BoxImg && (
+                            <img
+                              src={row0BoxImg}
+                              className="solution-preview-layer solution-preview-row0-box"
+                              draggable={false}
+                              alt=""
+                            />
+                          )}
+                          <img
+                            src={orbImage}
+                            className="solution-preview-orb"
+                            draggable={false}
+                            alt=""
+                          />
+                          {xMarkOf(orb) === 1 && (
+                            <img
+                              src={x1Img}
+                              className="solution-preview-layer"
+                              draggable={false}
+                              alt=""
+                            />
+                          )}
+                          {xMarkOf(orb) === 2 && (
+                            <img
+                              src={x2Img}
+                              className="solution-preview-layer"
+                              draggable={false}
+                              alt=""
+                            />
+                          )}
+                          {nMarkOf(orb) === 1 && (
+                            <img
+                              src={n1Img}
+                              className="solution-preview-layer solution-preview-n-mark"
+                              draggable={false}
+                              alt=""
+                            />
+                          )}
+                          {nMarkOf(orb) === 2 && (
+                            <img
+                              src={n2Img}
+                              className="solution-preview-layer solution-preview-n-mark"
+                              draggable={false}
+                              alt=""
+                            />
+                          )}
+                          {qMarkOf(orb) === 1 && (
+                            <span className="solution-preview-path-mark solution-preview-path-mark--start">
+                              Start
+                            </span>
+                          )}
+                          {qMarkOf(orb) === 2 && (
+                            <span className="solution-preview-path-mark solution-preview-path-mark--end">
+                              End
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>,
+      document.body
+    )}
 
     <input
       ref={importFileRef}
