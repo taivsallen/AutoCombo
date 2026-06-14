@@ -979,7 +979,7 @@ const endEditorPaint = useCallback(() => {
     verticalCombos: 0, 
     horizontalCombos: 0
   });
-  const GIF_FOOTER_H = 28;
+  const GIF_FOOTER_H = 24;
   const FLY_SPEED = 50;
   const [isReplaying, setIsReplaying] = useState(false);
   
@@ -1479,8 +1479,7 @@ const getCellCenterPx = useCallback((r, c) => {
 	  const x = (cellRect.left + cellRect.right) / 2 - rootRect.left;
 	  const y = (cellRect.top + cellRect.bottom) / 2 - rootRect.top;
 
-	  // ????撠?嚗?交?皛?subpixel ??
-	  return { x: Math.round(x), y: Math.round(y) };
+	  return { x, y };
 	}, []);
 
 const bumpGhostRender = useCallback(() => {
@@ -9415,189 +9414,137 @@ const abortGifExport = useCallback(() => {
 	  // ???恍蝡???扎?甇Ｗ?箏???
 	  stopToBase(true);
 	}, [stopToBase]);
-const pauseReplay = useCallback(() => {
-  if (!isReplaying) return;
-  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
-  replayAnimRef.current.raf = 0;
+function finishReplay(st, row0Target = null) {
+  const bb = st.b.map((row) => [...row]);
 
-  // ??????Ｙ敞蝛?dist0
-  const st = replayAnimRef.current;
-  if (st.tStart) {
-    const elapsed = (performance.now() - st.tStart) / 1000;
-    st.dist0 = (st.dist0 || 0) + elapsed * st.pxPerSec;
+  if (st.hole) {
+    bb[st.hole.r][st.hole.c] = row0Target
+      ? st.b[0][row0Target.c]
+      : st.held;
   }
 
+  setReplayBoard(bb);
+  setHolePos(null);
+  setHiddenBCell(null);
+  setGhostArrived(null);
+  setFloating(null);
+  setIsReplaying(false);
+  setIsPaused(false);
+  setCurrentStep(st.targetPath.length - 1);
+  clearAllGhosts();
+
+  st.raf = 0;
+  st.finished = true;
+}
+
+function enterReplayCell(st, nextStep) {
+  const prevRC = st.targetPath[nextStep - 1];
+  const currRC = st.targetPath[nextStep];
+
+  setGhostArrived(null);
+  setHiddenBCell({ r: prevRC.r, c: prevRC.c });
+
+  const pushedCell = st.b?.[currRC.r]?.[currRC.c];
+  const pushedOrbId =
+    pushedCell == null || pushedCell === -1 ? -1 : orbOf(pushedCell);
+
+  spawnManualGhostWithPt(
+    pushedOrbId,
+    getCellCenterPx(currRC.r, currRC.c),
+    getCellCenterPx(prevRC.r, prevRC.c),
+    currRC.r,
+    currRC.c,
+    prevRC.r,
+    prevRC.c
+  );
+
+  if (currRC.r === 0) {
+    st.lastNode = nextStep;
+    finishReplay(st, currRC);
+    return false;
+  }
+
+  if (!st.hole) {
+    st.hole = { r: currRC.r, c: currRC.c };
+    st.b[currRC.r][currRC.c] = -1;
+  } else {
+    st.hole = holeStepInPlace(st.b, st.hole, currRC);
+  }
+
+  st.lastNode = nextStep;
+  setHolePos({ ...st.hole });
+  setReplayBoard(st.b.map((row) => [...row]));
+  setCurrentStep(nextStep);
+  return true;
+}
+
+function runReplayFrame(now) {
+  const st = replayAnimRef.current;
+  if (!st || st.finished || !st.pts || st.pts.length < 2) return;
+
+  const lastStep = st.targetPath.length - 1;
+  const duration = st.moveDurationMs;
+  let elapsed = Math.max(0, now - st.segmentStartedAt);
+
+  while (elapsed >= duration && st.segmentIndex < lastStep) {
+    const nextStep = st.segmentIndex + 1;
+    const endpoint = st.pts[nextStep];
+
+    setFloating((prev) =>
+      prev
+        ? { ...prev, x: endpoint.x, y: endpoint.y, visible: true }
+        : prev
+    );
+
+    if (!enterReplayCell(st, nextStep)) return;
+
+    st.segmentIndex = nextStep;
+    st.segmentStartedAt += duration;
+    elapsed = Math.max(0, now - st.segmentStartedAt);
+  }
+
+  if (st.segmentIndex >= lastStep) {
+    finishReplay(st);
+    return;
+  }
+
+  const from = st.pts[st.segmentIndex];
+  const to = st.pts[st.segmentIndex + 1];
+  const progress = Math.min(1, elapsed / duration);
+  const x = from.x + (to.x - from.x) * progress;
+  const y = from.y + (to.y - from.y) * progress;
+
+  st.segmentElapsedMs = elapsed;
+  setFloating((prev) =>
+    prev ? { ...prev, x, y, visible: true } : prev
+  );
+  st.raf = requestAnimationFrame(runReplayFrame);
+}
+
+const pauseReplay = () => {
+  if (!isReplaying) return;
+
+  const st = replayAnimRef.current;
+  if (st.raf) cancelAnimationFrame(st.raf);
+  st.raf = 0;
+  st.segmentElapsedMs = st.segmentStartedAt
+    ? Math.min(st.moveDurationMs, performance.now() - st.segmentStartedAt)
+    : 0;
+
   setIsPaused(true);
-}, [isReplaying]);
-const resumeReplay = useCallback(() => {
+};
+
+const resumeReplay = () => {
   if (!isPaused) return;
 
   const st = replayAnimRef.current;
-  if (!st || !st.pts || !st.targetPath) return;
+  if (!st || st.finished || !st.pts || !st.targetPath) return;
 
   setIsPaused(false);
   setIsReplaying(true);
-
-  st.tStart = performance.now();
-
-  const EPS = 1e-4;
-
-  const tick = (now) => {
-    const s = replayAnimRef.current;
-    const elapsed = (now - s.tStart) / 1000;
-    const dist = (s.dist0 || 0) + elapsed * s.pxPerSec;
-
-    const clamped = Math.min(dist, s.total);
-
-    let acc = 0;
-    let i = 0;
-    while (i < s.segLen.length && acc + s.segLen[i] < clamped) {
-      acc += s.segLen[i];
-      i++;
-    }
-
-    const t =
-      s.segLen[i] === 0 ? 1 : (clamped - acc) / s.segLen[i];
-
-    const x =
-      s.pts[i].x +
-      (s.pts[i + 1].x - s.pts[i].x) * t;
-
-    const y =
-      s.pts[i].y +
-      (s.pts[i + 1].y - s.pts[i].y) * t;
-
-    setFloating(prev =>
-      prev ? { ...prev, x, y, visible: true } : prev
-    );
-
-    // =========================
-    // ? STEP ?券莎?靽格迤??
-    // =========================
-    while (s.lastNode < i) {
-      const nextStep = s.lastNode + 1;
-
-      const prevRC = s.targetPath[s.lastNode];   // ??鋆?
-      const currRC = s.targetPath[nextStep];
-
-      // ??????憿舐內
-      setGhostArrived(null);
-
-      // ???梯? B嚗????臭誑?游? A 銋?韏琿??
-      setHiddenBCell({ r: prevRC.r, c: prevRC.c });
-
-      // ??spawn ghost嚗 snapshot ?踹??郊??嚗?
-      const boardSnap = s.b.map(r => [...r]);
-
-      const pushedOrbId =
-  st.b?.[currRC.r]?.[currRC.c] == null || st.b[currRC.r][currRC.c] === -1
-    ? -1
-    : orbOf(st.b[currRC.r][currRC.c]);
-
-const fromPt = getCellCenterPx(currRC.r, currRC.c);
-const toPt = getCellCenterPx(prevRC.r, prevRC.c);
-
-spawnManualGhostWithPt(
-  pushedOrbId,
-  fromPt,
-  toPt,
-  currRC.r, currRC.c,
-  prevRC.r, prevRC.c
-);
-
-      // =========================
-      // ? row0 ??蝯?
-      // =========================
-      if (currRC.r === 0) {
-        if (s.hole) {
-          const bb = s.b.map(r => [...r]);
-          bb[s.hole.r][s.hole.c] = s.b[0][currRC.c];
-          setReplayBoard(bb);
-        } else {
-          setReplayBoard(s.b.map(r => [...r]));
-        }
-
-        setHiddenBCell(null);
-        setGhostArrived(null);
-
-        setFloating(null);
-        setIsReplaying(false);
-        setIsPaused(false);
-        setCurrentStep(s.targetPath.length - 1);
-        s.raf = 0;
-        return;
-      }
-
-      // =========================
-      // 瘣芋??
-      // =========================
-      if (!s.hole) {
-        s.hole = { r: currRC.r, c: currRC.c };
-        s.b[currRC.r][currRC.c] = -1;
-        setHolePos({ ...s.hole });
-      } else {
-        s.hole = holeStepInPlace(s.b, s.hole, currRC);
-        setHolePos({ ...s.hole });
-      }
-
-      s.lastNode = nextStep;
-
-      setReplayBoard(s.b.map(r => [...r]));
-      setCurrentStep(nextStep);
-    }
-
-    // =========================
-    // 蝯???
-    // =========================
-    if (dist >= s.total - EPS) {
-      const lastIdx = s.targetPath.length - 1;
-
-      if (s.lastNode < lastIdx) {
-        const currRC = s.targetPath[lastIdx];
-
-        if (currRC.r !== 0) {
-          if (!s.hole) {
-            s.hole = { r: currRC.r, c: currRC.c };
-            s.b[currRC.r][currRC.c] = -1;
-          } else {
-            s.hole = holeStepInPlace(s.b, s.hole, currRC);
-          }
-        }
-
-        s.lastNode = lastIdx;
-      }
-
-      const bb = s.b.map(r => [...r]);
-
-      if (s.hole) {
-        const lastRC = s.targetPath[lastIdx];
-
-        if (lastRC.r === 0) {
-          bb[s.hole.r][s.hole.c] = s.b[0][lastRC.c];
-        } else {
-          bb[s.hole.r][s.hole.c] = s.held;
-        }
-      }
-
-      setReplayBoard(bb);
-
-      setHiddenBCell(null);
-      setGhostArrived(null);
-
-      setFloating(null);
-      setIsReplaying(false);
-      setIsPaused(false);
-      setCurrentStep(s.targetPath.length - 1);
-
-      s.raf = 0;
-      return;
-    }
-
-    s.raf = requestAnimationFrame(tick);
-  };
-
-  st.raf = requestAnimationFrame(tick);
-}, [isPaused]);
+  st.segmentStartedAt = performance.now() - (st.segmentElapsedMs || 0);
+  st.raf = requestAnimationFrame(runReplayFrame);
+};
 const stopReplay = useCallback((clearPath = false) => {
   if (replayAnimRef.current.raf) {
     cancelAnimationFrame(replayAnimRef.current.raf);
@@ -10062,42 +10009,12 @@ const moveSolutionPreview = useCallback((event) => {
 ///////////////////////////////
 
 const [gifFooter, setGifFooter] = useState({
-	  segment: 1,
-	  segmentTotal: 1,
 	  comboText: "0",
 	  step: 0,
 	  stepTotal: 0,
 	});
 /////////////////
 // 蝚砌??嚗IF ?臬瞍?瘜?/////////////////
-// ??頝臬????渡?畾蛛?靘?GIF footer 憿舐內?桀?畾菔?脣漲??// 撠楝敺??蝺挾蝝Ｗ?嚗策 GIF footer 憿舐內畾菔?脣漲??
-const buildSegmentIndexByStep = (rcPath) => {
-	  const n = rcPath?.length || 0;
-	  if (n < 2) return { segAt: [1], segTotal: 1 };
-
-	  let seg = 1;
-	  const segAt = Array(n).fill(1);
-
-	  let prevDr = rcPath[1].r - rcPath[0].r;
-	  let prevDc = rcPath[1].c - rcPath[0].c;
-
-	  segAt[0] = 1;
-	  segAt[1] = 1;
-
-	  for (let i = 2; i < n; i++) {
-		const dr = rcPath[i].r - rcPath[i - 1].r;
-		const dc = rcPath[i].c - rcPath[i - 1].c;
-
-		// ?孵??寡?嚗斜轉?頧?帖嚗停蝞畾?
-		if (dr !== prevDr || dc !== prevDc) seg++;
-
-		segAt[i] = seg;
-		prevDr = dr;
-		prevDc = dc;
-	  }
-
-	  return { segAt, segTotal: seg };
-	};
 // 靘?楝敺??瑕??恍銝西撓??GIF??// 靘楝敺??剝??瑕?嚗撓?箇?臭?頛?GIF??
 const exportGif = useCallback(async () => {
 	  // ?????甈∪?綽???id??瘨?璅飛??
@@ -10138,12 +10055,9 @@ const exportGif = useCallback(async () => {
 		const maxFrames = 500;
 		const skip = Math.max(1, Math.ceil(totalSteps / maxFrames));
 		const frameDelay = Math.max(60, config.replaySpeed * skip);
-		const { segAt, segTotal } = buildSegmentIndexByStep(path);
 		const comboText = `${stats.combos}${stats.skyfallCombos > 0 ? `+${stats.skyfallCombos}` : ""}`;
 
 		setGifFooter({
-		  segment: segAt[0] || 1,
-		  segmentTotal: segTotal,
 		  comboText,
 		  step: 0,
 		  stepTotal: totalSteps,
@@ -10304,10 +10218,8 @@ const exportGif = useCallback(async () => {
 		  if (isCancelled()) return;
 
 		  if (i % skip === 0 || i === path.length - 1) {
-			// ???湔 footer嚗egment/step嚗?
 			 setGifFooter(prev => ({
 			  ...prev,
-			  segment: segAt[i] || prev.segment || 1,
 			  step: i,
 			}));
 
@@ -10323,7 +10235,6 @@ const exportGif = useCallback(async () => {
 		// ??撘瑕?敺?甇亦? footer + ?芯?撘蛛?蝣箔?憿舐內 step=totalSteps
 		setGifFooter(prev => ({
 		  ...prev,
-		  segment: segAt[totalSteps] || prev.segment || 1,
 		  step: totalSteps,
 		}));
 		await new Promise(r => requestAnimationFrame(r));
@@ -10449,7 +10360,7 @@ const cellCenterByRC = (r, c) => {
 	  if (!rc) return { x: 0, y: 0 };
 	  return { x: (rc.left + rc.right) / 2, y: (rc.top + rc.bottom) / 2 };
 	};
-const replayPathContinuous = (targetPath = path, startPx = null) => {
+const replayPathContinuous = (targetPath = path) => {
 	  if (!targetPath || targetPath.length < 2) return;
 
 	  if (replayAnimRef.current.raf) cancelAnimationFrame(replayAnimRef.current.raf);
@@ -10480,168 +10391,209 @@ const replayPathContinuous = (targetPath = path, startPx = null) => {
 
 	  setReplayBoard(b);
 
-	  const pts = buildPixelPath(targetPath, startPx);
+	  const pts = buildPixelPath(targetPath);
 	  if (!pts || pts.length < 2) return;
-
-	  const segLen = [];
-	  let total = 0;
-	  for (let i = 0; i < pts.length - 1; i++) {
-		const d = Math.hypot(pts[i+1].x - pts[i].x, pts[i+1].y - pts[i].y);
-		segLen.push(d);
-		total += d;
-	  }
-	  if (total <= 0) return;
 
 	  setFloating({ orbId: startOrbId, x: pts[0].x, y: pts[0].y, visible: true });
 
-	  const totalSteps = targetPath.length - 1;
-	  const totalTimeSec = (totalSteps * config.replaySpeed) / 1000;
-	  const pxPerSec = total / totalTimeSec;
-
 	  replayAnimRef.current = {
 		raf: 0,
-		tStart: performance.now(),
-		pxPerSec,
-		dist0: 0,
-
+		finished: false,
+		segmentIndex: 0,
+		segmentStartedAt: performance.now(),
+		segmentElapsedMs: 0,
+		moveDurationMs: Math.max(16, Number(config.replaySpeed) || 250),
 		b,
-		hole,          // ??瘣?蝵殷?b 鋆⊿撠? -1嚗?
-		held: startCell,// ??瘞賊??箏?
-
+		hole,
+		held: startCell,
 		lastNode: 0,
 		pts,
-		segLen,
-		total,
 		targetPath,
 	  };
 
-	  const EPS = 1e-4;
+	  replayAnimRef.current.raf = requestAnimationFrame(runReplayFrame);
+	};
+const routeDirection = (a, b) => ({
+  dr: Math.sign(b.r - a.r),
+  dc: Math.sign(b.c - a.c),
+});
+const routeDirectionKey = (a, b) => {
+  const { dr, dc } = routeDirection(a, b);
+  return `${dr},${dc}`;
+};
+const ROUTE_DIAGONAL_UNIT = Math.SQRT1_2;
+const ROUTE_ORIENTATIONS = {
+  H: {
+    normal: { x: 0, y: 1 },
+  },
+  V: {
+    normal: { x: 1, y: 0 },
+  },
+  D_DOWN: {
+    normal: { x: ROUTE_DIAGONAL_UNIT, y: -ROUTE_DIAGONAL_UNIT },
+  },
+  D_UP: {
+    normal: { x: ROUTE_DIAGONAL_UNIT, y: ROUTE_DIAGONAL_UNIT },
+  },
+};
+const routeOrientationKey = (a, b) => {
+  const { dr, dc } = routeDirection(a, b);
+  if (dr === 0) return "H";
+  if (dc === 0) return "V";
+  return dr * dc > 0 ? "D_DOWN" : "D_UP";
+};
+const routeTangent = (a, b) => {
+  const { dr, dc } = routeDirection(a, b);
+  const length = Math.hypot(dc, dr) || 1;
+  return { x: dc / length, y: dr / length };
+};
+const routeEdgeKey = (a, b, orientation) => {
+  const keyA = `${a.r},${a.c}`;
+  const keyB = `${b.r},${b.c}`;
+  return keyA < keyB
+    ? `${orientation}:${keyA}>${keyB}`
+    : `${orientation}:${keyB}>${keyA}`;
+};
+const addRouteOffset = (point, line) => {
+  const normal = ROUTE_ORIENTATIONS[line.orientation].normal;
+  return {
+    x: point.x + normal.x * line.offset,
+    y: point.y + normal.y * line.offset,
+  };
+};
+const intersectRouteLines = (p1, tangent1, p2, tangent2) => {
+  const cross = (a, b) => a.x * b.y - a.y * b.x;
+  const denominator = cross(tangent1, tangent2);
+  if (Math.abs(denominator) < 1e-6) return null;
 
-	  const tick = (now) => {
-		const st = replayAnimRef.current;
-		const elapsed = (now - st.tStart) / 1000;
-		const dist = (st.dist0 || 0) + elapsed * st.pxPerSec;
+  const delta = { x: p2.x - p1.x, y: p2.y - p1.y };
+  const distance = cross(delta, tangent2) / denominator;
+  return {
+    x: p1.x + tangent1.x * distance,
+    y: p1.y + tangent1.y * distance,
+  };
+};
+const buildShiftedRoutePoints = (rcPath, laneGap) => {
+  if (!rcPath?.length) return [];
 
-		// 雿蔭??
-		const clamped = Math.min(dist, st.total);
-		let acc = 0;
-		let i = 0;
-		while (i < st.segLen.length && acc + st.segLen[i] < clamped) {
-		  acc += st.segLen[i];
-		  i++;
-		}
-		
-		const t = st.segLen[i] === 0 ? 1 : (clamped - acc) / st.segLen[i];
-		const x = st.pts[i].x + (st.pts[i + 1].x - st.pts[i].x) * t;
-		const y = st.pts[i].y + (st.pts[i + 1].y - st.pts[i].y) * t;
-		setFloating(prev => prev ? { ...prev, x, y, visible: true } : prev);
+  const centers = rcPath.map((p) => getCellCenterPx(p.r, p.c));
+  if (rcPath.length < 2) return centers;
 
-		// ??韏圈?蝭暺停?漱??皛???
-		while (st.lastNode < i) {
-  const nextStep = st.lastNode + 1;
-  const prevRC = st.targetPath[st.lastNode];
-  const currRC = st.targetPath[nextStep];
+  const lines = [];
+  const edgeLines = Array(rcPath.length - 1);
+  let start = 0;
+  let direction = routeDirectionKey(rcPath[0], rcPath[1]);
 
-  setGhostArrived(null);
-  setHiddenBCell({ r: prevRC.r, c: prevRC.c });
-
-  const pushedOrbId =
-  st.b?.[currRC.r]?.[currRC.c] == null || st.b[currRC.r][currRC.c] === -1
-    ? -1
-    : orbOf(st.b[currRC.r][currRC.c]);
-
-const fromPt = getCellCenterPx(currRC.r, currRC.c);
-const toPt = getCellCenterPx(prevRC.r, prevRC.c);
-
-spawnManualGhostWithPt(
-  pushedOrbId,
-  fromPt,
-  toPt,
-  currRC.r, currRC.c,
-  prevRC.r, prevRC.c
-);
-
-  // 頦? row0嚗?甇ｇ??? held ?曉?瘣?
-  if (currRC.r === 0) {
-    if (st.hole) {
-      const bb = st.b.map(r => [...r]);
-      bb[st.hole.r][st.hole.c] = st.b[0][currRC.c];
-      setReplayBoard(bb);
-    } else {
-      setReplayBoard(st.b.map(r => [...r]));
+  const appendLine = (end) => {
+    const orientation = routeOrientationKey(
+      rcPath[start],
+      rcPath[start + 1]
+    );
+    const edgeKeys = [];
+    for (let i = start; i < end; i++) {
+      edgeKeys.push(routeEdgeKey(rcPath[i], rcPath[i + 1], orientation));
     }
 
-    setFloating(null);
-    setIsReplaying(false);
-    setIsPaused(false);
-    setCurrentStep(st.targetPath.length - 1);
-	clearAllGhosts();
-    st.raf = 0;
-    return;
+    const line = {
+      start,
+      end,
+      orientation,
+      tangent: routeTangent(rcPath[start], rcPath[start + 1]),
+      edgeKeys,
+      lane: 0,
+      offset: 0,
+    };
+    lines.push(line);
+    for (let i = start; i < end; i++) edgeLines[i] = line;
+  };
+
+  for (let i = 1; i < rcPath.length - 1; i++) {
+    const nextDirection = routeDirectionKey(rcPath[i], rcPath[i + 1]);
+    if (nextDirection === direction) continue;
+
+    appendLine(i);
+    start = i;
+    direction = nextDirection;
   }
 
-  // 蝚砌?甈∟???row1~5嚗??取消嚗?????韏啜?憿舐內嚗???蝘餃?嚗?
-  if (!st.hole) {
-    st.hole = { r: currRC.r, c: currRC.c };
-    st.b[currRC.r][currRC.c] = -1;
-    setHolePos({ ...st.hole });
-  } else {
-    st.hole = holeStepInPlace(st.b, st.hole, currRC);
-    setHolePos({ ...st.hole });
+  appendLine(rcPath.length - 1);
+
+  const laneUsage = new Map();
+
+  for (const line of lines) {
+    const occupied = new Set();
+    for (const key of line.edgeKeys) {
+      const lanes = laneUsage.get(key);
+      if (!lanes) continue;
+      for (const lane of lanes) occupied.add(lane);
+    }
+
+    let lane = 0;
+    while (occupied.has(lane)) lane++;
+    line.lane = lane;
+
+    for (const key of line.edgeKeys) {
+      const lanes = laneUsage.get(key) || new Set();
+      lanes.add(lane);
+      laneUsage.set(key, lanes);
+    }
   }
 
-  st.lastNode = nextStep;
-  setReplayBoard(st.b.map(r => [...r]));
-  setCurrentStep(nextStep);
-}
-		
-		// 蝯?嚗? held ?曉瘣?瘚桃?瘨仃
-		if (dist >= st.total - EPS) {
-			const lastIdx = st.targetPath.length - 1;
+  for (const line of lines) {
+    let maxLane = 0;
+    for (const key of line.edgeKeys) {
+      const lanes = laneUsage.get(key);
+      if (!lanes) continue;
+      for (const lane of lanes) maxLane = Math.max(maxLane, lane);
+    }
 
-	  // ? 編輯??敺???step??
-	  if (st.lastNode < lastIdx) {
-		const currRC = st.targetPath[lastIdx];
+    line.offset = (line.lane - maxLane / 2) * laneGap;
+  }
 
-		if (currRC.r !== 0) {
-		  if (!st.hole) {
-			st.hole = { r: currRC.r, c: currRC.c };
-			st.b[currRC.r][currRC.c] = -1;
-		  } else {
-			st.hole = holeStepInPlace(st.b, st.hole, currRC);
-		  }
-		}
+  return centers.map((center, index) => {
+    const previous = index > 0 ? edgeLines[index - 1] : null;
+    const next = index < edgeLines.length ? edgeLines[index] : null;
 
-		st.lastNode = lastIdx;
-	  }
-		  const bb = st.b.map(r => [...r]);
-			if (st.hole) {
-			  const lastRC = st.targetPath[lastIdx];
+    if (previous && next && previous !== next) {
+      const previousPoint = addRouteOffset(center, previous);
+      const nextPoint = addRouteOffset(center, next);
+      const intersection = intersectRouteLines(
+        previousPoint,
+        previous.tangent,
+        nextPoint,
+        next.tangent
+      );
 
-			  if (lastRC.r === 0) {
-				// ???敺???row0嚗 row0 閰脫???瘣?
-				bb[st.hole.r][st.hole.c] = st.b[0][lastRC.c];
-			  } else {
-				bb[st.hole.r][st.hole.c] = st.held;
-			  }
-			}
-			setReplayBoard(bb);
+      if (
+        intersection &&
+        Number.isFinite(intersection.x) &&
+        Number.isFinite(intersection.y)
+      ) {
+        return intersection;
+      }
 
-		  setHolePos(null);
-		  setFloating(null);
-		  setIsReplaying(false);
-		  setIsPaused(false);
-		  setCurrentStep(st.targetPath.length - 1);
-		  clearAllGhosts();
-		  st.raf = 0;
-		  return;
-		}
+      return previousPoint;
+    }
 
-		st.raf = requestAnimationFrame(tick);
-	  };
+    const line = previous || next;
+    return line ? addRouteOffset(center, line) : center;
+  });
+};
+const buildStraightPath = (points) => {
+  if (!points || points.length < 2) {
+    return { d: "", start: points?.[0] || null, tip: points?.[0] || null };
+  }
 
-	  replayAnimRef.current.raf = requestAnimationFrame(tick);
-	};
+  const d = points
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+    .join(" ");
+
+  return {
+    d,
+    start: points[0],
+    tip: points[points.length - 1],
+  };
+};
 const hypot = (x, y) => Math.hypot(x, y);
 const q = (v, unit = 0.25) => Math.round(v / unit) * unit;
 const lineIntersection = (P, r, Q, s, eps = 1e-9) => {
@@ -13143,60 +13095,68 @@ const visualImg = Object.values(ORB_TYPES).find(
       if (isManualDragging) return null;
       if (!path || path.length < 2) return null;
 
-      const visiblePath = path.slice(0, currentStep + 1);
-      if (visiblePath.length < 2) return null;
+      const completedCount = Math.max(
+        0,
+        Math.min(path.length, currentStep + 1)
+      );
+      const routePoints = buildShiftedRoutePoints(
+        path,
+        Math.max(6, stableCellSize / 10)
+      );
+      const visiblePoints = routePoints.slice(0, completedCount);
+      const cursorActive = (isReplaying || isPaused) && floating?.visible;
+      if (
+        cursorActive &&
+        currentStep >= 0 &&
+        currentStep < path.length - 1
+      ) {
+        const rawFrom = getCellCenterPx(path[currentStep].r, path[currentStep].c);
+        const rawTo = getCellCenterPx(
+          path[currentStep + 1].r,
+          path[currentStep + 1].c
+        );
+        const dx = rawTo.x - rawFrom.x;
+        const dy = rawTo.y - rawFrom.y;
+        const lengthSq = dx * dx + dy * dy;
+        const progress =
+          lengthSq > 0
+            ? Math.max(
+                0,
+                Math.min(
+                  1,
+                  ((floating.x - rawFrom.x) * dx +
+                    (floating.y - rawFrom.y) * dy) /
+                    lengthSq
+                )
+              )
+            : 1;
+        const shiftedFrom = routePoints[currentStep];
+        const shiftedTo = routePoints[currentStep + 1];
+        const cursorPoint = {
+          x: shiftedFrom.x + (shiftedTo.x - shiftedFrom.x) * progress,
+          y: shiftedFrom.y + (shiftedTo.y - shiftedFrom.y) * progress,
+        };
 
-      const pts0 = buildPixelPath(visiblePath);
-
-      let d, start, tip;
-      let ptsDetour = pts0;
-      let triMarks = [];
-      let segLabels = [];
-
-      if (isManualDragging) {
-        const simple = buildPathStringAndMarkersRounded(pts0, 6);
-        d = simple.d;
-        start = simple.start;
-        tip = simple.tip;
-      } else {
-        const bumpPx = Math.max(10, Math.min(22, stableCellSize * 0.22));
-        const rampPx = Math.max(10, Math.min(22, stableCellSize * 0.22));
-
-        const ptsJump = collapseUpcomingOverlapRunsV3(pts0, {
-          prefixMinEdges: 1,
-          suffixMinEdges: 1,
-          fullMinEdges: 3,
-          bump: bumpPx,
-          bumpRamp: rampPx,
-        });
-
-        ptsDetour = deOverlapByRampedDetourV2(ptsJump, 8, 14);
-
-        const complex = buildPathStringAndMarkersRounded(ptsDetour, 10);
-        d = complex.d;
-        start = complex.start;
-        tip = complex.tip;
-
-        triMarks = replayDone
-          ? sampleAlongPolyline(ptsDetour, 22, 14)
-          : [];
-
-        segLabels = replayDone
-          ? buildSegmentLabelsFromRcPath(visiblePath, getCellCenterPx, {
-              cellSize: stableCellSize,
-              labelR: 8,
-              pathStroke: 4,
-              gap: -2,
-              alongScale: 0.22,
-              minPxLen: 10,
-            })
-          : [];
+        if (
+          !visiblePoints.length ||
+          Math.hypot(
+            cursorPoint.x - visiblePoints[visiblePoints.length - 1].x,
+            cursorPoint.y - visiblePoints[visiblePoints.length - 1].y
+          ) > 0.25
+        ) {
+          visiblePoints.push(cursorPoint);
+        }
       }
+
+      if (visiblePoints.length < 2) return null;
+
+      const { d, start, tip } = buildStraightPath(visiblePoints);
 
       return (
         <>
           {start && (
             <circle
+              data-testid="replay-start-marker"
               cx={start.x}
               cy={start.y}
               r="14"
@@ -13207,112 +13167,23 @@ const visualImg = Object.values(ORB_TYPES).find(
             />
           )}
 
-          <>
-            <path
-              d={d}
-              stroke="rgba(0,0,0,0.55)"
-              strokeWidth="5"
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{
-                filter: "blur(3.5px)",
-                mixBlendMode: "normal",
-              }}
-              opacity={0.9}
-            />
-
-            <path
-              d={d}
-              stroke="rgba(255,255,255,0.95)"
-              strokeWidth="8"
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{
-                filter: "blur(6px)",
-                mixBlendMode: "screen",
-              }}
-              opacity={0.45}
-            />
-
-            <path
-              d={d}
-              stroke="white"
-              strokeWidth="4"
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{
-                mixBlendMode: "screen",
-              }}
-              opacity={0.95}
-            />
-          </>
-
-          {replayDone && triMarks.length > 0 && (
-            <g opacity={1}>
-              {triMarks.map((m, idx) => {
-                const leg = 4;
-                const angleDeg = 30;
-                const theta = (angleDeg * Math.PI) / 180;
-                const dx = -leg * Math.cos(theta);
-                const dy = leg * Math.sin(theta);
-                const coreWidth = 6;
-                const sw = coreWidth * 0.15;
-
-                return (
-                  <g
-                    key={idx}
-                    transform={`translate(${m.x} ${m.y}) rotate(${m.ang})`}
-                  >
-                    <path
-                      d={`M ${dx} ${-dy} L 0 0 L ${dx} ${dy}`}
-                      fill="none"
-                      stroke="black"
-                      strokeWidth={sw}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </g>
-                );
-              })}
-            </g>
-          )}
-
-          {replayDone && segLabels.length > 0 && (
-            <g>
-              {segLabels.map((s) => (
-                <g key={s.idx}>
-                  <circle
-                    cx={s.x}
-                    cy={s.y}
-                    r={7}
-                    fill="rgba(0,0,0,0.75)"
-                    stroke="rgba(255,255,255,0.35)"
-                    strokeWidth="1.2"
-                  />
-                  <text
-                    x={s.x}
-                    y={s.y + 3}
-                    textAnchor="middle"
-                    fontSize="9"
-                    fontWeight="900"
-                    fill="white"
-                    style={{
-                      pointerEvents: "none",
-                      userSelect: "none",
-                    }}
-                  >
-                    {s.idx}
-                  </text>
-                </g>
-              ))}
-            </g>
-          )}
+          <path
+            data-testid="replay-route-line"
+            d={d}
+            stroke="white"
+            strokeWidth="4"
+            fill="none"
+            strokeLinecap="butt"
+            strokeLinejoin="miter"
+            style={{
+              filter: "drop-shadow(3px 3px 4px rgba(0,0,0,0.95))",
+            }}
+            opacity={0.96}
+          />
 
           {currentStep >= 0 && tip && (
             <circle
+              data-testid="replay-cursor-marker"
               cx={tip.x}
               cy={tip.y}
               r="16"
@@ -13512,7 +13383,7 @@ const visualImg = Object.values(ORB_TYPES).find(
 
   {gifCaptureMode && (
     <div
-      className="solver-gif-footer w-full flex items-center justify-center text-[12px] font-black tracking-wide"
+      className="solver-gif-footer w-full flex items-center justify-center gap-4 text-[11px] font-black tracking-wide"
       style={{
         height: GIF_FOOTER_H,
         marginTop: 0,
@@ -13520,14 +13391,9 @@ const visualImg = Object.values(ORB_TYPES).find(
         borderTop: "1px solid rgba(255,255,255,0.12)",
       }}
     >
-      <span className="text-white/90">
-        segment: {gifFooter.segment}/{gifFooter.segmentTotal}
-      </span>
-      <span className="mx-2 text-white/30">|</span>
       <span className="text-fuchsia-200">
         combo: {gifFooter.comboText}
       </span>
-      <span className="mx-2 text-white/30">|</span>
       <span className="text-emerald-200">
         step: {gifFooter.step}/{gifFooter.stepTotal}
       </span>
@@ -13612,9 +13478,7 @@ const visualImg = Object.values(ORB_TYPES).find(
             if (isPaused) return resumeReplay();
 
             if (!path || path.length === 0) return;
-            const s = getCellCenterPx(path[0].r, path[0].c);
-            const startPx = { x: s.x, y: s.y - 30 };
-            replayPathContinuous(path, startPx);
+            replayPathContinuous(path);
           }}
           disabled={
             solving ||
