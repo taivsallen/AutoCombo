@@ -107,6 +107,46 @@ body {
   --settings-accent-rgb: 96 165 250;
 }
 
+.solver-hard-step-control {
+  min-width: 0;
+}
+
+.solver-hard-step-label {
+  white-space: nowrap;
+}
+
+.solver-hard-step-switch {
+  position: relative;
+  width: 2.15rem;
+  height: 1.2rem;
+  flex: 0 0 auto;
+  border: 1px solid rgb(82 82 91 / 0.9);
+  border-radius: 9999px;
+  background: rgb(38 38 38 / 0.95);
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.solver-hard-step-switch > span {
+  position: absolute;
+  top: 0.16rem;
+  left: 0.17rem;
+  width: 0.76rem;
+  height: 0.76rem;
+  border-radius: 9999px;
+  background: #737373;
+  transition: transform 140ms ease, background 140ms ease;
+}
+
+.solver-hard-step-switch.is-enabled {
+  border-color: rgb(96 165 250 / 0.75);
+  background: rgb(37 99 235 / 0.48);
+}
+
+.solver-hard-step-switch.is-enabled > span {
+  background: #bfdbfe;
+  transform: translateX(0.98rem);
+}
+
 .solver-settings-panel--rules,
 .solver-settings-content--rules {
   --settings-accent-rgb: 34 211 238;
@@ -265,6 +305,14 @@ body {
 .solver-rule-requirement-grid,
 .solver-rule-add-grid {
   gap: 0.25rem;
+}
+
+.solver-rule-add-grid {
+  grid-template-columns: repeat(auto-fit, minmax(4.1rem, 1fr));
+}
+
+.solver-rule-add-grid > span {
+  grid-column: 1 / -1;
 }
 
 .solver-rule-requirement-grid {
@@ -892,6 +940,16 @@ body {
 
   .solver-rule-requirement-grid {
     grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .solver-rule-add-grid {
+    grid-template-columns: repeat(auto-fit, minmax(4.1rem, 1fr));
+    gap: 0.2rem;
+  }
+
+  .solver-rule-add-grid button {
+    padding-inline: 0.25rem;
+    white-space: nowrap;
   }
 
   .solver-orb-rules-grid {

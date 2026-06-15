@@ -286,6 +286,8 @@ const STATE_DESC = {
 const DEFAULT_CONFIG = {
   beamWidth: 440,    
   maxSteps: 30,      
+  hardStepLimitEnabled: false,
+  hardStepLimit: 80,
   maxNodes: 50000,  
   evalWorkers: 1,
   humanPlanner: true,
@@ -872,6 +874,8 @@ const endEditorPaint = useCallback(() => {
     diagonal: false,
     skyfall: false,
     autoRow0Expanded: false,
+    hardStepLimitEnabled: false,
+    hardStepLimit: 80,
     normalizedRuleProfileRef: null,
     value: "",
   });
@@ -4519,7 +4523,18 @@ const beamSolve = async (
     1,
     Math.min(60, Math.floor(Number(cfg.reverseMaxSteps) || 60))
   );
-  const solverMaxSteps = Math.max(1, Math.floor(Number(cfg.maxSteps) || 1));
+  const configuredMaxSteps = Math.max(
+    1,
+    Math.floor(Number(cfg.maxSteps) || 1)
+  );
+  const hardStepLimitEnabled = cfg.hardStepLimitEnabled === true;
+  const hardStepLimit = Math.max(
+    1,
+    Math.min(250, Math.floor(Number(cfg.hardStepLimit) || 1))
+  );
+  const solverMaxSteps = hardStepLimitEnabled
+    ? Math.min(configuredMaxSteps, hardStepLimit)
+    : configuredMaxSteps;
   const REVERSE_TARGET_LIMIT = REVERSE_PLAN_ENABLED ? 10 : 0;
   const DEFER_MOVE_MATERIALIZATION =
     cfg.deferMoveMaterialization !== false;
@@ -7306,6 +7321,8 @@ self.onmessage = (e) => {
     precomputedPrimitives = null,
   }) => {
     const steps = stepsOf(node);
+    if (steps > solverMaxSteps) return;
+
     const boardKey = precomputedBoardKey || getBoardKey(nextBoard);
     const primitiveCacheKey = getEvalPrimitiveCacheKey(boardKey, hole, held);
     let primitives = precomputedPrimitives || getCachedEvalPrimitives(primitiveCacheKey);
@@ -9336,13 +9353,20 @@ const makeSolutionResetKey = (
   skyfallEnabled,
   autoRow0Expanded,
   ruleProfile,
-  precomputedBoardKey = ""
+  precomputedBoardKey = "",
+  hardStepLimitEnabled = false,
+  hardStepLimit = 80
 ) => {
   return JSON.stringify({
     board: precomputedBoardKey || getBoardKey(baseBoard),
     diagonal: !!diagonalEnabled,
     skyfall: !!skyfallEnabled,
     autoRow0Expanded: !!autoRow0Expanded,
+    hardStepLimitEnabled: !!hardStepLimitEnabled,
+    hardStepLimit: Math.max(
+      1,
+      Math.min(250, Math.floor(Number(hardStepLimit) || 1))
+    ),
     ruleProfile: getNormalizedRuleProfileForCache(ruleProfile),
   });
 };
@@ -9627,6 +9651,8 @@ const stopSolveProgressTicker = useCallback((forceComplete = false) => {
   const solverConfigFingerprint = [
     solverConfig?.beamWidth,
     solverConfig?.maxSteps,
+    solverConfig?.hardStepLimitEnabled ?? false,
+    solverConfig?.hardStepLimit ?? 80,
     solverConfig?.maxNodes,
     solverConfig?.evalWorkers,
     solverConfig?.humanPlanner ?? true,
@@ -9694,6 +9720,16 @@ const stopSolveProgressTicker = useCallback((forceComplete = false) => {
     resetKeyCache.diagonal === !!diagonalEnabled &&
     resetKeyCache.skyfall === !!skyfallEnabled &&
     resetKeyCache.autoRow0Expanded === !!autoRow0Expanded &&
+    resetKeyCache.hardStepLimitEnabled ===
+      !!solverConfig?.hardStepLimitEnabled &&
+    resetKeyCache.hardStepLimit ===
+      Math.max(
+        1,
+        Math.min(
+          250,
+          Math.floor(Number(solverConfig?.hardStepLimit) || 1)
+        )
+      ) &&
     resetKeyCache.normalizedRuleProfileRef === normalizedRuleProfile;
 
   const resetKey = isResetKeyCacheHit
@@ -9704,7 +9740,9 @@ const stopSolveProgressTicker = useCallback((forceComplete = false) => {
         skyfallEnabled,
         autoRow0Expanded,
         normalizedRuleProfile,
-        baseBoardKey
+        baseBoardKey,
+        solverConfig?.hardStepLimitEnabled,
+        solverConfig?.hardStepLimit
       );
 
   if (!isResetKeyCacheHit) {
@@ -9712,6 +9750,15 @@ const stopSolveProgressTicker = useCallback((forceComplete = false) => {
     resetKeyCache.diagonal = !!diagonalEnabled;
     resetKeyCache.skyfall = !!skyfallEnabled;
     resetKeyCache.autoRow0Expanded = !!autoRow0Expanded;
+    resetKeyCache.hardStepLimitEnabled =
+      !!solverConfig?.hardStepLimitEnabled;
+    resetKeyCache.hardStepLimit = Math.max(
+      1,
+      Math.min(
+        250,
+        Math.floor(Number(solverConfig?.hardStepLimit) || 1)
+      )
+    );
     resetKeyCache.normalizedRuleProfileRef = normalizedRuleProfile;
     resetKeyCache.value = resetKey;
   }
@@ -11914,7 +11961,11 @@ return (
     className={`solver-settings-content solver-settings-content--${
       isManual ? "manual" : settingsTab
     } p-4 grid grid-cols-1 gap-3 ${
-      isManual ? "md:grid-cols-2" : "md:grid-cols-3"
+      isManual
+        ? "md:grid-cols-2"
+        : settingsTab === "search"
+          ? "md:grid-cols-2"
+          : "md:grid-cols-3"
     }`}
   >
     {!isManual && settingsTab === "search" && (
@@ -11930,6 +11981,53 @@ return (
   onChange={(n) => setInitTargetCombo(parseInt(n, 10))}
  />
       </>
+    )}
+
+    {!isManual && settingsTab === "search" && (
+      <ParamSlider
+        label="步數限制"
+        labelContent={
+          <span className="solver-hard-step-label inline-flex items-center gap-2">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={config.hardStepLimitEnabled}
+              aria-label="切換步數限制"
+              onClick={() => {
+                setConfig((prev) => ({
+                  ...prev,
+                  hardStepLimitEnabled: !prev.hardStepLimitEnabled,
+                }));
+                clearSolutionPools();
+                setNeedsSolve(true);
+              }}
+              className={`solver-hard-step-switch ${
+                config.hardStepLimitEnabled ? "is-enabled" : ""
+              }`}
+            >
+              <span />
+            </button>
+            <span>步數限制</span>
+          </span>
+        }
+        value={config.hardStepLimit}
+        min={1}
+        max={250}
+        step={1}
+        inputMode="numeric"
+        formatInput={(v) => String(v)}
+        disabled={!config.hardStepLimitEnabled}
+        disabledText="未啟用"
+        containerClassName="solver-hard-step-control"
+        onChange={(n) => {
+          setConfig((prev) => ({
+            ...prev,
+            hardStepLimit: Math.max(1, Math.min(250, Math.round(n))),
+          }));
+          clearSolutionPools();
+          setNeedsSolve(true);
+        }}
+      />
     )}
 
     {isManual && (
@@ -12131,9 +12229,9 @@ return (
           )}
 <hr className="solver-rule-divider border-cyan-400/20" />
           <div className="solver-rule-add">
-            <div className="solver-rule-add-grid grid grid-cols-7">
+            <div className="solver-rule-add-grid grid">
               {ruleAddOptions.length === 0 ? (
-                <span className="col-span-7 text-xs font-bold text-neutral-500">❌無可新增選項。</span>
+                <span className="text-xs font-bold text-neutral-500">❌無可新增選項。</span>
               ) : (
                 ruleAddOptions.map((opt) => (
                   <button
@@ -14332,6 +14430,7 @@ const roundToStep = (v, step, min = 0) => {
 
 const ParamSlider = ({
   label,
+  labelContent = null,
   value,
   min,
   max,
@@ -14339,22 +14438,28 @@ const ParamSlider = ({
   onChange,
   inputMode = "decimal",
   formatInput = (v) => String(v),
+  disabled = false,
+  disabledText = "未啟用",
+  containerClassName = "",
 }) => {
   const [text, setText] = React.useState(formatInput(value));
   const isComposingRef = React.useRef(false);
 
   React.useEffect(() => {
     if (isComposingRef.current) return;
-    setText(formatInput(value));
-  }, [value, formatInput]);
+    setText(disabled ? disabledText : formatInput(value));
+  }, [value, formatInput, disabled, disabledText]);
 
-  const commit = React.useCallback(() => {
-    if (text.trim() === "") {
+  const commit = React.useCallback((rawText = text) => {
+    if (disabled) return;
+
+    const nextText = String(rawText);
+    if (nextText.trim() === "") {
       setText(formatInput(value));
       return;
     }
 
-    const n = Number(text);
+    const n = Number(nextText);
     if (!Number.isFinite(n)) {
       setText(formatInput(value));
       return;
@@ -14370,42 +14475,30 @@ const ParamSlider = ({
 
     onChange(next);
     setText(formatInput(next));
-  }, [text, value, min, max, step, onChange, formatInput]);
-
-const setSpecialPriorityAndDirty = (updater) => {
-  setSpecialPriority((prev) => {
-    const next = typeof updater === "function" ? updater(prev) : updater;
-    return next;
-  });
-  setNeedsSolve(true);
-};
-
-const commitClearCountText = () => {
-  let n = parseInt(String(clearCountText).replace(/[^\d]/g, ""), 10);
-  if (!Number.isFinite(n)) n = specialPriority.clearCount || 3;
-  n = Math.max(3, Math.min(30, n));
-
-  setClearCountText(String(n));
-  setSpecialPriorityAndDirty((prev) => ({
-    ...prev,
-    clearCount: n,
-  }));
-};
+  }, [text, value, min, max, step, onChange, formatInput, disabled]);
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className={`flex flex-col gap-1.5 ${containerClassName}`}>
       <div className="flex justify-between items-center text-[14px] font-bold text-neutral-400 gap-2">
-        <span>{label}</span>
+        <span>{labelContent || label}</span>
 
         {/* ???芯??頛詨 input嚗???砌??航撓??label */}
         <input
-          value={text}
+          value={disabled ? disabledText : text}
           inputMode={inputMode}
-          className="w-24 md:w-28 px-2 py-1 rounded-lg bg-neutral-950 border border-neutral-800 text-blue-400 font-bold text-base text-right outline-none focus:ring-2 focus:ring-blue-500/40"
+          disabled={disabled}
+          className={`w-24 md:w-28 px-2 py-1 rounded-lg border font-bold text-base text-right outline-none ${
+            disabled
+              ? "cursor-not-allowed border-neutral-800 bg-neutral-900 text-neutral-600"
+              : "border-neutral-800 bg-neutral-950 text-blue-400 focus:ring-2 focus:ring-blue-500/40"
+          }`}
           onCompositionStart={() => { isComposingRef.current = true; }}
-          onCompositionEnd={() => { isComposingRef.current = false; commit(); }}
+          onCompositionEnd={(e) => {
+            isComposingRef.current = false;
+            commit(e.currentTarget.value);
+          }}
           onChange={(e) => setText(e.target.value)}
-          onBlur={commit}
+          onBlur={(e) => commit(e.currentTarget.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") e.currentTarget.blur();
             if (e.key === "Escape") {
@@ -14422,12 +14515,18 @@ const commitClearCountText = () => {
         max={max}
         step={step}
         value={value}
+        disabled={disabled}
         onChange={(e) => {
+          if (disabled) return;
           const n = Number(e.target.value);
           onChange(n);
           setText(formatInput(n));
         }}
-        className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+        className={`w-full h-1.5 rounded-lg appearance-none accent-blue-500 ${
+          disabled
+            ? "cursor-not-allowed bg-neutral-900 opacity-45"
+            : "cursor-pointer bg-neutral-800"
+        }`}
       />
     </div>
   );
