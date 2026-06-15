@@ -801,14 +801,18 @@ const applyEditAtCell = useCallback((r, c) => {
 }, [selectedMark, selectedBrush, isManual]);
 
 const startEditorPaint = useCallback((r, c) => {
-	if (r === 0 && selectedBrush === ORB_TYPES.HEART.id) return;
+	if (
+    selectedMark === 0 &&
+    r === 0 &&
+    selectedBrush === ORB_TYPES.HEART.id
+  ) return;
 
   editorDraggingRef.current = true;
   editorLastPaintRef.current = { r: r, c: c };
 
   lockPageScrollForEditorPaint();
   applyEditAtCell(r, c);
-}, [applyEditAtCell, lockPageScrollForEditorPaint]);
+}, [applyEditAtCell, lockPageScrollForEditorPaint, selectedBrush, selectedMark]);
 
 const moveEditorPaint = useCallback((r, c) => {
   if (!editorDraggingRef.current) return;
@@ -816,11 +820,15 @@ const moveEditorPaint = useCallback((r, c) => {
   const last = editorLastPaintRef.current;
   if (last.r === r && last.c === c) return;
 
-	if (r === 0 && selectedBrush === ORB_TYPES.HEART.id) return;
+	if (
+    selectedMark === 0 &&
+    r === 0 &&
+    selectedBrush === ORB_TYPES.HEART.id
+  ) return;
 
   editorLastPaintRef.current = { r, c };
   applyEditAtCell(r, c);
-}, [applyEditAtCell]);
+}, [applyEditAtCell, selectedBrush, selectedMark]);
 
 const endEditorPaint = useCallback(() => {
   editorDraggingRef.current = false;
@@ -10447,19 +10455,21 @@ const routeTangent = (a, b) => {
   const length = Math.hypot(dc, dr) || 1;
   return { x: dc / length, y: dr / length };
 };
-const routeEdgeKey = (a, b, orientation) => {
-  const keyA = `${a.r},${a.c}`;
-  const keyB = `${b.r},${b.c}`;
-  return keyA < keyB
-    ? `${orientation}:${keyA}>${keyB}`
-    : `${orientation}:${keyB}>${keyA}`;
-};
 const addRouteOffset = (point, line) => {
   const normal = ROUTE_ORIENTATIONS[line.orientation].normal;
   return {
     x: point.x + normal.x * line.offset,
     y: point.y + normal.y * line.offset,
   };
+};
+const routeSupportCoordinate = (point, orientation) => {
+  const normal = ROUTE_ORIENTATIONS[orientation].normal;
+  return point.x * normal.x + point.y * normal.y;
+};
+const routeLaneSlot = (attempt) => {
+  if (attempt === 0) return 0;
+  const distance = Math.ceil(attempt / 2);
+  return attempt % 2 === 1 ? -distance : distance;
 };
 const intersectRouteLines = (p1, tangent1, p2, tangent2) => {
   const cross = (a, b) => a.x * b.y - a.y * b.x;
@@ -10473,14 +10483,15 @@ const intersectRouteLines = (p1, tangent1, p2, tangent2) => {
     y: p1.y + tangent1.y * distance,
   };
 };
-const buildShiftedRoutePoints = (rcPath, laneGap) => {
-  if (!rcPath?.length) return [];
+const buildShiftedRouteGeometry = (rcPath, laneGap) => {
+  if (!rcPath?.length) return { lines: [], start: null, end: null };
 
   const centers = rcPath.map((p) => getCellCenterPx(p.r, p.c));
-  if (rcPath.length < 2) return centers;
+  if (rcPath.length < 2) {
+    return { lines: [], start: centers[0] || null, end: centers[0] || null };
+  }
 
   const lines = [];
-  const edgeLines = Array(rcPath.length - 1);
   let start = 0;
   let direction = routeDirectionKey(rcPath[0], rcPath[1]);
 
@@ -10489,22 +10500,20 @@ const buildShiftedRoutePoints = (rcPath, laneGap) => {
       rcPath[start],
       rcPath[start + 1]
     );
-    const edgeKeys = [];
-    for (let i = start; i < end; i++) {
-      edgeKeys.push(routeEdgeKey(rcPath[i], rcPath[i + 1], orientation));
-    }
 
     const line = {
       start,
       end,
       orientation,
       tangent: routeTangent(rcPath[start], rcPath[start + 1]),
-      edgeKeys,
       lane: 0,
       offset: 0,
+      supportCoordinate: 0,
+      displayStart: null,
+      displayEnd: null,
+      entryPoints: null,
     };
     lines.push(line);
-    for (let i = start; i < end; i++) edgeLines[i] = line;
   };
 
   for (let i = 1; i < rcPath.length - 1; i++) {
@@ -10518,81 +10527,115 @@ const buildShiftedRoutePoints = (rcPath, laneGap) => {
 
   appendLine(rcPath.length - 1);
 
-  const laneUsage = new Map();
+  const usedSupportCoordinates = new Map();
+  const minimumSupportGap = laneGap * 0.75;
 
   for (const line of lines) {
-    const occupied = new Set();
-    for (const key of line.edgeKeys) {
-      const lanes = laneUsage.get(key);
-      if (!lanes) continue;
-      for (const lane of lanes) occupied.add(lane);
-    }
+    const orientationSupports =
+      usedSupportCoordinates.get(line.orientation) || [];
+    const baseSupport = routeSupportCoordinate(
+      centers[line.start],
+      line.orientation
+    );
 
-    let lane = 0;
-    while (occupied.has(lane)) lane++;
-    line.lane = lane;
-
-    for (const key of line.edgeKeys) {
-      const lanes = laneUsage.get(key) || new Set();
-      lanes.add(lane);
-      laneUsage.set(key, lanes);
-    }
-  }
-
-  for (const line of lines) {
-    let maxLane = 0;
-    for (const key of line.edgeKeys) {
-      const lanes = laneUsage.get(key);
-      if (!lanes) continue;
-      for (const lane of lanes) maxLane = Math.max(maxLane, lane);
-    }
-
-    line.offset = (line.lane - maxLane / 2) * laneGap;
-  }
-
-  return centers.map((center, index) => {
-    const previous = index > 0 ? edgeLines[index - 1] : null;
-    const next = index < edgeLines.length ? edgeLines[index] : null;
-
-    if (previous && next && previous !== next) {
-      const previousPoint = addRouteOffset(center, previous);
-      const nextPoint = addRouteOffset(center, next);
-      const intersection = intersectRouteLines(
-        previousPoint,
-        previous.tangent,
-        nextPoint,
-        next.tangent
+    let attempt = 0;
+    while (true) {
+      const lane = routeLaneSlot(attempt);
+      const offset = lane * laneGap;
+      const candidateSupport = baseSupport + offset;
+      const overlapsExtendedLine = orientationSupports.some(
+        (usedSupport) =>
+          Math.abs(candidateSupport - usedSupport) < minimumSupportGap
       );
 
-      if (
-        intersection &&
-        Number.isFinite(intersection.x) &&
-        Number.isFinite(intersection.y)
-      ) {
-        return intersection;
+      if (!overlapsExtendedLine) {
+        line.lane = lane;
+        line.offset = offset;
+        line.supportCoordinate = candidateSupport;
+        orientationSupports.push(candidateSupport);
+        usedSupportCoordinates.set(line.orientation, orientationSupports);
+        break;
       }
 
-      return previousPoint;
+      attempt++;
     }
-
-    const line = previous || next;
-    return line ? addRouteOffset(center, line) : center;
-  });
-};
-const buildStraightPath = (points) => {
-  if (!points || points.length < 2) {
-    return { d: "", start: points?.[0] || null, tip: points?.[0] || null };
   }
 
-  const d = points
-    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
-    .join(" ");
+  lines[0].displayStart = addRouteOffset(centers[lines[0].start], lines[0]);
+  const foldbackUsage = new Map();
+
+  for (let i = 0; i < lines.length - 1; i++) {
+    const current = lines[i];
+    const next = lines[i + 1];
+    const corner = centers[current.end];
+    const currentPoint = addRouteOffset(corner, current);
+    const nextPoint = addRouteOffset(corner, next);
+    const cross =
+      current.tangent.x * next.tangent.y -
+      current.tangent.y * next.tangent.x;
+    const intersection =
+      Math.abs(cross) >= 1e-6
+        ? intersectRouteLines(
+            currentPoint,
+            current.tangent,
+            nextPoint,
+            next.tangent
+          )
+        : null;
+
+    if (
+      intersection &&
+      Number.isFinite(intersection.x) &&
+      Number.isFinite(intersection.y)
+    ) {
+      current.displayEnd = intersection;
+      next.displayStart = intersection;
+    } else {
+      const cornerCell = rcPath[current.end];
+      const foldbackKey =
+        `${cornerCell.r},${cornerCell.c}:${current.orientation}:` +
+        routeDirectionKey(rcPath[current.start], rcPath[current.start + 1]);
+      const foldbackIndex = foldbackUsage.get(foldbackKey) || 0;
+      foldbackUsage.set(foldbackKey, foldbackIndex + 1);
+
+      const capDepth = laneGap * (0.75 + foldbackIndex * 0.75);
+      const capOffset = {
+        x: current.tangent.x * capDepth,
+        y: current.tangent.y * capDepth,
+      };
+      const currentCap = {
+        x: currentPoint.x + capOffset.x,
+        y: currentPoint.y + capOffset.y,
+      };
+      const nextCap = {
+        x: nextPoint.x + capOffset.x,
+        y: nextPoint.y + capOffset.y,
+      };
+
+      current.displayEnd = currentCap;
+      next.displayStart = nextCap;
+      next.entryPoints = [currentCap, nextCap];
+    }
+  }
+
+  const lastLine = lines[lines.length - 1];
+  lastLine.displayEnd = addRouteOffset(centers[lastLine.end], lastLine);
 
   return {
-    d,
-    start: points[0],
-    tip: points[points.length - 1],
+    lines: lines.map((line, index) => ({
+      ...line,
+      segmentIndex: index,
+    })),
+    start: lines[0].displayStart,
+    end: lastLine.displayEnd,
   };
+};
+const buildStraightPath = (points) => {
+  if (!points || points.length < 2) return "";
+
+  return points
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+    .join(" ");
 };
 const hypot = (x, y) => Math.hypot(x, y);
 const q = (v, unit = 0.25) => Math.round(v / unit) * unit;
@@ -13095,16 +13138,13 @@ const visualImg = Object.values(ORB_TYPES).find(
       if (isManualDragging) return null;
       if (!path || path.length < 2) return null;
 
-      const completedCount = Math.max(
-        0,
-        Math.min(path.length, currentStep + 1)
-      );
-      const routePoints = buildShiftedRoutePoints(
+      const routeGeometry = buildShiftedRouteGeometry(
         path,
         Math.max(6, stableCellSize / 10)
       );
-      const visiblePoints = routePoints.slice(0, completedCount);
       const cursorActive = (isReplaying || isPaused) && floating?.visible;
+      let activeEdgeProgress = 0;
+
       if (
         cursorActive &&
         currentStep >= 0 &&
@@ -13118,7 +13158,7 @@ const visualImg = Object.values(ORB_TYPES).find(
         const dx = rawTo.x - rawFrom.x;
         const dy = rawTo.y - rawFrom.y;
         const lengthSq = dx * dx + dy * dy;
-        const progress =
+        activeEdgeProgress =
           lengthSq > 0
             ? Math.max(
                 0,
@@ -13130,27 +13170,63 @@ const visualImg = Object.values(ORB_TYPES).find(
                 )
               )
             : 1;
-        const shiftedFrom = routePoints[currentStep];
-        const shiftedTo = routePoints[currentStep + 1];
-        const cursorPoint = {
-          x: shiftedFrom.x + (shiftedTo.x - shiftedFrom.x) * progress,
-          y: shiftedFrom.y + (shiftedTo.y - shiftedFrom.y) * progress,
-        };
-
-        if (
-          !visiblePoints.length ||
-          Math.hypot(
-            cursorPoint.x - visiblePoints[visiblePoints.length - 1].x,
-            cursorPoint.y - visiblePoints[visiblePoints.length - 1].y
-          ) > 0.25
-        ) {
-          visiblePoints.push(cursorPoint);
-        }
       }
 
-      if (visiblePoints.length < 2) return null;
+      const visibleSegments = [];
+      const visibleRoutePoints = [];
+      for (const line of routeGeometry.lines) {
+        if (currentStep < line.start) break;
 
-      const { d, start, tip } = buildStraightPath(visiblePoints);
+        let lineProgress;
+        if (currentStep >= line.end) {
+          lineProgress = 1;
+        } else {
+          const completedEdges = Math.max(0, currentStep - line.start);
+          const totalEdges = Math.max(1, line.end - line.start);
+          lineProgress =
+            (completedEdges + activeEdgeProgress) / totalEdges;
+        }
+
+        if (lineProgress <= 0 && line.segmentIndex > 0) continue;
+
+        const endPoint = {
+          x:
+            line.displayStart.x +
+            (line.displayEnd.x - line.displayStart.x) * lineProgress,
+          y:
+            line.displayStart.y +
+            (line.displayEnd.y - line.displayStart.y) * lineProgress,
+        };
+        const points = line.entryPoints
+          ? [...line.entryPoints, endPoint]
+          : [line.displayStart, endPoint];
+        for (const point of points) {
+          const previousPoint =
+            visibleRoutePoints[visibleRoutePoints.length - 1];
+          if (
+            previousPoint &&
+            Math.hypot(
+              point.x - previousPoint.x,
+              point.y - previousPoint.y
+            ) < 0.01
+          ) {
+            continue;
+          }
+          visibleRoutePoints.push(point);
+        }
+        visibleSegments.push({
+          ...line,
+          tip: endPoint,
+        });
+
+        if (lineProgress < 1) break;
+      }
+
+      if (!visibleSegments.length) return null;
+
+      const start = routeGeometry.start;
+      const tip = visibleSegments[visibleSegments.length - 1].tip;
+      const routePathD = buildStraightPath(visibleRoutePoints);
 
       return (
         <>
@@ -13169,7 +13245,7 @@ const visualImg = Object.values(ORB_TYPES).find(
 
           <path
             data-testid="replay-route-line"
-            d={d}
+            d={routePathD}
             stroke="white"
             strokeWidth="4"
             fill="none"
@@ -13658,23 +13734,16 @@ const visualImg = Object.values(ORB_TYPES).find(
   data-editor-cell="1"
   data-r={r}
   data-c={c}
-                              onMouseDown={(e) => {
+  onPointerDown={(e) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    startEditorPaint(r, c);
+  }}
+  onPointerMove={(e) => {
+  if (!editorDraggingRef.current) return;
   e.preventDefault();
-  startEditorPaint(r, c);
-}}
-onMouseEnter={() => {
-  moveEditorPaint(r, c);
-}}
-onTouchStart={(e) => {
-  e.preventDefault();
-  startEditorPaint(r, c);
-}}
-onTouchMove={(e) => {
-  e.preventDefault();
-  const touch = e.touches?.[0];
-  if (!touch) return;
 
-  const el = document.elementFromPoint(touch.clientX, touch.clientY);
+  const el = document.elementFromPoint(e.clientX, e.clientY);
   const cell = el?.closest?.("[data-editor-cell]");
   if (!cell) return;
 
@@ -13683,8 +13752,14 @@ onTouchMove={(e) => {
   if (Number.isNaN(rr) || Number.isNaN(cc)) return;
 
   moveEditorPaint(rr, cc);
-}}
+  }}
+  onPointerUp={(e) => {
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    endEditorPaint();
+  }}
+  onPointerCancel={endEditorPaint}
 							  className="relative w-full aspect-square flex items-center justify-center transition-all duration-75 rounded-2xl"
+                style={{ touchAction: "none" }}
                             >
                               <div
                                 className={`absolute inset-0 m-auto w-[95%] h-[95%] rounded-2xl pointer-events-none transition-all duration-75
@@ -13771,6 +13846,7 @@ onTouchMove={(e) => {
                       {Object.values(ORB_TYPES).map((type) => (
                         <button
                           key={type.id}
+                          data-editor-orb={type.id}
                           onClick={() => setSelectedBrush(type.id)}
                           className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
                             ${
@@ -13801,6 +13877,7 @@ onTouchMove={(e) => {
 
                     <div className="solver-editor-states flex flex-wrap justify-center gap-3 max-w-[450px] mx-auto">
                       <button
+                        data-editor-mark="0"
                         onClick={() => setSelectedMark(0)}
                         className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
                           ${
@@ -13815,6 +13892,7 @@ onTouchMove={(e) => {
 
                       {!isManual && (
                         <button
+                          data-editor-mark="1"
                           onClick={() => setSelectedMark(1)}
                           className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
                             ${
@@ -13834,6 +13912,7 @@ onTouchMove={(e) => {
                       )}
 
                       <button
+                        data-editor-mark="2"
                         onClick={() => setSelectedMark(2)}
                         className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
                           ${
@@ -13854,6 +13933,7 @@ onTouchMove={(e) => {
                       {!isManual && (
                         <>
                           <button
+                            data-editor-mark="3"
                             onClick={() => setSelectedMark(3)}
                             className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
                               ${
@@ -13869,6 +13949,7 @@ onTouchMove={(e) => {
                           </button>
 
                           <button
+                            data-editor-mark="4"
                             onClick={() => setSelectedMark(4)}
                             className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
                               ${
@@ -13886,6 +13967,7 @@ onTouchMove={(e) => {
                       )}
 					  
 					  <button
+  data-editor-mark="5"
   onClick={() => setSelectedMark(5)}
   className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
     ${
@@ -13905,6 +13987,7 @@ onTouchMove={(e) => {
 
 {!isManual && (
   <button
+    data-editor-mark="6"
     onClick={() => setSelectedMark(6)}
     className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex items-center justify-center transition-all bg-neutral-950 border border-neutral-800
       ${
