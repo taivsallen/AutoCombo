@@ -11188,74 +11188,77 @@ const ensureImageLoaded = (imgEl) =>
 const featureFromImageData = (imgData) => {
 	  const { data, width, height } = imgData;
 
-	  // bins: H(12) + S(6) + V(6) + edge(6) = 30 蝬?
-	  const H_BINS = 12, S_BINS = 6, V_BINS = 6, E_BINS = 6;
+	  const H_BINS = 18, S_BINS = 5, V_BINS = 5, E_BINS = 4;
 	  const feat = new Float32Array(H_BINS + S_BINS + V_BINS + E_BINS);
-
-	  // ???圈??嫣噶蝞?edge
 	  const gray = new Float32Array(width * height);
+	  const mask = new Uint8Array(width * height);
+	  const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
 	  let idx = 0;
 	  for (let y = 0; y < height; y++) {
+		const yn = (y + 0.5) / height;
 		for (let x = 0; x < width; x++, idx++) {
+		  const xn = (x + 0.5) / width;
+		  if (xn > 0.64 && yn < 0.46) continue;
+
+		  const dx = xn - 0.5;
+		  const dy = yn - 0.52;
+		  if (dx * dx + dy * dy > 0.3) continue;
+
 		  const i = idx * 4;
+		  const a = data[i + 3] / 255;
+		  if (a < 0.15) continue;
+
 		  const r = data[i] / 255;
 		  const g = data[i + 1] / 255;
 		  const b = data[i + 2] / 255;
-		  const a = data[i + 3] / 255;
-
-		  // ?????仿?嚗芋?踹??航???嚗?
-		  if (a < 0.15) {
-			gray[idx] = 0;
-			continue;
-		  }
-
-		  // brightness / gray
 		  const v = Math.max(r, g, b);
 		  const m = Math.min(r, g, b);
-		  const c = v - m;
-		  const s = v > 1e-6 ? (c / v) : 0;
+		  const chroma = v - m;
+		  const s = v > 1e-6 ? chroma / v : 0;
+		  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
-		  // hue
+		  gray[idx] = lum;
+		  mask[idx] = 1;
+
+		  const colorWeight = clamp01((s - 0.1) / 0.35) * clamp01((v - 0.2) / 0.35);
+		  if (colorWeight <= 0) continue;
+
 		  let h = 0;
-		  if (c > 1e-6) {
-			if (v === r) h = ((g - b) / c) % 6;
-			else if (v === g) h = (b - r) / c + 2;
-			else h = (r - g) / c + 4;
-			h = (h * 60);
+		  if (chroma > 1e-6) {
+			if (v === r) h = ((g - b) / chroma) % 6;
+			else if (v === g) h = (b - r) / chroma + 2;
+			else h = (r - g) / chroma + 4;
+			h *= 60;
 			if (h < 0) h += 360;
 		  }
 
-		  // histogram
 		  const hb = Math.min(H_BINS - 1, Math.floor(h / 360 * H_BINS));
 		  const sb = Math.min(S_BINS - 1, Math.floor(s * S_BINS));
 		  const vb = Math.min(V_BINS - 1, Math.floor(v * V_BINS));
 
-		  feat[hb] += 1;
-		  feat[H_BINS + sb] += 1;
-		  feat[H_BINS + S_BINS + vb] += 1;
-
-		  // ?圈? (?鈭桀漲)
-		  gray[idx] = (0.2126 * r + 0.7152 * g + 0.0722 * b);
+		  feat[hb] += colorWeight * 2.2;
+		  feat[H_BINS + sb] += colorWeight * 0.45;
+		  feat[H_BINS + S_BINS + vb] += colorWeight * 0.35;
 		}
 	  }
 
-	  // edge histogram (蝪∪ Sobel-ish嚗撌桀?餈撮)
-	  // ?其????獢?瑽???皞漲
-	  let eCount = 0;
+	  const edgeOffset = H_BINS + S_BINS + V_BINS;
 	  for (let y = 1; y < height - 1; y++) {
 		for (let x = 1; x < width - 1; x++) {
 		  const p = y * width + x;
-		  const gx = (gray[p + 1] - gray[p - 1]);
-		  const gy = (gray[p + width] - gray[p - width]);
-		  const mag = Math.min(1, Math.hypot(gx, gy) * 2.2); // ?曉之銝暺?
+		  if (!mask[p] || !mask[p - 1] || !mask[p + 1] || !mask[p - width] || !mask[p + width]) {
+			continue;
+		  }
+
+		  const gx = gray[p + 1] - gray[p - 1];
+		  const gy = gray[p + width] - gray[p - width];
+		  const mag = Math.min(1, Math.hypot(gx, gy) * 2.2);
 		  const eb = Math.min(E_BINS - 1, Math.floor(mag * E_BINS));
-		  feat[H_BINS + S_BINS + V_BINS + eb] += 1;
-		  eCount++;
+		  feat[edgeOffset + eb] += 0.35;
 		}
 	  }
 
-	  // normalize (L2)
 	  let norm = 0;
 	  for (let i = 0; i < feat.length; i++) norm += feat[i] * feat[i];
 	  norm = Math.sqrt(norm) || 1;
