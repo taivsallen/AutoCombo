@@ -854,6 +854,12 @@ const endEditorPaint = useCallback(() => {
   const pendingAutoSolveImportRef = useRef(false);
   const [autoSolveImportVersion, setAutoSolveImportVersion] = useState(0);
   const [screenshotBusy, setScreenshotBusy] = useState(false);
+  const boardSourceRef = useRef({
+    stream: null,
+    video: null,
+  });
+  const [boardSourceName, setBoardSourceName] = useState("");
+  const [boardSourceBusy, setBoardSourceBusy] = useState(false);
   
   const [exportingGif, setExportingGif] = useState(false);
   const [gifProgress, setGifProgress] = useState({ cur: 0, total: 0, pct: 0 });
@@ -10051,6 +10057,7 @@ const videoPipRef = useRef({
   video: null,
   stream: null,
   raf: 0,
+  recordedUrl: null,
 });
 const pipAutoOpenAttemptRef = useRef(0);
 const pipImageCacheRef = useRef(new Map());
@@ -10071,8 +10078,13 @@ const standardVideoPipSupported =
 const webkitVideoPipSupported =
   typeof HTMLVideoElement !== "undefined" &&
   typeof HTMLVideoElement.prototype.webkitSetPresentationMode === "function";
-const videoPipSupported =
+const streamVideoPipSupported =
   canvasStreamSupported && (standardVideoPipSupported || webkitVideoPipSupported);
+const recordedVideoPipSupported =
+  canvasStreamSupported &&
+  typeof MediaRecorder !== "undefined" &&
+  (standardVideoPipSupported || webkitVideoPipSupported);
+const videoPipSupported = streamVideoPipSupported || recordedVideoPipSupported;
 const guidePipSupported =
   (typeof window !== "undefined" && !!window.documentPictureInPicture?.requestWindow) ||
   videoPipSupported;
@@ -10142,6 +10154,8 @@ const closeGuidePip = useCallback(() => {
   if (video) {
     video.pause();
     video.srcObject = null;
+    video.removeAttribute("src");
+    video.load?.();
     if (video.parentNode) {
       video.parentNode.removeChild(video);
     }
@@ -10149,57 +10163,65 @@ const closeGuidePip = useCallback(() => {
 
   videoState.stream?.getTracks?.().forEach((track) => track.stop());
   videoState.stream = null;
+  if (videoState.recordedUrl) {
+    URL.revokeObjectURL(videoState.recordedUrl);
+    videoState.recordedUrl = null;
+  }
   setVideoPipActive(false);
 }, []);
 
-const captureScreenshotAndSolve = useCallback(async (event) => {
-  if (screenshotBusy || importBusy || showImportCrop || solving || exportingGif || showEditor) return;
+const stopBoardSource = useCallback(() => {
+  const sourceState = boardSourceRef.current;
+  sourceState.stream?.getTracks?.().forEach((track) => track.stop());
+  sourceState.stream = null;
 
-  const sourceWindow =
-    event?.currentTarget?.ownerDocument?.defaultView ||
-    (typeof window !== "undefined" ? window : null);
-  const mediaDevices =
-    sourceWindow?.navigator?.mediaDevices ||
-    (typeof navigator !== "undefined" ? navigator.mediaDevices : null);
-
-  if (!mediaDevices?.getDisplayMedia) {
-    alert("目前瀏覽器不支援螢幕截圖匯入，請使用新版 Chrome / Edge。");
-    return;
+  if (sourceState.video) {
+    sourceState.video.pause();
+    sourceState.video.srcObject = null;
   }
 
-  let stream = null;
-  setScreenshotBusy(true);
-  autoSolveImportedRef.current = true;
+  setBoardSourceName("");
+}, []);
 
-  try {
-    stream = await mediaDevices.getDisplayMedia({
-      video: {
-        frameRate: { ideal: 1, max: 5 },
-      },
-      audio: false,
-    });
+const formatBoardSourceName = useCallback((track) => {
+  const raw = (track?.label || track?.getSettings?.().displaySurface || "已選擇").trim();
+  const lower = raw.toLowerCase();
 
-    const track = stream.getVideoTracks?.()[0] || null;
-    const displaySurface = track?.getSettings?.().displaySurface || "";
-    const hasFloatingWindow =
-      !!(pipWindowRef.current && !pipWindowRef.current.closed) || videoPipActive;
-    const shouldCloseForCapture = hasFloatingWindow && displaySurface !== "window";
+  if (lower.includes("google")) return "Google";
+  if (lower.includes("chrome")) return "Google Chrome";
+  if (lower.includes("safari")) return "Safari";
+  if (lower.includes("edge")) return "Edge";
+  if (lower.includes("tower") || raw.includes("神魔")) return "神魔之塔";
 
-    if (shouldCloseForCapture) {
-      closeGuidePip();
-      await new Promise((resolve) => setTimeout(resolve, 220));
-    } else {
-      await new Promise((resolve) => setTimeout(resolve, 80));
-    }
+  return raw
+    .replace(/^window[:\s-]*/i, "")
+    .replace(/^screen[:\s-]*/i, "")
+    .replace(/\s+/g, " ")
+    .slice(0, 18);
+}, []);
 
-    const video = document.createElement("video");
+const ensureBoardSourceVideoReady = useCallback(async (stream) => {
+  if (!stream) throw new Error("尚未選擇版面來源。");
+
+  let video = boardSourceRef.current.video;
+  if (!video) {
+    video = document.createElement("video");
     video.muted = true;
     video.playsInline = true;
-    video.srcObject = stream;
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
+    boardSourceRef.current.video = video;
+  }
 
+  if (video.srcObject !== stream) {
+    video.pause();
+    video.srcObject = stream;
+  }
+
+  if (!video.videoWidth || !video.videoHeight) {
     await new Promise((resolve, reject) => {
       const timer = window.setTimeout(() => {
-        reject(new Error("截圖來源讀取逾時。"));
+        reject(new Error("版面來源讀取逾時。"));
       }, 5000);
 
       video.onloadedmetadata = () => {
@@ -10209,28 +10231,132 @@ const captureScreenshotAndSolve = useCallback(async (event) => {
 
       video.onerror = () => {
         window.clearTimeout(timer);
-        reject(new Error("截圖來源無法讀取。"));
+        reject(new Error("版面來源無法讀取。"));
       };
     });
+  }
 
-    await video.play().catch(() => {});
+  await video.play().catch(() => {});
+
+  if (typeof video.requestVideoFrameCallback === "function") {
+    await new Promise((resolve) => video.requestVideoFrameCallback(resolve));
+  } else {
     await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
 
-    const width = video.videoWidth || track?.getSettings?.().width || 0;
-    const height = video.videoHeight || track?.getSettings?.().height || 0;
-    if (!width || !height) {
-      throw new Error("截圖尺寸讀取失敗。");
+  return video;
+}, []);
+
+const selectBoardSource = useCallback(async (event) => {
+  if (boardSourceBusy || importBusy || showImportCrop || solving || exportingGif || showEditor) {
+    return null;
+  }
+
+  const sourceWindow =
+    event?.currentTarget?.ownerDocument?.defaultView ||
+    (typeof window !== "undefined" ? window : null);
+  const mediaDevices =
+    sourceWindow?.navigator?.mediaDevices ||
+    (typeof navigator !== "undefined" ? navigator.mediaDevices : null);
+
+  if (!mediaDevices?.getDisplayMedia) {
+    alert("目前瀏覽器不支援選擇版面來源，請使用新版 Chrome / Edge。");
+    return null;
+  }
+
+  setBoardSourceBusy(true);
+
+  try {
+    const stream = await mediaDevices.getDisplayMedia({
+      video: {
+        frameRate: { ideal: 3, max: 8 },
+      },
+      audio: false,
+      preferCurrentTab: false,
+      selfBrowserSurface: "exclude",
+      surfaceSwitching: "include",
+    });
+
+    stopBoardSource();
+    boardSourceRef.current.stream = stream;
+
+    const track = stream.getVideoTracks?.()[0] || null;
+    setBoardSourceName(formatBoardSourceName(track));
+
+    track?.addEventListener?.("ended", () => {
+      if (boardSourceRef.current.stream === stream) {
+        boardSourceRef.current.stream = null;
+        setBoardSourceName("");
+      }
+    });
+
+    await ensureBoardSourceVideoReady(stream);
+    return stream;
+  } catch (err) {
+    if (err?.name !== "NotAllowedError" && err?.name !== "AbortError") {
+      console.error("[pip] source selection failed", err);
+      alert(`版面來源選擇失敗：${err?.message || err}`);
+    }
+    return null;
+  } finally {
+    setBoardSourceBusy(false);
+  }
+}, [
+  boardSourceBusy,
+  ensureBoardSourceVideoReady,
+  exportingGif,
+  formatBoardSourceName,
+  importBusy,
+  showEditor,
+  showImportCrop,
+  solving,
+  stopBoardSource,
+]);
+
+const captureBoardSourceFrameBlob = useCallback(async (stream) => {
+  const video = await ensureBoardSourceVideoReady(stream);
+  const track = stream?.getVideoTracks?.()[0] || null;
+  const width = video.videoWidth || track?.getSettings?.().width || 0;
+  const height = video.videoHeight || track?.getSettings?.().height || 0;
+
+  if (!width || !height) {
+    throw new Error("版面來源尺寸讀取失敗。");
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("無法建立版面來源畫布。");
+  ctx.drawImage(video, 0, 0, width, height);
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error("版面來源轉換失敗。");
+
+  return blob;
+}, [ensureBoardSourceVideoReady]);
+
+const calculateFromBoardSource = useCallback(async (event) => {
+  if (boardSourceBusy || importBusy || showImportCrop || solving || exportingGif || showEditor) return;
+
+  setBoardSourceBusy(true);
+  autoSolveImportedRef.current = true;
+
+  try {
+    let stream = boardSourceRef.current.stream;
+    const liveTrack = stream?.getVideoTracks?.().find((track) => track.readyState === "live");
+
+    if (!stream || !liveTrack) {
+      setBoardSourceBusy(false);
+      stream = await selectBoardSource(event);
+      setBoardSourceBusy(true);
+      if (!stream) {
+        autoSolveImportedRef.current = false;
+        return;
+      }
     }
 
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) throw new Error("無法建立截圖畫布。");
-    ctx.drawImage(video, 0, 0, width, height);
-
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-    if (!blob) throw new Error("截圖轉換失敗。");
+    const blob = await captureBoardSourceFrameBlob(stream);
 
     if (importImgUrl) URL.revokeObjectURL(importImgUrl);
     const url = URL.createObjectURL(blob);
@@ -10241,24 +10367,27 @@ const captureScreenshotAndSolve = useCallback(async (event) => {
     pendingAutoSolveImportRef.current = false;
 
     if (err?.name !== "NotAllowedError" && err?.name !== "AbortError") {
-      console.error("[pip] screenshot import failed", err);
-      alert(`截圖上傳失敗：${err?.message || err}`);
+      console.error("[pip] source calculation failed", err);
+      alert(`版面來源計算失敗：${err?.message || err}`);
     }
   } finally {
-    stream?.getTracks?.().forEach((track) => track.stop());
-    setScreenshotBusy(false);
+    setBoardSourceBusy(false);
   }
 }, [
-  closeGuidePip,
+  boardSourceBusy,
+  captureBoardSourceFrameBlob,
   exportingGif,
   importBusy,
   importImgUrl,
-  screenshotBusy,
+  selectBoardSource,
   showEditor,
   showImportCrop,
   solving,
-  videoPipActive,
 ]);
+
+useEffect(() => {
+  return () => stopBoardSource();
+}, [stopBoardSource]);
 
 const openGuidePip = useCallback(
   async ({ silent = false } = {}) => {
@@ -10342,6 +10471,10 @@ const openGuidePip = useCallback(
             line-height: 1;
             font-weight: 900;
             cursor: pointer;
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
           .guide-pip-button:hover {
             background: rgba(255,255,255,0.16);
@@ -10501,6 +10634,7 @@ const pipPathPoints = Array.isArray(pipPathSource)
 const pipPathKey = pipPathPoints.map((p) => `${p.r},${p.c}`).join("|");
 const pipLoading =
   screenshotBusy ||
+  boardSourceBusy ||
   importBusy ||
   showImportCrop ||
   solving ||
@@ -10513,12 +10647,15 @@ const pipComboText = selectedPipSolution
     } C`
   : "";
 const pipStatusText = pipLoading
-  ? screenshotBusy || importBusy || showImportCrop
-    ? "截圖中"
+  ? boardSourceBusy || screenshotBusy || importBusy || showImportCrop
+    ? "讀取來源"
     : "計算中"
   : selectedPipSolution
   ? `#${pipSolutionIndex + 1} / ${getPathSteps(selectedPipSolution.path)}步 / ${pipComboText}`
   : "尚無路徑";
+const boardSourceButtonText = boardSourceName
+  ? `版面來源: ${boardSourceName}`
+  : "版面來源";
 function getPipOrbImage(src) {
   if (!src) return null;
 
@@ -10677,6 +10814,173 @@ function drawVideoPipFrame(now = 0) {
   }
 }
 
+function ensureVideoPipElement() {
+  const state = videoPipRef.current;
+
+  if (!state.video) {
+    state.video = document.createElement("video");
+    state.video.muted = true;
+    state.video.playsInline = true;
+    state.video.loop = true;
+    state.video.setAttribute("playsinline", "");
+    state.video.setAttribute("webkit-playsinline", "");
+    state.video.style.position = "fixed";
+    state.video.style.left = "0";
+    state.video.style.bottom = "0";
+    state.video.style.width = "1px";
+    state.video.style.height = "1px";
+    state.video.style.opacity = "0.001";
+    state.video.style.pointerEvents = "none";
+    state.video.style.zIndex = "-1";
+    state.video.addEventListener("leavepictureinpicture", () => {
+      if (videoPipRef.current.raf) {
+        cancelAnimationFrame(videoPipRef.current.raf);
+        videoPipRef.current.raf = 0;
+      }
+      videoPipRef.current.video?.pause();
+      videoPipRef.current.video && (videoPipRef.current.video.srcObject = null);
+      videoPipRef.current.stream?.getTracks?.().forEach((track) => track.stop());
+      videoPipRef.current.stream = null;
+      setVideoPipActive(false);
+    });
+    state.video.addEventListener("webkitpresentationmodechanged", () => {
+      if (state.video?.webkitPresentationMode === "picture-in-picture") return;
+      if (videoPipRef.current.raf) {
+        cancelAnimationFrame(videoPipRef.current.raf);
+        videoPipRef.current.raf = 0;
+      }
+      setVideoPipActive(false);
+    });
+  }
+
+  if (!state.video.isConnected) {
+    document.body.appendChild(state.video);
+  }
+
+  return state.video;
+}
+
+function getSupportedPipRecorderMimeType() {
+  if (typeof MediaRecorder === "undefined") return "";
+
+  const candidates = [
+    'video/mp4;codecs="avc1.42E01E"',
+    "video/mp4",
+    "video/webm;codecs=vp9",
+    "video/webm;codecs=vp8",
+    "video/webm",
+  ];
+
+  return candidates.find((type) => MediaRecorder.isTypeSupported?.(type)) || "";
+}
+
+async function recordPipCanvasVideoUrl(canvas) {
+  if (!canvas?.captureStream || typeof MediaRecorder === "undefined") {
+    throw new Error("瀏覽器不支援把盤面錄成短影片。");
+  }
+
+  drawVideoPipFrame();
+
+  const stream = canvas.captureStream(4);
+  const videoTrack = stream.getVideoTracks?.()[0] || null;
+  const mimeType = getSupportedPipRecorderMimeType();
+  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  const chunks = [];
+
+  recorder.ondataavailable = (event) => {
+    if (event.data?.size) chunks.push(event.data);
+  };
+
+  const stopped = new Promise((resolve, reject) => {
+    recorder.onstop = resolve;
+    recorder.onerror = () => reject(recorder.error || new Error("短影片錄製失敗。"));
+  });
+
+  const frameTimer = window.setInterval(() => {
+    drawVideoPipFrame();
+    videoTrack?.requestFrame?.();
+  }, 180);
+
+  recorder.start();
+  videoTrack?.requestFrame?.();
+  await new Promise((resolve) => setTimeout(resolve, 1050));
+  recorder.stop();
+  await stopped;
+
+  window.clearInterval(frameTimer);
+  stream.getTracks?.().forEach((track) => track.stop());
+
+  if (!chunks.length) throw new Error("短影片沒有產生資料。");
+
+  const blob = new Blob(chunks, { type: mimeType || chunks[0]?.type || "video/webm" });
+  return URL.createObjectURL(blob);
+}
+
+async function openRecordedVideoGuidePip() {
+  if (!recordedVideoPipSupported) return false;
+
+  const state = videoPipRef.current;
+  if (!state.canvas) {
+    state.canvas = document.createElement("canvas");
+  }
+
+  const videoUrl = await recordPipCanvasVideoUrl(state.canvas);
+  if (state.recordedUrl) URL.revokeObjectURL(state.recordedUrl);
+  state.recordedUrl = videoUrl;
+
+  const video = ensureVideoPipElement();
+  video.pause();
+  video.srcObject = null;
+  video.src = videoUrl;
+  video.loop = true;
+  video.muted = true;
+  video.playsInline = true;
+
+  await new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error("短影片載入逾時。")), 5000);
+    video.onloadedmetadata = () => {
+      window.clearTimeout(timer);
+      resolve();
+    };
+    video.onerror = () => {
+      window.clearTimeout(timer);
+      reject(new Error("短影片無法載入。"));
+    };
+  });
+
+  await video.play();
+
+  if (
+    typeof video.webkitSetPresentationMode === "function" &&
+    (typeof video.webkitSupportsPresentationMode !== "function" ||
+      video.webkitSupportsPresentationMode("picture-in-picture"))
+  ) {
+    video.webkitSetPresentationMode("picture-in-picture");
+  } else if (standardVideoPipSupported && document.pictureInPictureElement !== video) {
+    await video.requestPictureInPicture();
+  } else {
+    throw new Error("目前瀏覽器不接受短影片浮動小窗。");
+  }
+
+  setVideoPipActive(true);
+
+  const hasAvailableSolution =
+    (activeSolutions?.length || 0) > 0 ||
+    (Array.isArray(path) && path.length >= 2);
+
+  if (
+    needsSolve &&
+    !hasAvailableSolution &&
+    !solving &&
+    !isManual &&
+    ruleValidation.ok
+  ) {
+    solveRef.current?.();
+  }
+
+  return true;
+}
+
 async function openVideoGuidePip({ silent = false } = {}) {
   if (!videoPipSupported) {
     if (!silent) {
@@ -10697,57 +11001,24 @@ async function openVideoGuidePip({ silent = false } = {}) {
       state.stream = state.canvas.captureStream(12);
     }
 
-    if (!state.video) {
-      state.video = document.createElement("video");
-      state.video.muted = true;
-      state.video.playsInline = true;
-      state.video.setAttribute("playsinline", "");
-      state.video.setAttribute("webkit-playsinline", "");
-      state.video.style.position = "fixed";
-      state.video.style.left = "0";
-      state.video.style.bottom = "0";
-      state.video.style.width = "1px";
-      state.video.style.height = "1px";
-      state.video.style.opacity = "0.001";
-      state.video.style.pointerEvents = "none";
-      state.video.style.zIndex = "-1";
-      state.video.addEventListener("leavepictureinpicture", () => {
-        if (videoPipRef.current.raf) {
-          cancelAnimationFrame(videoPipRef.current.raf);
-          videoPipRef.current.raf = 0;
-        }
-        videoPipRef.current.video?.pause();
-        videoPipRef.current.video && (videoPipRef.current.video.srcObject = null);
-        videoPipRef.current.stream?.getTracks?.().forEach((track) => track.stop());
-        videoPipRef.current.stream = null;
-        setVideoPipActive(false);
-      });
-      state.video.addEventListener("webkitpresentationmodechanged", () => {
-        if (state.video?.webkitPresentationMode === "picture-in-picture") return;
-        if (videoPipRef.current.raf) {
-          cancelAnimationFrame(videoPipRef.current.raf);
-          videoPipRef.current.raf = 0;
-        }
-        setVideoPipActive(false);
-      });
+    const video = ensureVideoPipElement();
+    if (state.recordedUrl) {
+      URL.revokeObjectURL(state.recordedUrl);
+      state.recordedUrl = null;
     }
-
-    if (!state.video.isConnected) {
-      document.body.appendChild(state.video);
-    }
-
-    state.video.srcObject = state.stream;
+    video.removeAttribute("src");
+    video.srcObject = state.stream;
     drawVideoPipFrame();
-    await state.video.play();
+    await video.play();
 
-    if (standardVideoPipSupported && document.pictureInPictureElement !== state.video) {
-      await state.video.requestPictureInPicture();
+    if (standardVideoPipSupported && document.pictureInPictureElement !== video) {
+      await video.requestPictureInPicture();
     } else if (
-      typeof state.video.webkitSetPresentationMode === "function" &&
-      (typeof state.video.webkitSupportsPresentationMode !== "function" ||
-        state.video.webkitSupportsPresentationMode("picture-in-picture"))
+      typeof video.webkitSetPresentationMode === "function" &&
+      (typeof video.webkitSupportsPresentationMode !== "function" ||
+        video.webkitSupportsPresentationMode("picture-in-picture"))
     ) {
-      state.video.webkitSetPresentationMode("picture-in-picture");
+      video.webkitSetPresentationMode("picture-in-picture");
     } else {
       throw new Error("目前瀏覽器不支援浮動小窗。");
     }
@@ -10770,6 +11041,17 @@ async function openVideoGuidePip({ silent = false } = {}) {
 
     return true;
   } catch (err) {
+    const state = videoPipRef.current;
+    state.stream?.getTracks?.().forEach((track) => track.stop());
+    state.stream = null;
+
+    try {
+      const recordedOpened = await openRecordedVideoGuidePip();
+      if (recordedOpened) return true;
+    } catch (recordErr) {
+      console.warn("[pip] recorded video fallback failed", recordErr);
+    }
+
     if (!silent) {
       console.warn("[pip] video open failed", err);
       alert("浮動小窗需要由按鈕點擊開啟；若剛剛是切換程式自動觸發，請先按一次「小窗」。");
@@ -15218,11 +15500,20 @@ const visualImg = Object.values(ORB_TYPES).find(
               <button
                 type="button"
                 className="guide-pip-button"
-                onClick={captureScreenshotAndSolve}
-                disabled={screenshotBusy || importBusy || showImportCrop || solving || showEditor}
-                title="選擇神魔之塔視窗；若選整個螢幕，小窗會在截圖前關閉以避免被截入"
+                onClick={selectBoardSource}
+                disabled={boardSourceBusy || importBusy || showImportCrop || solving || showEditor}
+                title="選擇版面來源；之後按計算會直接抓此來源的最新畫面"
               >
-                截圖上傳
+                {boardSourceButtonText}
+              </button>
+              <button
+                type="button"
+                className="guide-pip-button"
+                onClick={calculateFromBoardSource}
+                disabled={boardSourceBusy || importBusy || showImportCrop || solving || showEditor}
+                title="從目前版面來源抓最新畫面並開始計算"
+              >
+                計算
               </button>
             </div>
           </div>
@@ -15231,7 +15522,7 @@ const visualImg = Object.values(ORB_TYPES).find(
             {pipLoading ? (
               <div className="guide-pip-loading">
                 <div className="guide-pip-spinner" />
-                <div>計算中</div>
+                <div>{pipStatusText}</div>
               </div>
             ) : (
               (() => {
