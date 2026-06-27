@@ -112,6 +112,196 @@ export default function ImportCropModal({
     };
   }, []);
 
+  // ====== 偵測 5x6 盤面 ======
+  const detectBoardGrid = useCallback((imgEl, content) => {
+    const natW = imgEl.naturalWidth;
+    const natH = imgEl.naturalHeight;
+
+    const targetW = Math.min(480, natW);
+    const s = targetW / natW;
+    const W = Math.max(1, Math.round(natW * s));
+    const H = Math.max(1, Math.round(natH * s));
+
+    const c = document.createElement("canvas");
+    c.width = W;
+    c.height = H;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(imgEl, 0, 0, W, H);
+
+    const { data } = ctx.getImageData(0, 0, W, H);
+    const stride = W + 1;
+    const orbIntegral = new Float32Array((W + 1) * (H + 1));
+    const darkIntegral = new Float32Array((W + 1) * (H + 1));
+
+    for (let y = 1; y <= H; y++) {
+      let orbRowSum = 0;
+      let darkRowSum = 0;
+      const srcRow = (y - 1) * W * 4;
+      const dstRow = y * stride;
+      const prevRow = (y - 1) * stride;
+
+      for (let x = 1; x <= W; x++) {
+        const i = srcRow + (x - 1) * 4;
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const maxc = Math.max(r, g, b);
+        const minc = Math.min(r, g, b);
+        const sat = maxc > 1e-6 ? (maxc - minc) / maxc : 0;
+        const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+        const orbLike = maxc > 90 && sat > 0.23 && lum > 55 ? 1 : 0;
+        const darkLike = lum < 85 && sat < 0.7 ? 1 : 0;
+
+        orbRowSum += orbLike;
+        darkRowSum += darkLike;
+
+        const dst = dstRow + x;
+        orbIntegral[dst] = orbIntegral[prevRow + x] + orbRowSum;
+        darkIntegral[dst] = darkIntegral[prevRow + x] + darkRowSum;
+      }
+    }
+
+    const rectMean = (integral, x0, y0, x1, y1) => {
+      const ax = clamp(Math.round(x0), 0, W);
+      const ay = clamp(Math.round(y0), 0, H);
+      const bx = clamp(Math.round(x1), 0, W);
+      const by = clamp(Math.round(y1), 0, H);
+      if (bx <= ax || by <= ay) return 0;
+
+      const area = (bx - ax) * (by - ay);
+      const sum =
+        integral[by * stride + bx] -
+        integral[ay * stride + bx] -
+        integral[by * stride + ax] +
+        integral[ay * stride + ax];
+
+      return sum / area;
+    };
+
+    const cl = clamp(content.sx * s, 0, W);
+    const ct = clamp(content.sy * s, 0, H);
+    const cr = clamp((content.sx + content.sw) * s, 0, W);
+    const cb = clamp((content.sy + content.sh) * s, 0, H);
+    const cw = Math.max(1, cr - cl);
+    const ch = Math.max(1, cb - ct);
+    const tallScreenshot = ch > cw * 1.35;
+
+    const minW = Math.max(120, cw * 0.72);
+    const maxW = Math.min(cw, W);
+    const widthStep = Math.max(3, Math.round(W / 120));
+    const posStep = Math.max(3, Math.round(W / 140));
+    const ySearchTop = tallScreenshot ? Math.max(ct + ch * 0.42, H * 0.42) : ct;
+    const ySearchBottom = Math.min(cb, H * 0.96);
+    const xCenter = cl + cw / 2;
+
+    let best = null;
+
+    const scoreCenters = (x0, y0, w, h) => {
+      const cellW = w / COLS;
+      const cellH = h / ROWS;
+      const rad = Math.max(1, Math.min(cellW, cellH) * 0.22);
+      const vals = [];
+      let sum = 0;
+      let minRow = 1;
+
+      for (let r = 0; r < ROWS; r++) {
+        let rowSum = 0;
+        for (let col = 0; col < COLS; col++) {
+          const cx = x0 + (col + 0.5) * cellW;
+          const cy = y0 + (r + 0.5) * cellH;
+          const v = rectMean(orbIntegral, cx - rad, cy - rad, cx + rad, cy + rad);
+          vals.push(v);
+          sum += v;
+          rowSum += v;
+        }
+        minRow = Math.min(minRow, rowSum / COLS);
+      }
+
+      vals.sort((a, b) => a - b);
+      return {
+        avg: sum / (ROWS * COLS),
+        p20: vals[Math.floor(vals.length * 0.2)],
+        minRow,
+      };
+    };
+
+    const scoreGrid = (x0, y0, w, h) => {
+      const cellW = w / COLS;
+      const cellH = h / ROWS;
+      const band = Math.max(1, w * 0.008);
+      let lineSum = 0;
+      let lineCount = 0;
+
+      for (let col = 1; col < COLS; col++) {
+        const x = x0 + cellW * col;
+        lineSum += rectMean(darkIntegral, x - band, y0 + h * 0.04, x + band, y0 + h * 0.96);
+        lineCount++;
+      }
+
+      for (let r = 1; r < ROWS; r++) {
+        const y = y0 + cellH * r;
+        lineSum += rectMean(darkIntegral, x0 + w * 0.04, y - band, x0 + w * 0.96, y + band);
+        lineCount++;
+      }
+
+      const edge =
+        (rectMean(darkIntegral, x0, y0, x0 + w, y0 + band) +
+          rectMean(darkIntegral, x0, y0 + h - band, x0 + w, y0 + h) +
+          rectMean(darkIntegral, x0, y0, x0 + band, y0 + h) +
+          rectMean(darkIntegral, x0 + w - band, y0, x0 + w, y0 + h)) /
+        4;
+
+      return {
+        lines: lineCount ? lineSum / lineCount : 0,
+        edge,
+      };
+    };
+
+    for (let w = minW; w <= maxW; w += widthStep) {
+      const h = w * ASPECT;
+      if (h > ch || h < 80) continue;
+
+      const baseX = xCenter - w / 2;
+      const xMin = Math.max(cl, baseX - cw * 0.08);
+      const xMax = Math.min(cr - w, baseX + cw * 0.08);
+      const yMax = Math.min(ySearchBottom - h, cb - h);
+      if (xMax < xMin || yMax < ySearchTop) continue;
+
+      for (let x = xMin; x <= xMax; x += posStep) {
+        for (let y = ySearchTop; y <= yMax; y += posStep) {
+          const center = scoreCenters(x, y, w, h);
+          if (center.avg < 0.42 || center.p20 < 0.22 || center.minRow < 0.35) {
+            continue;
+          }
+
+          const grid = scoreGrid(x, y, w, h);
+          const score =
+            center.avg * 2.1 +
+            center.p20 * 1.2 +
+            center.minRow +
+            grid.lines * 0.75 +
+            grid.edge * 0.25 +
+            (y / H) * 0.12;
+
+          if (!best || score > best.score) {
+            best = { x, y, w, h, score };
+          }
+        }
+      }
+    }
+
+    if (!best || best.score < 2.7) return null;
+
+    const inv = 1 / s;
+    return {
+      sx: best.x * inv,
+      sy: best.y * inv,
+      sw: best.w * inv,
+      sh: best.h * inv,
+    };
+  }, []);
+
   // ====== 偵測血條 ======
   const detectHpBar = useCallback((imgEl) => {
     const natW = imgEl.naturalWidth;
@@ -263,7 +453,7 @@ export default function ImportCropModal({
   // ====== 自動算出 5x6 裁切區 ======
   const getAutoCropSourceRect = useCallback((imgEl) => {
     const content = detectContentBounds(imgEl);
-    const hp = detectHpBar(imgEl);
+    const board = detectBoardGrid(imgEl, content);
 
     const fallback = () => {
       let w = Math.min(content.sw, content.sh / ASPECT);
@@ -277,15 +467,18 @@ export default function ImportCropModal({
       return { sx: x, sy: y, sw: w, sh: h };
     };
 
+    if (board) return board;
+
+    const hp = detectHpBar(imgEl);
     if (!hp) return fallback();
 
-    const hpOffsetDown = Math.max(2, Math.round(imgEl.naturalHeight * 0.002));
+    const hpOffsetDown = Math.max(8, Math.round(imgEl.naturalHeight * 0.018));
     const top = hp.sy + hp.sh + hpOffsetDown;
 
     const contentCenterX = content.sx + content.sw / 2;
 
-    const usableLeft = content.sx + content.sw * 0.04;
-    const usableRight = content.sx + content.sw * 0.96;
+    const usableLeft = content.sx;
+    const usableRight = content.sx + content.sw;
     const usableWidth = usableRight - usableLeft;
 
     const bottom = content.sy + content.sh;
@@ -311,7 +504,7 @@ export default function ImportCropModal({
       sw: w,
       sh: h,
     };
-  }, [detectContentBounds, detectHpBar]);
+  }, [detectBoardGrid, detectContentBounds, detectHpBar]);
 
   const buildCropCanvas = useCallback(() => {
     const img = imgRef.current;
