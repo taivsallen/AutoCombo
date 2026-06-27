@@ -850,6 +850,10 @@ const endEditorPaint = useCallback(() => {
   const [showImportCrop, setShowImportCrop] = useState(false);
   const [importImgUrl, setImportImgUrl] = useState("");
   const importFileRef = useRef(null);
+  const autoSolveImportedRef = useRef(false);
+  const pendingAutoSolveImportRef = useRef(false);
+  const [autoSolveImportVersion, setAutoSolveImportVersion] = useState(0);
+  const [screenshotBusy, setScreenshotBusy] = useState(false);
   
   const [exportingGif, setExportingGif] = useState(false);
   const [gifProgress, setGifProgress] = useState({ cur: 0, total: 0, pct: 0 });
@@ -2341,6 +2345,7 @@ if (allowDiagonal) {
 	  e.target.value = ""; // 霈?瑼?
 	  if (!f) return;
 
+    autoSolveImportedRef.current = false;
 	  if (importImgUrl) URL.revokeObjectURL(importImgUrl);
 	  const url = URL.createObjectURL(f);
 	  setImportImgUrl(url);
@@ -9377,6 +9382,76 @@ const clearSolutionPools = useCallback(() => {
   solutionPoolContextRef.current.resetKey = "";
 }, []);
 
+const applyDetectedPlayBoard = useCallback(
+  (detected, { autoSolve = false } = {}) => {
+    if (!Array.isArray(detected) || detected.length < PLAY_ROWS) {
+      throw new Error("辨識結果不是 5x6 版面。");
+    }
+
+    stopToBase(true);
+
+    const source =
+      baseBoardRef.current?.length
+        ? baseBoardRef.current
+        : originalBoard?.length
+        ? originalBoard
+        : board;
+
+    const next = Array.from({ length: TOTAL_ROWS }, (_, r) =>
+      Array.from({ length: COLS }, (_, c) => {
+        const existing = source?.[r]?.[c];
+        if (existing == null || orbOf(existing) < 0) {
+          return withMarks(r === 0 ? c % 5 : 0, 0, 0, 0);
+        }
+        return withMarks(orbOf(existing), xMarkOf(existing), qMarkOf(existing), nMarkOf(existing));
+      })
+    );
+
+    for (let r = 0; r < PLAY_ROWS; r++) {
+      const row = detected[r];
+      if (!Array.isArray(row) || row.length < COLS) {
+        throw new Error("辨識結果不是 5x6 版面。");
+      }
+
+      for (let c = 0; c < COLS; c++) {
+        const orbId = orbOf(row[c]);
+        if (orbId < 0 || orbId > 5) {
+          throw new Error(`第 ${r + 1} 列第 ${c + 1} 格辨識失敗。`);
+        }
+        next[r + PLAY_ROWS_START][c] = withMarks(orbId, 0, 0, 0);
+      }
+    }
+
+    const finalBoard = next.map((row) => [...row]);
+    baseBoardRef.current = finalBoard.map((row) => [...row]);
+    boardRef.current = finalBoard.map((row) => [...row]);
+    setBoard(finalBoard.map((row) => [...row]));
+    setOriginalBoard(finalBoard.map((row) => [...row]));
+    setEditingBoard(finalBoard.map((row) => [...row]));
+
+    clearSolutionPools();
+    solverCache.current.clear();
+    refreshTarget(finalBoard);
+
+    setPath([]);
+    setCurrentStep(-1);
+    setReplayBoard(null);
+    setFloating(null);
+    setHolePos(null);
+    setHiddenBCell(null);
+    setGhostArrived(null);
+    setIsReplaying(false);
+    setIsPaused(false);
+    setNeedsSolve(true);
+
+    if (autoSolve) {
+      pendingAutoSolveImportRef.current = true;
+      setAutoSolveImportVersion((v) => v + 1);
+    }
+  },
+  [board, clearSolutionPools, originalBoard, refreshTarget, stopToBase]
+);
+
 const toggleAutoRow0Expanded = useCallback(() => {
   setAutoRow0Expanded((v) => !v);
   clearSolutionPools();
@@ -9638,9 +9713,9 @@ const stopSolveProgressTicker = useCallback((forceComplete = false) => {
 
   const solve = () => {
   if (!ruleValidation.ok) return;
-  solverCache.current.clear();
   stopToBase(true);
   setNeedsSolve(false);
+  setSelectedPoolIndex(0);
 
   const base = baseBoardRef.current;
   const baseBoardKey = getBoardKey(base);
@@ -9713,6 +9788,7 @@ const stopSolveProgressTicker = useCallback((forceComplete = false) => {
   }
 
   const boardKey = `${baseBoardKey}|cfg:${configHash}`;
+  const preferredPoolIndex = 0;
 
   const resetKeyCache = solveResetKeyCacheRef.current;
   const isResetKeyCacheHit =
@@ -9794,7 +9870,7 @@ const stopSolveProgressTicker = useCallback((forceComplete = false) => {
         const activeList =
           priorityMode === "steps" ? cached.pools.steps : cached.pools.combo;
 
-        const picked = activeList[selectedPoolIndex] || activeList[0];
+        const picked = activeList[preferredPoolIndex] || activeList[0];
 
         solveProgressRawRef.current = {
           current: maxProgressNodes,
@@ -9909,7 +9985,7 @@ const stopSolveProgressTicker = useCallback((forceComplete = false) => {
       const activeList =
         priorityMode === "steps" ? mergedPools.steps : mergedPools.combo;
 
-      const picked = activeList[selectedPoolIndex] || activeList[0] || null;
+      const picked = activeList[preferredPoolIndex] || activeList[0] || null;
 
       if (picked) {
         applySolvedCandidate(picked);
@@ -9967,6 +10043,776 @@ const stopSolveProgressTicker = useCallback((forceComplete = false) => {
 };
 
 const activeSolutions = priorityMode === "steps" ? solutionPools.steps : solutionPools.combo;
+
+const pipWindowRef = useRef(null);
+const solveRef = useRef(null);
+const videoPipRef = useRef({
+  canvas: null,
+  video: null,
+  stream: null,
+  raf: 0,
+});
+const pipAutoOpenAttemptRef = useRef(0);
+const pipImageCacheRef = useRef(new Map());
+const drawVideoPipFrameRef = useRef(null);
+const [pipRoot, setPipRoot] = useState(null);
+const [videoPipActive, setVideoPipActive] = useState(false);
+const selectedPipSolution =
+  activeSolutions?.[selectedPoolIndex] || activeSolutions?.[0] || null;
+const canvasStreamSupported =
+  typeof document !== "undefined" &&
+  typeof HTMLCanvasElement !== "undefined" &&
+  !!HTMLCanvasElement.prototype.captureStream;
+const standardVideoPipSupported =
+  typeof document !== "undefined" &&
+  !!document.pictureInPictureEnabled &&
+  typeof HTMLVideoElement !== "undefined" &&
+  !!HTMLVideoElement.prototype.requestPictureInPicture;
+const webkitVideoPipSupported =
+  typeof HTMLVideoElement !== "undefined" &&
+  typeof HTMLVideoElement.prototype.webkitSetPresentationMode === "function";
+const videoPipSupported =
+  canvasStreamSupported && (standardVideoPipSupported || webkitVideoPipSupported);
+const guidePipSupported =
+  (typeof window !== "undefined" && !!window.documentPictureInPicture?.requestWindow) ||
+  videoPipSupported;
+
+useEffect(() => {
+  solveRef.current = solve;
+});
+
+useEffect(() => {
+  if (!pendingAutoSolveImportRef.current) return;
+  if (showImportCrop || importBusy || showEditor || solving) return;
+
+  if (!ruleValidation.ok) {
+    pendingAutoSolveImportRef.current = false;
+    alert("截圖已套用到主版面，但目前解盾/底層條件有衝突，無法自動求解。");
+    return;
+  }
+
+  pendingAutoSolveImportRef.current = false;
+  solveRef.current?.();
+}, [
+  autoSolveImportVersion,
+  importBusy,
+  ruleValidation.ok,
+  showEditor,
+  showImportCrop,
+  solving,
+]);
+
+const closeGuidePip = useCallback(() => {
+  const win = pipWindowRef.current;
+  pipWindowRef.current = null;
+  setPipRoot(null);
+
+  if (win && !win.closed) {
+    try {
+      win.close();
+    } catch (err) {
+      console.warn("[pip] close failed", err);
+    }
+  }
+
+  const videoState = videoPipRef.current;
+  if (videoState.raf) {
+    cancelAnimationFrame(videoState.raf);
+    videoState.raf = 0;
+  }
+
+  const video = videoState.video;
+  if (video && document.pictureInPictureElement === video) {
+    document.exitPictureInPicture?.().catch((err) => {
+      console.warn("[pip] video exit failed", err);
+    });
+  }
+  if (
+    video &&
+    typeof video.webkitSetPresentationMode === "function" &&
+    video.webkitPresentationMode === "picture-in-picture"
+  ) {
+    try {
+      video.webkitSetPresentationMode("inline");
+    } catch (err) {
+      console.warn("[pip] webkit video exit failed", err);
+    }
+  }
+
+  if (video) {
+    video.pause();
+    video.srcObject = null;
+    if (video.parentNode) {
+      video.parentNode.removeChild(video);
+    }
+  }
+
+  videoState.stream?.getTracks?.().forEach((track) => track.stop());
+  videoState.stream = null;
+  setVideoPipActive(false);
+}, []);
+
+const captureScreenshotAndSolve = useCallback(async (event) => {
+  if (screenshotBusy || importBusy || showImportCrop || solving || exportingGif || showEditor) return;
+
+  const sourceWindow =
+    event?.currentTarget?.ownerDocument?.defaultView ||
+    (typeof window !== "undefined" ? window : null);
+  const mediaDevices =
+    sourceWindow?.navigator?.mediaDevices ||
+    (typeof navigator !== "undefined" ? navigator.mediaDevices : null);
+
+  if (!mediaDevices?.getDisplayMedia) {
+    alert("目前瀏覽器不支援螢幕截圖匯入，請使用新版 Chrome / Edge。");
+    return;
+  }
+
+  let stream = null;
+  setScreenshotBusy(true);
+  autoSolveImportedRef.current = true;
+
+  try {
+    stream = await mediaDevices.getDisplayMedia({
+      video: {
+        frameRate: { ideal: 1, max: 5 },
+      },
+      audio: false,
+    });
+
+    const track = stream.getVideoTracks?.()[0] || null;
+    const displaySurface = track?.getSettings?.().displaySurface || "";
+    const hasFloatingWindow =
+      !!(pipWindowRef.current && !pipWindowRef.current.closed) || videoPipActive;
+    const shouldCloseForCapture = hasFloatingWindow && displaySurface !== "window";
+
+    if (shouldCloseForCapture) {
+      closeGuidePip();
+      await new Promise((resolve) => setTimeout(resolve, 220));
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
+
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.srcObject = stream;
+
+    await new Promise((resolve, reject) => {
+      const timer = window.setTimeout(() => {
+        reject(new Error("截圖來源讀取逾時。"));
+      }, 5000);
+
+      video.onloadedmetadata = () => {
+        window.clearTimeout(timer);
+        resolve();
+      };
+
+      video.onerror = () => {
+        window.clearTimeout(timer);
+        reject(new Error("截圖來源無法讀取。"));
+      };
+    });
+
+    await video.play().catch(() => {});
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const width = video.videoWidth || track?.getSettings?.().width || 0;
+    const height = video.videoHeight || track?.getSettings?.().height || 0;
+    if (!width || !height) {
+      throw new Error("截圖尺寸讀取失敗。");
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) throw new Error("無法建立截圖畫布。");
+    ctx.drawImage(video, 0, 0, width, height);
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("截圖轉換失敗。");
+
+    if (importImgUrl) URL.revokeObjectURL(importImgUrl);
+    const url = URL.createObjectURL(blob);
+    setImportImgUrl(url);
+    setShowImportCrop(true);
+  } catch (err) {
+    autoSolveImportedRef.current = false;
+    pendingAutoSolveImportRef.current = false;
+
+    if (err?.name !== "NotAllowedError" && err?.name !== "AbortError") {
+      console.error("[pip] screenshot import failed", err);
+      alert(`截圖上傳失敗：${err?.message || err}`);
+    }
+  } finally {
+    stream?.getTracks?.().forEach((track) => track.stop());
+    setScreenshotBusy(false);
+  }
+}, [
+  closeGuidePip,
+  exportingGif,
+  importBusy,
+  importImgUrl,
+  screenshotBusy,
+  showEditor,
+  showImportCrop,
+  solving,
+  videoPipActive,
+]);
+
+const openGuidePip = useCallback(
+  async ({ silent = false } = {}) => {
+    if (typeof window === "undefined") return;
+
+    const pipApi = window.documentPictureInPicture;
+    if (!pipApi?.requestWindow) {
+      await openVideoGuidePip({ silent });
+      return;
+    }
+
+    if (showEditor) return;
+
+    try {
+      if (!pipWindowRef.current || pipWindowRef.current.closed) {
+        const rowCount = autoRow0Expanded ? TOTAL_ROWS : PLAY_ROWS;
+        const pipWidth = 360;
+        const pipHeight = Math.round(pipWidth * (rowCount / COLS)) + 64;
+        const pipWin = await pipApi.requestWindow({
+          width: pipWidth,
+          height: Math.max(320, Math.min(460, pipHeight)),
+          preferInitialWindowPlacement: true,
+        });
+
+        const doc = pipWin.document;
+        doc.title = "轉珠路徑";
+        doc.body.innerHTML = '<div id="guide-pip-root"></div>';
+
+        const style = doc.createElement("style");
+        style.textContent = `
+          html, body, #guide-pip-root {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background: #050505;
+            color: #fff;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          }
+          .guide-pip-shell {
+            box-sizing: border-box;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 7px;
+            background: radial-gradient(circle at 50% 0%, rgba(39,39,42,0.92), #050505 58%);
+          }
+          .guide-pip-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            min-height: 30px;
+            flex: 0 0 auto;
+          }
+          .guide-pip-title {
+            min-width: 0;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            color: rgba(255,255,255,0.74);
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+          }
+          .guide-pip-actions {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex: 0 0 auto;
+          }
+          .guide-pip-button {
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 7px;
+            background: rgba(255,255,255,0.08);
+            color: rgba(255,255,255,0.86);
+            padding: 5px 7px;
+            font-size: 11px;
+            line-height: 1;
+            font-weight: 900;
+            cursor: pointer;
+          }
+          .guide-pip-button:hover {
+            background: rgba(255,255,255,0.16);
+          }
+          .guide-pip-button:disabled {
+            cursor: wait;
+            opacity: 0.55;
+          }
+          .guide-pip-stage {
+            min-height: 0;
+            flex: 1 1 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .guide-pip-board {
+            display: block;
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 10px 18px rgba(0,0,0,0.5));
+          }
+          .guide-pip-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+            height: 100%;
+            color: rgba(255,255,255,0.72);
+            font-size: 12px;
+            font-weight: 900;
+            letter-spacing: 0.14em;
+          }
+          .guide-pip-spinner {
+            width: 46px;
+            height: 46px;
+            border-radius: 999px;
+            border: 4px solid rgba(255,255,255,0.12);
+            border-top-color: #facc15;
+            animation: guide-pip-spin 0.8s linear infinite;
+          }
+          @keyframes guide-pip-spin {
+            to { transform: rotate(360deg); }
+          }
+        `;
+        doc.head.appendChild(style);
+
+        pipWin.addEventListener("pagehide", () => {
+          if (pipWindowRef.current === pipWin) {
+            pipWindowRef.current = null;
+            setPipRoot(null);
+          }
+        });
+
+        pipWindowRef.current = pipWin;
+        setPipRoot(doc.getElementById("guide-pip-root"));
+      }
+
+      const hasAvailableSolution =
+        (activeSolutions?.length || 0) > 0 ||
+        (Array.isArray(path) && path.length >= 2);
+
+      if (
+        needsSolve &&
+        !hasAvailableSolution &&
+        !solving &&
+        !isManual &&
+        ruleValidation.ok
+      ) {
+        solveRef.current?.();
+      }
+    } catch (err) {
+      const fellBack = await openVideoGuidePip({ silent: true });
+      if (fellBack) return;
+
+      if (!silent) {
+        console.warn("[pip] open failed", err);
+        alert("浮動小窗需要由按鈕點擊開啟；若剛剛是切換程式自動觸發，請先按一次「小窗」。");
+      }
+    }
+  },
+  [
+    activeSolutions,
+    autoRow0Expanded,
+    isManual,
+    needsSolve,
+    path,
+    ruleValidation.ok,
+    showEditor,
+    solving,
+  ]
+);
+
+useEffect(() => {
+  const onLeave = () => {
+    if (pipWindowRef.current && !pipWindowRef.current.closed) return;
+    if (videoPipActive) return;
+    if (!guidePipSupported) return;
+
+    const now = Date.now();
+    if (now - pipAutoOpenAttemptRef.current < 2500) return;
+    pipAutoOpenAttemptRef.current = now;
+
+    openGuidePip({ silent: true });
+  };
+
+  const onVisibilityChange = () => {
+    if (document.visibilityState === "hidden") onLeave();
+  };
+
+  window.addEventListener("blur", onLeave);
+  window.addEventListener("pagehide", onLeave);
+  document.addEventListener("visibilitychange", onVisibilityChange);
+
+  return () => {
+    window.removeEventListener("blur", onLeave);
+    window.removeEventListener("pagehide", onLeave);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+  };
+}, [guidePipSupported, openGuidePip, videoPipActive]);
+
+useEffect(() => {
+  return () => closeGuidePip();
+}, [closeGuidePip]);
+
+const pipBoardSource =
+  Array.isArray(originalBoard) && originalBoard.length ? originalBoard : board;
+const pipRowOffset = autoRow0Expanded ? 0 : PLAY_ROWS_START;
+const pipRowCount = autoRow0Expanded ? TOTAL_ROWS : PLAY_ROWS;
+const pipBoardRows = Array.isArray(pipBoardSource)
+  ? pipBoardSource.slice(pipRowOffset, pipRowOffset + pipRowCount)
+  : [];
+const pipSolutionIndex = selectedPipSolution
+  ? Math.max(0, activeSolutions.indexOf(selectedPipSolution))
+  : -1;
+const pipPathSource = selectedPipSolution?.path || path || [];
+const pipPathPoints = Array.isArray(pipPathSource)
+  ? pipPathSource.reduce((out, p) => {
+      if (!p) return out;
+      if (
+        p.r < pipRowOffset ||
+        p.r >= pipRowOffset + pipRowCount ||
+        p.c < 0 ||
+        p.c >= COLS
+      ) {
+        return out;
+      }
+
+      const prev = out[out.length - 1];
+      if (!prev || prev.r !== p.r || prev.c !== p.c) {
+        out.push(p);
+      }
+      return out;
+    }, [])
+  : [];
+const pipPathKey = pipPathPoints.map((p) => `${p.r},${p.c}`).join("|");
+const pipLoading =
+  screenshotBusy ||
+  importBusy ||
+  showImportCrop ||
+  solving ||
+  (needsSolve && !selectedPipSolution && ruleValidation.ok);
+const pipComboText = selectedPipSolution
+  ? `${selectedPipSolution.initialCombos || 0}${
+      selectedPipSolution.skyfallCombos > 0
+        ? `+${selectedPipSolution.skyfallCombos}`
+        : ""
+    } C`
+  : "";
+const pipStatusText = pipLoading
+  ? screenshotBusy || importBusy || showImportCrop
+    ? "截圖中"
+    : "計算中"
+  : selectedPipSolution
+  ? `#${pipSolutionIndex + 1} / ${getPathSteps(selectedPipSolution.path)}步 / ${pipComboText}`
+  : "尚無路徑";
+function getPipOrbImage(src) {
+  if (!src) return null;
+
+  const cache = pipImageCacheRef.current;
+  let img = cache.get(src);
+  if (!img) {
+    img = new Image();
+    img.onload = () => drawVideoPipFrameRef.current?.();
+    img.src = src;
+    cache.set(src, img);
+  }
+
+  return img;
+}
+
+function buildCompletedPipRoute(cellSize = 1) {
+  if (!pipPathPoints.length || pipPathPoints.length < 2) {
+    return { geometry: null, points: [], pathD: "" };
+  }
+
+  const routeGeometry = buildShiftedRouteGeometry(
+    pipPathPoints,
+    Math.max(cellSize * 0.1, cellSize === 1 ? 0.06 : 6),
+    (r, c) => ({
+      x: (c + 0.5) * cellSize,
+      y: (r - pipRowOffset + 0.5) * cellSize,
+    })
+  );
+  const points = collectCompletedRoutePoints(routeGeometry);
+
+  return {
+    geometry: routeGeometry,
+    points,
+    pathD: buildStraightPath(points),
+  };
+}
+
+function drawVideoPipFrame(now = 0) {
+  const canvas = videoPipRef.current.canvas;
+  if (!canvas) return;
+
+  const width = 720;
+  const height = Math.round(width * (pipRowCount / COLS));
+
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#050505";
+  ctx.fillRect(0, 0, width, height);
+
+  if (pipLoading) {
+    const cx = width / 2;
+    const cy = height / 2;
+    const radius = Math.min(width, height) * 0.085;
+    const start = (now / 1000) * Math.PI * 2;
+
+    ctx.fillStyle = "#050505";
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = "rgba(255,255,255,0.16)";
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.arc(cx, cy - 20, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#facc15";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.arc(cx, cy - 20, radius, start, start + Math.PI * 1.35);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(255,255,255,0.78)";
+    ctx.font = "900 30px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("計算中", cx, cy + radius + 34);
+    return;
+  }
+
+  const cell = width / COLS;
+  for (let r = 0; r < pipRowCount; r++) {
+    const row = pipBoardRows[r] || [];
+    for (let c = 0; c < COLS; c++) {
+      ctx.fillStyle = (r + c) % 2 === 0 ? "#2b2b2b" : "#151515";
+      ctx.fillRect(c * cell, r * cell, cell, cell);
+      ctx.strokeStyle = "rgba(255,255,255,0.05)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(c * cell, r * cell, cell, cell);
+
+      const orbId = orbOf(row[c]);
+      const img = getPipOrbImage(ORB_ICON_IMGS[orbId]);
+      if (img?.complete && img.naturalWidth > 0) {
+        ctx.drawImage(
+          img,
+          c * cell + cell * 0.02,
+          r * cell + cell * 0.02,
+          cell * 0.96,
+          cell * 0.96
+        );
+      }
+    }
+  }
+
+  if (autoRow0Expanded) {
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(0, cell);
+    ctx.lineTo(width, cell);
+    ctx.stroke();
+  }
+
+  if (pipPathPoints.length >= 2) {
+    const pipRoute = buildCompletedPipRoute(cell);
+
+    const drawEndpoint = (point, fillStyle, radiusPx) => {
+      if (!point) return;
+      ctx.fillStyle = fillStyle;
+      ctx.strokeStyle = "rgba(0,0,0,0.95)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radiusPx, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    };
+
+    const drawPath = () => {
+      if (pipRoute.points.length < 2) return;
+      ctx.save();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 4;
+      ctx.lineCap = "butt";
+      ctx.lineJoin = "miter";
+      ctx.globalAlpha = 0.96;
+      ctx.shadowColor = "rgba(0,0,0,0.95)";
+      ctx.shadowOffsetX = 3;
+      ctx.shadowOffsetY = 3;
+      ctx.shadowBlur = 4;
+      ctx.beginPath();
+      pipRoute.points.forEach((point, idx) => {
+        if (idx === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    drawEndpoint(pipRoute.geometry?.start, "#22c55e", 14);
+    drawPath();
+    drawEndpoint(pipRoute.geometry?.end, "#ef4444", 16);
+  }
+}
+
+async function openVideoGuidePip({ silent = false } = {}) {
+  if (!videoPipSupported) {
+    if (!silent) {
+      alert("目前瀏覽器不能把自訂盤面轉成系統浮動小窗。iPhone Safari 的 YouTube 小窗通常只接受真正影片，無法直接吃圖片或 Canvas。");
+    }
+    return false;
+  }
+
+  if (showEditor) return false;
+
+  try {
+    const state = videoPipRef.current;
+    if (!state.canvas) {
+      state.canvas = document.createElement("canvas");
+    }
+
+    if (!state.stream) {
+      state.stream = state.canvas.captureStream(12);
+    }
+
+    if (!state.video) {
+      state.video = document.createElement("video");
+      state.video.muted = true;
+      state.video.playsInline = true;
+      state.video.setAttribute("playsinline", "");
+      state.video.setAttribute("webkit-playsinline", "");
+      state.video.style.position = "fixed";
+      state.video.style.left = "0";
+      state.video.style.bottom = "0";
+      state.video.style.width = "1px";
+      state.video.style.height = "1px";
+      state.video.style.opacity = "0.001";
+      state.video.style.pointerEvents = "none";
+      state.video.style.zIndex = "-1";
+      state.video.addEventListener("leavepictureinpicture", () => {
+        if (videoPipRef.current.raf) {
+          cancelAnimationFrame(videoPipRef.current.raf);
+          videoPipRef.current.raf = 0;
+        }
+        videoPipRef.current.video?.pause();
+        videoPipRef.current.video && (videoPipRef.current.video.srcObject = null);
+        videoPipRef.current.stream?.getTracks?.().forEach((track) => track.stop());
+        videoPipRef.current.stream = null;
+        setVideoPipActive(false);
+      });
+      state.video.addEventListener("webkitpresentationmodechanged", () => {
+        if (state.video?.webkitPresentationMode === "picture-in-picture") return;
+        if (videoPipRef.current.raf) {
+          cancelAnimationFrame(videoPipRef.current.raf);
+          videoPipRef.current.raf = 0;
+        }
+        setVideoPipActive(false);
+      });
+    }
+
+    if (!state.video.isConnected) {
+      document.body.appendChild(state.video);
+    }
+
+    state.video.srcObject = state.stream;
+    drawVideoPipFrame();
+    await state.video.play();
+
+    if (standardVideoPipSupported && document.pictureInPictureElement !== state.video) {
+      await state.video.requestPictureInPicture();
+    } else if (
+      typeof state.video.webkitSetPresentationMode === "function" &&
+      (typeof state.video.webkitSupportsPresentationMode !== "function" ||
+        state.video.webkitSupportsPresentationMode("picture-in-picture"))
+    ) {
+      state.video.webkitSetPresentationMode("picture-in-picture");
+    } else {
+      throw new Error("目前瀏覽器不支援浮動小窗。");
+    }
+
+    setVideoPipActive(true);
+
+    const hasAvailableSolution =
+      (activeSolutions?.length || 0) > 0 ||
+      (Array.isArray(path) && path.length >= 2);
+
+    if (
+      needsSolve &&
+      !hasAvailableSolution &&
+      !solving &&
+      !isManual &&
+      ruleValidation.ok
+    ) {
+      solveRef.current?.();
+    }
+
+    return true;
+  } catch (err) {
+    if (!silent) {
+      console.warn("[pip] video open failed", err);
+      alert("浮動小窗需要由按鈕點擊開啟；若剛剛是切換程式自動觸發，請先按一次「小窗」。");
+    }
+    return false;
+  }
+}
+
+useEffect(() => {
+  drawVideoPipFrameRef.current = drawVideoPipFrame;
+});
+
+useEffect(() => {
+  if (!videoPipActive) return;
+  drawVideoPipFrame();
+}, [
+  autoRow0Expanded,
+  board,
+  originalBoard,
+  pipLoading,
+  pipPathKey,
+  pipRowCount,
+  selectedPipSolution,
+  videoPipActive,
+]);
+
+useEffect(() => {
+  if (!videoPipActive || !pipLoading) return undefined;
+
+  const tick = (now) => {
+    drawVideoPipFrameRef.current?.(now);
+    videoPipRef.current.raf = requestAnimationFrame(tick);
+  };
+
+  videoPipRef.current.raf = requestAnimationFrame(tick);
+
+  return () => {
+    if (videoPipRef.current.raf) {
+      cancelAnimationFrame(videoPipRef.current.raf);
+      videoPipRef.current.raf = 0;
+    }
+  };
+}, [videoPipActive, pipLoading]);
 
 const buildSolutionPreviewBoard = useCallback((solution) => {
   const base = baseBoardRef.current?.length ? baseBoardRef.current : board;
@@ -10530,10 +11376,10 @@ const intersectRouteLines = (p1, tangent1, p2, tangent2) => {
     y: p1.y + tangent1.y * distance,
   };
 };
-const buildShiftedRouteGeometry = (rcPath, laneGap) => {
+const buildShiftedRouteGeometry = (rcPath, laneGap, getCenterPx = getCellCenterPx) => {
   if (!rcPath?.length) return { lines: [], start: null, end: null };
 
-  const centers = rcPath.map((p) => getCellCenterPx(p.r, p.c));
+  const centers = rcPath.map((p) => getCenterPx(p.r, p.c));
   if (rcPath.length < 2) {
     return { lines: [], start: centers[0] || null, end: centers[0] || null };
   }
@@ -10676,6 +11522,30 @@ const buildShiftedRouteGeometry = (rcPath, laneGap) => {
     start: lines[0].displayStart,
     end: lastLine.displayEnd,
   };
+};
+const collectCompletedRoutePoints = (routeGeometry) => {
+  const visibleRoutePoints = [];
+
+  for (const line of routeGeometry?.lines || []) {
+    const points = line.entryPoints
+      ? [...line.entryPoints, line.displayEnd]
+      : [line.displayStart, line.displayEnd];
+
+    for (const point of points) {
+      if (!point) continue;
+
+      const previousPoint = visibleRoutePoints[visibleRoutePoints.length - 1];
+      if (
+        previousPoint &&
+        Math.hypot(point.x - previousPoint.x, point.y - previousPoint.y) < 0.01
+      ) {
+        continue;
+      }
+      visibleRoutePoints.push(point);
+    }
+  }
+
+  return visibleRoutePoints;
 };
 const buildStraightPath = (points) => {
   if (!points || points.length < 2) return "";
@@ -13730,6 +14600,26 @@ const visualImg = Object.values(ORB_TYPES).find(
         <div className="solver-export-panel flex flex-col items-center gap-2">
           <div className="solver-export-controls flex items-center justify-center gap-2">
             <button
+              onClick={() => openGuidePip()}
+              disabled={showEditor || exportingGif}
+              className={[
+                "solver-export-control-button flex items-center justify-center gap-2 rounded-2xl font-black shadow-xl transition-all text-sm border active:scale-95",
+                showEditor || exportingGif ? "opacity-20" : "",
+                pipRoot || videoPipActive
+                  ? "bg-yellow-500 hover:bg-yellow-400 border-yellow-300/30 shadow-yellow-900/30 text-black"
+                  : "bg-neutral-800 hover:bg-neutral-700 border-neutral-700 text-neutral-200",
+              ].join(" ")}
+              title={
+                guidePipSupported
+                  ? "開啟浮動小窗"
+                  : "此瀏覽器可能不支援浮動小窗；點擊後會嘗試使用可用的手機/影片小窗模式"
+              }
+            >
+              <Layers size={20} />
+              小窗
+            </button>
+
+            <button
               onClick={exportGif}
               disabled={
                 solving ||
@@ -14317,6 +15207,181 @@ const visualImg = Object.values(ORB_TYPES).find(
       document.body
     )}
 
+    {pipRoot &&
+      createPortal(
+        <div className="guide-pip-shell">
+          <div className="guide-pip-toolbar">
+            <div className="guide-pip-title">
+              {autoRow0Expanded ? "6x6" : "5x6"} / {pipStatusText}
+            </div>
+            <div className="guide-pip-actions">
+              <button
+                type="button"
+                className="guide-pip-button"
+                onClick={captureScreenshotAndSolve}
+                disabled={screenshotBusy || importBusy || showImportCrop || solving || showEditor}
+                title="選擇神魔之塔視窗；若選整個螢幕，小窗會在截圖前關閉以避免被截入"
+              >
+                截圖上傳
+              </button>
+            </div>
+          </div>
+
+          <div className="guide-pip-stage">
+            {pipLoading ? (
+              <div className="guide-pip-loading">
+                <div className="guide-pip-spinner" />
+                <div>計算中</div>
+              </div>
+            ) : (
+              (() => {
+                const pipRoute = buildCompletedPipRoute(1);
+
+                return (
+                  <svg
+                    className="guide-pip-board"
+                    viewBox={`0 0 ${COLS} ${pipRowCount}`}
+                    preserveAspectRatio="xMidYMid meet"
+                    role="img"
+                    aria-label="轉珠路徑小窗"
+                  >
+                    <defs>
+                      <filter
+                        id="pipGlowGreen"
+                        x="-50%"
+                        y="-50%"
+                        width="200%"
+                        height="200%"
+                      >
+                        <feGaussianBlur stdDeviation="0.045" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+                      <filter
+                        id="pipGlowRed"
+                        x="-50%"
+                        y="-50%"
+                        width="200%"
+                        height="200%"
+                      >
+                        <feGaussianBlur stdDeviation="0.045" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+                      <filter
+                        id="pipRouteShadow"
+                        x="-1"
+                        y="-1"
+                        width={COLS + 2}
+                        height={pipRowCount + 2}
+                        filterUnits="userSpaceOnUse"
+                      >
+                        <feDropShadow
+                          dx="0.05"
+                          dy="0.05"
+                          stdDeviation="0.067"
+                          floodColor="black"
+                          floodOpacity="0.95"
+                        />
+                      </filter>
+                    </defs>
+
+                    <rect x="0" y="0" width={COLS} height={pipRowCount} fill="#080808" />
+
+                    {pipBoardRows.map((row, localR) =>
+                      row.map((cell, c) => {
+                        const orbId = orbOf(cell);
+                        const imgSrc = ORB_ICON_IMGS[orbId];
+                        const bg = (localR + c) % 2 === 0 ? "#2b2b2b" : "#151515";
+
+                        return (
+                          <React.Fragment key={`pip-cell-${localR}-${c}`}>
+                            <rect
+                              x={c}
+                              y={localR}
+                              width="1"
+                              height="1"
+                              fill={bg}
+                              stroke="rgba(255,255,255,0.05)"
+                              strokeWidth="0.015"
+                            />
+                            {imgSrc && (
+                              <image
+                                href={imgSrc}
+                                x={c + 0.02}
+                                y={localR + 0.02}
+                                width="0.96"
+                                height="0.96"
+                                preserveAspectRatio="xMidYMid meet"
+                              />
+                            )}
+                          </React.Fragment>
+                        );
+                      })
+                    )}
+
+                    {autoRow0Expanded && (
+                      <line
+                        x1="0"
+                        y1="1"
+                        x2={COLS}
+                        y2="1"
+                        stroke="rgba(255,255,255,0.35)"
+                        strokeWidth="0.035"
+                      />
+                    )}
+
+                    {pipRoute.points.length >= 2 && (
+                      <>
+                        {pipRoute.geometry?.start && (
+                          <circle
+                            cx={pipRoute.geometry.start.x}
+                            cy={pipRoute.geometry.start.y}
+                            r="0.22"
+                            fill="#22c55e"
+                            stroke="black"
+                            strokeWidth="0.033"
+                            filter="url(#pipGlowGreen)"
+                          />
+                        )}
+
+                        <path
+                          d={pipRoute.pathD}
+                          stroke="white"
+                          strokeWidth="0.067"
+                          fill="none"
+                          strokeLinecap="butt"
+                          strokeLinejoin="miter"
+                          filter="url(#pipRouteShadow)"
+                          opacity="0.96"
+                        />
+
+                        {pipRoute.geometry?.end && (
+                          <circle
+                            cx={pipRoute.geometry.end.x}
+                            cy={pipRoute.geometry.end.y}
+                            r="0.25"
+                            fill="#ef4444"
+                            stroke="black"
+                            strokeWidth="0.033"
+                            filter="url(#pipGlowRed)"
+                          />
+                        )}
+                      </>
+                    )}
+                  </svg>
+                );
+              })()
+            )}
+          </div>
+        </div>,
+        pipRoot
+      )}
+
     <input
       ref={importFileRef}
       type="file"
@@ -14328,11 +15393,16 @@ const visualImg = Object.values(ORB_TYPES).find(
     <ImportCropModal
       open={showImportCrop}
       imgUrl={importImgUrl}
-      onCancel={() => setShowImportCrop(false)}
+      onCancel={() => {
+        autoSolveImportedRef.current = false;
+        pendingAutoSolveImportRef.current = false;
+        setShowImportCrop(false);
+      }}
       onConfirm={async ({ cropCanvas }) => {
         console.log("[ImportCropModal] onConfirm fired", cropCanvas);
 
         setImportBusy(true);
+        const shouldAutoSolve = autoSolveImportedRef.current;
         try {
           if (!cropCanvas) {
             alert("裁切資料不存在，請重新開啟裁切視窗。");
@@ -14355,6 +15425,12 @@ const visualImg = Object.values(ORB_TYPES).find(
           );
 
           console.log("[detect] result", detected);
+
+          if (shouldAutoSolve) {
+            applyDetectedPlayBoard(detected, { autoSolve: true });
+            setShowImportCrop(false);
+            return;
+          }
 
           setEditingBoard((prev) => {
             const next = prev.map((r) => [...r]);
@@ -14381,6 +15457,7 @@ const visualImg = Object.values(ORB_TYPES).find(
           console.log("cropCanvas size:", cropCanvas?.width, cropCanvas?.height);
           alert("匯入失敗，請查看 console。");
         } finally {
+          autoSolveImportedRef.current = false;
           setImportBusy(false);
         }
       }}
