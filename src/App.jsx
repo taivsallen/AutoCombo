@@ -8,6 +8,18 @@ import GIF from "gif.js.optimized";
 import gifWorkerUrl from "gif.js.optimized/dist/gif.worker.js?url";
 import gifsicle from "gifsicle-wasm-browser";
 import { Sparkles, FileDown, Wrench, Play, Pause, Square, Zap, RefreshCw, Database, Activity, Target, BrainCircuit, Settings2, Sliders, Layers, Microscope, Binary, Timer, Unlink, AlignJustify, AlignCenterVertical, Footprints, Trophy, Edit3, Check, X, Palette, Clock, Hourglass, Ruler, CloudLightning, MoveUpRight, Move, Lightbulb } from 'lucide-react';
+import {
+  LANGUAGE_MENU_TEXT,
+  LANGUAGE_OPTIONS,
+  applyLanguageToDocument,
+  detectLanguageByIp,
+  getBrowserFallbackLanguage,
+  getPathLanguage,
+  getStoredLanguage,
+  setStoredLanguage,
+  syncLanguagePath,
+  translateText,
+} from "./i18n";
 
 import wImg from './assets/w.png';
 import fImg from './assets/f.png';
@@ -386,6 +398,116 @@ function topKByScore(items, K, getScore) {
 }
 
 const App = () => {
+
+const [language, setLanguage] = useState(
+  () => getPathLanguage() || getStoredLanguage() || getBrowserFallbackLanguage()
+);
+const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
+const [languageMenuPosition, setLanguageMenuPosition] = useState({ left: 16, top: 48 });
+const languageButtonRef = useRef(null);
+
+const updateLanguageMenuPosition = useCallback(() => {
+  if (typeof window === "undefined") return;
+
+  const rect = languageButtonRef.current?.getBoundingClientRect?.();
+  if (!rect) return;
+
+  const menuW = 144;
+  const gap = 8;
+  const edge = 8;
+  const left = Math.max(edge, Math.min(rect.left, window.innerWidth - menuW - edge));
+  const top = Math.max(edge, rect.bottom + gap);
+
+  setLanguageMenuPosition({ left, top });
+}, []);
+
+useEffect(() => {
+  let cancelled = false;
+
+  if (getPathLanguage() || getStoredLanguage()) return () => {};
+
+  detectLanguageByIp().then((detected) => {
+    if (!cancelled && !getPathLanguage() && !getStoredLanguage()) {
+      syncLanguagePath(detected);
+      setLanguage(detected);
+    }
+  });
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
+useEffect(() => {
+  applyLanguageToDocument(language);
+}, [language]);
+
+useEffect(() => {
+  const syncFromPath = () => {
+    const pathLanguage = getPathLanguage();
+    if (pathLanguage) {
+      setLanguage(pathLanguage);
+      applyLanguageToDocument(pathLanguage);
+    }
+  };
+
+  window.addEventListener("popstate", syncFromPath);
+
+  return () => {
+    window.removeEventListener("popstate", syncFromPath);
+  };
+}, []);
+
+useLayoutEffect(() => {
+  if (!languageMenuOpen) return undefined;
+
+  updateLanguageMenuPosition();
+
+  window.addEventListener("resize", updateLanguageMenuPosition);
+  window.addEventListener("scroll", updateLanguageMenuPosition, true);
+
+  return () => {
+    window.removeEventListener("resize", updateLanguageMenuPosition);
+    window.removeEventListener("scroll", updateLanguageMenuPosition, true);
+  };
+}, [languageMenuOpen, updateLanguageMenuPosition]);
+
+useEffect(() => {
+  if (!languageMenuOpen) return undefined;
+
+  const closeOnOutsideClick = (event) => {
+    if (!event.target?.closest?.("[data-language-menu]")) {
+      setLanguageMenuOpen(false);
+    }
+  };
+
+  const closeOnEscape = (event) => {
+    if (event.key === "Escape") {
+      setLanguageMenuOpen(false);
+    }
+  };
+
+  document.addEventListener("pointerdown", closeOnOutsideClick);
+  document.addEventListener("keydown", closeOnEscape);
+
+  return () => {
+    document.removeEventListener("pointerdown", closeOnOutsideClick);
+    document.removeEventListener("keydown", closeOnEscape);
+  };
+}, [languageMenuOpen]);
+
+const handleLanguageChange = useCallback((nextLanguage) => {
+  setStoredLanguage(nextLanguage);
+  syncLanguagePath(nextLanguage);
+  setLanguage(nextLanguage);
+  applyLanguageToDocument(nextLanguage);
+  if (typeof window !== "undefined") {
+    window.requestAnimationFrame?.(() => {
+      applyLanguageToDocument(nextLanguage);
+    });
+  }
+  setLanguageMenuOpen(false);
+}, []);
 
 const ghostIdRef = useRef(0);
 
@@ -10662,14 +10784,17 @@ const pipComboText = selectedPipSolution
   : "";
 const pipStatusText = pipLoading
   ? boardSourceBusy || screenshotBusy || importBusy || showImportCrop
-    ? "讀取來源"
-    : "計算中"
+    ? translateText("讀取來源", language)
+    : translateText("計算中", language)
   : selectedPipSolution
-  ? `#${pipSolutionIndex + 1} / ${getPathSteps(selectedPipSolution.path)}步 / ${pipComboText}`
-  : "尚無路徑";
+  ? translateText(
+      `#${pipSolutionIndex + 1} / ${getPathSteps(selectedPipSolution.path)}步 / ${pipComboText}`,
+      language
+    )
+  : translateText("尚無路徑", language);
 const boardSourceButtonText = boardSourceName
-  ? `版面來源: ${boardSourceName}`
-  : "版面來源";
+  ? translateText(`版面來源: ${boardSourceName}`, language)
+  : translateText("版面來源", language);
 function getPipOrbImage(src) {
   if (!src) return null;
 
@@ -10750,7 +10875,7 @@ function drawVideoPipFrame(now = 0) {
     ctx.font = "900 30px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("計算中", cx, cy + radius + 34);
+    ctx.fillText(translateText("計算中", language), cx, cy + radius + 34);
     return;
   }
 
@@ -12760,6 +12885,10 @@ const renderSpecialOrbPicker = (
   );
 };
 
+const currentLanguageOption =
+  LANGUAGE_OPTIONS.find((item) => item.code === language) || LANGUAGE_OPTIONS[0];
+const languageMenuLabel = LANGUAGE_MENU_TEXT[language] || LANGUAGE_MENU_TEXT.en;
+
 return (
   <div className="solver-app-shell bg-neutral-950 text-white font-sans">
     {isDevSolverBench && (
@@ -12785,7 +12914,61 @@ return (
     <div className="solver-app-header w-full bg-neutral-900/95 backdrop-blur border-b border-white/10">
   <div className="solver-app-header-row mx-auto max-w-[1600px] w-full px-4 py-2 flex items-center justify-between gap-1">
     <div className="flex items-center gap-3">
-      <img src={logoImg} className="w-8 h-8" alt="" />
+      <div className="relative" data-language-menu data-i18n-skip="true">
+        <button
+          ref={languageButtonRef}
+          type="button"
+          onClick={() => {
+            updateLanguageMenuPosition();
+            setLanguageMenuOpen((open) => !open);
+          }}
+          className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-neutral-950/40 transition hover:border-cyan-400/50 hover:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-cyan-400/45"
+          aria-label={languageMenuLabel}
+          title={languageMenuLabel}
+        >
+          <img src={logoImg} className="h-7 w-7" alt="" />
+          <span className="absolute -bottom-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full border border-neutral-950 bg-cyan-400 px-1 text-[9px] font-black leading-none text-neutral-950">
+            {currentLanguageOption.shortLabel}
+          </span>
+        </button>
+
+        {languageMenuOpen &&
+          typeof document !== "undefined" &&
+          createPortal(
+            <div
+              className="fixed z-[2147483647] w-36 overflow-hidden rounded-xl border border-white/10 bg-neutral-950/95 p-1 shadow-2xl shadow-black/60 backdrop-blur"
+              data-language-menu
+              data-i18n-skip="true"
+              style={{
+                left: languageMenuPosition.left,
+                top: languageMenuPosition.top,
+              }}
+            >
+              {LANGUAGE_OPTIONS.map((option) => {
+                const active = option.code === language;
+
+                return (
+                  <button
+                    key={option.code}
+                    type="button"
+                    onClick={() => handleLanguageChange(option.code)}
+                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-black transition ${
+                      active
+                        ? "bg-cyan-400 text-neutral-950"
+                        : "text-neutral-200 hover:bg-neutral-800"
+                    }`}
+                  >
+                    <span>{option.label}</span>
+                    <span className={active ? "text-neutral-950/70" : "text-neutral-500"}>
+                      {option.shortLabel}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>,
+            document.body
+          )}
+      </div>
       <h1 className="solver-brand-title text-lg md:text-xl font-black tracking-wide">
         Tower of Saviors
         {isManual ? (
@@ -13242,9 +13425,10 @@ return (
       </span>
 
       <span className="text-xs font-black text-yellow-300">
-        {`Lv${performanceLevel} ${
-          PERFORMANCE_PRESETS[performanceLevel - 1]?.label || ""
-        }`}
+        {`Lv${performanceLevel} ${translateText(
+          PERFORMANCE_PRESETS[performanceLevel - 1]?.label || "",
+          language
+        )}`}
       </span>
     </div>
 
@@ -13298,7 +13482,7 @@ return (
                     {renderOrbIcon(orb, "h-4 w-4")}
                   </span>
                   <span className={remain < 0 ? "font-black text-red-400" : "font-bold text-neutral-400"}>
-                    版 {stock} / 用 {used} / 剩 {remain}
+                    {translateText(`版 ${stock} / 用 ${used} / 剩 ${remain}`, language)}
                   </span>
                 </div>
                 <div className="solver-orb-rule-controls flex items-center gap-2">
@@ -15518,7 +15702,7 @@ const visualImg = Object.values(ORB_TYPES).find(
                 className="guide-pip-button"
                 onClick={selectBoardSource}
                 disabled={boardSourceBusy || importBusy || showImportCrop || solving || showEditor}
-                title="選擇版面來源；之後按計算會直接抓此來源的最新畫面"
+                title={translateText("選擇版面來源；之後按計算會直接抓此來源的最新畫面", language)}
               >
                 {boardSourceButtonText}
               </button>
@@ -15527,9 +15711,9 @@ const visualImg = Object.values(ORB_TYPES).find(
                 className="guide-pip-button"
                 onClick={calculateFromBoardSource}
                 disabled={boardSourceBusy || importBusy || showImportCrop || solving || showEditor}
-                title="從目前版面來源抓最新畫面並開始計算"
+                title={translateText("從目前版面來源抓最新畫面並開始計算", language)}
               >
-                計算
+                {translateText("計算", language)}
               </button>
             </div>
           </div>

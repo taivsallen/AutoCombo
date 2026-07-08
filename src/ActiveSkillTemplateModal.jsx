@@ -40,14 +40,20 @@ const TEMPLATE_ORB_IMG = {
   x: xImg,
 };
 
+const toPublicAssetUrl = (src) => {
+  if (!src) return "";
+  if (/^(?:https?:|data:|blob:|\/)/.test(src)) return src;
+  return `${import.meta.env.BASE_URL}${src.replace(/^\.\//, "")}`;
+};
+
 const RACE_IMG = {
-  human: "./race/human.png",
-  god: "./race/god.png",
-  demon: "./race/demon.png",
-  beast: "./race/beast.png",
-  dragon: "./race/dragon.png",
-  machina: "./race/machina.png",
-  elf: "./race/elf.png",
+  human: toPublicAssetUrl("race/human.png"),
+  god: toPublicAssetUrl("race/god.png"),
+  demon: toPublicAssetUrl("race/demon.png"),
+  beast: toPublicAssetUrl("race/beast.png"),
+  dragon: toPublicAssetUrl("race/dragon.png"),
+  machina: toPublicAssetUrl("race/machina.png"),
+  elf: toPublicAssetUrl("race/elf.png"),
 };
 
 function getColumnCount() {
@@ -138,7 +144,7 @@ function TemplateCard({
             "
           >
             <img
-              src={item.characterImg}
+              src={toPublicAssetUrl(item.characterImg)}
               alt={item.characterName}
               draggable={false}
               loading="lazy"
