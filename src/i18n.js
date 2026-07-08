@@ -1,4 +1,7 @@
-import { UI_TRANSLATION_ROWS } from "./i18nTranslationData.js";
+import UI_TRANSLATION_ROWS from "./i18nTranslationRows.js";
+import { HTML_ALTERNATES, SEO_METADATA, SITE_BASE_PATH } from "./seoMetadata.js";
+
+export { SEO_METADATA };
 
 export const LANGUAGE_STORAGE_KEY = "comboauto.language";
 
@@ -13,43 +16,6 @@ export const LANGUAGE_MENU_TEXT = {
   en: "Change language",
   ja: "言語を切り替え",
 };
-
-export const SEO_METADATA = {
-  zh: {
-    path: "/",
-    htmlLang: "zh-Hant",
-    title: "神魔之塔自動轉珠模擬器 | AutoCombo",
-    description:
-      "神魔之塔自動轉珠模擬器，可自動搜尋最佳轉珠路徑。支援自訂盤面、圖片辨識、天降與斜轉判定、Combo 與步數比較、解盾與回放。",
-    keywords: "神魔之塔, 神魔, TOS, 轉珠, 自動轉珠, 轉珠模擬器, Combo, 解盾, 最佳路徑",
-    url: "https://taivsallen.github.io/AutoCombo/",
-    locale: "zh_TW",
-  },
-  en: {
-    path: "/en/",
-    htmlLang: "en",
-    title: "Tower of Saviors Auto Combo Solver | AutoCombo",
-    description:
-      "An auto combo solver and orb route simulator for Tower of Saviors. Search optimized paths, import boards from images, compare combos and steps, handle shields, and replay solutions.",
-    keywords:
-      "Tower of Saviors, TOS, auto combo solver, orb route simulator, combo optimizer, board recognition, shield solver",
-    url: "https://taivsallen.github.io/AutoCombo/en/",
-    locale: "en_US",
-  },
-  ja: {
-    path: "/ja/",
-    htmlLang: "ja",
-    title: "タワーオブセイバーズ 自動コンボルート検索 | AutoCombo",
-    description:
-      "Tower of Saviors / 神魔之塔 向けの自動ドロップ操作シミュレーター。画像から盤面を認識し、最適ルート検索、コンボと手数の比較、ギミック対応、リプレイ表示に対応。",
-    keywords:
-      "Tower of Saviors, 神魔之塔, タワーオブセイバーズ, 自動コンボ, ドロップ操作, ルート検索, コンボ最適化, 盤面認識",
-    url: "https://taivsallen.github.io/AutoCombo/ja/",
-    locale: "ja_JP",
-  },
-};
-
-const SITE_BASE_PATH = "/AutoCombo";
 
 const SUPPORTED_LANGUAGES = new Set(LANGUAGE_OPTIONS.map((item) => item.code));
 const TRANSLATED_ATTRIBUTES = ["title", "aria-label", "placeholder", "alt"];
@@ -144,12 +110,6 @@ const updatePageMetadata = (lang) => {
 
   const normalizedLang = normalizeLanguage(lang);
   const meta = SEO_METADATA[normalizedLang] || SEO_METADATA.en;
-  const alternates = [
-    ["zh-Hant", SEO_METADATA.zh.url],
-    ["en", SEO_METADATA.en.url],
-    ["ja", SEO_METADATA.ja.url],
-    ["x-default", SEO_METADATA.en.url],
-  ];
 
   document.title = meta.title;
   upsertMeta('meta[name="description"]', { name: "description", content: meta.description });
@@ -168,7 +128,7 @@ const updatePageMetadata = (lang) => {
   });
   upsertLink('link[rel="canonical"]', { rel: "canonical", href: meta.url });
 
-  alternates.forEach(([hreflang, href]) => {
+  HTML_ALTERNATES.forEach(([hreflang, href]) => {
     upsertLink(`link[rel="alternate"][hreflang="${hreflang}"]`, {
       rel: "alternate",
       hreflang,
@@ -245,9 +205,6 @@ export const detectLanguageByIp = async () => {
   return getBrowserFallbackLanguage();
 };
 
-const escapeRegex = (value) =>
-  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 const PLACEHOLDER_RE = /\{([A-Za-z0-9_]+)\}/g;
 
 const hasPlaceholder = (value) => {
@@ -257,23 +214,24 @@ const hasPlaceholder = (value) => {
 
 const compileTemplate = (source, target) => {
   PLACEHOLDER_RE.lastIndex = 0;
-  const names = [];
-  let pattern = "";
+  const parts = [];
   let lastIndex = 0;
   let match;
 
   while ((match = PLACEHOLDER_RE.exec(source))) {
-    pattern += escapeRegex(source.slice(lastIndex, match.index));
-    pattern += "(.+?)";
-    names.push(match[1]);
+    if (match.index > lastIndex) {
+      parts.push({ type: "literal", value: source.slice(lastIndex, match.index) });
+    }
+    parts.push({ type: "placeholder", name: match[1] });
     lastIndex = match.index + match[0].length;
   }
 
-  pattern += escapeRegex(source.slice(lastIndex));
+  if (lastIndex < source.length) {
+    parts.push({ type: "literal", value: source.slice(lastIndex) });
+  }
 
   return {
-    regex: new RegExp(`^${pattern}$`, "u"),
-    names,
+    parts,
     target,
   };
 };
@@ -310,17 +268,39 @@ for (const row of UI_TRANSLATION_ROWS) {
   }
 }
 
+const findNextLiteral = (parts, startIndex) =>
+  parts.slice(startIndex).find((part) => part.type === "literal" && part.value);
+
+const matchTemplateParts = (text, parts) => {
+  let index = 0;
+  const values = new Map();
+
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i];
+
+    if (part.type === "literal") {
+      if (!text.startsWith(part.value, index)) return null;
+      index += part.value.length;
+      continue;
+    }
+
+    const nextLiteral = findNextLiteral(parts, i + 1);
+    const endIndex = nextLiteral ? text.indexOf(nextLiteral.value, index) : text.length;
+    if (endIndex <= index) return null;
+
+    values.set(part.name, text.slice(index, endIndex));
+    index = endIndex;
+  }
+
+  return index === text.length ? values : null;
+};
+
 const translateTemplate = (text, lang) => {
   for (const item of templateTranslations[lang] || []) {
-    const match = item.regex.exec(text);
-    if (!match) continue;
-
-    const values = new Map();
-    item.names.forEach((name, idx) => {
-      values.set(name, match[idx + 1] || "");
-    });
-
-    return item.target.replace(PLACEHOLDER_RE, (_, name) => values.get(name) ?? "");
+    const values = matchTemplateParts(text, item.parts);
+    if (values) {
+      return item.target.replace(PLACEHOLDER_RE, (_, name) => values.get(name) ?? "");
+    }
   }
   return null;
 };
@@ -340,10 +320,11 @@ export const translateText = (value, lang = activeLanguage) => {
   const text = String(value ?? "");
   if (!text.trim()) return text;
 
-  const match = text.match(/^(\s*)([\s\S]*?)(\s*)$/);
-  if (!match) return translateTrimmed(text, lang);
-
-  const [, leading, body, trailing] = match;
+  const leadingLength = text.length - text.trimStart().length;
+  const bodyEnd = text.trimEnd().length;
+  const leading = text.slice(0, leadingLength);
+  const body = text.slice(leadingLength, bodyEnd);
+  const trailing = text.slice(bodyEnd);
   return `${leading}${translateTrimmed(body, lang)}${trailing}`;
 };
 

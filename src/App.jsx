@@ -10549,8 +10549,11 @@ const openGuidePip = useCallback(
         });
 
         const doc = pipWin.document;
-        doc.title = "轉珠路徑";
-        doc.body.innerHTML = '<div id="guide-pip-root"></div>';
+        doc.title = translateText("轉珠路徑", language);
+        doc.body.replaceChildren();
+        const guideRoot = doc.createElement("div");
+        guideRoot.id = "guide-pip-root";
+        doc.body.appendChild(guideRoot);
 
         const style = doc.createElement("style");
         style.textContent = `
@@ -10697,6 +10700,7 @@ const openGuidePip = useCallback(
     activeSolutions,
     autoRow0Expanded,
     isManual,
+    language,
     needsSolve,
     path,
     ruleValidation.ok,
