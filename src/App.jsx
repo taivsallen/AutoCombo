@@ -7,7 +7,7 @@ import ActiveSkillTemplateModal from "./ActiveSkillTemplateModal";
 import GIF from "gif.js.optimized";
 import gifWorkerUrl from "gif.js.optimized/dist/gif.worker.js?url";
 import gifsicle from "gifsicle-wasm-browser";
-import { Sparkles, FileDown, Wrench, Play, Pause, Square, Zap, RefreshCw, Database, Activity, Target, BrainCircuit, Settings2, Sliders, Layers, Microscope, Binary, Timer, Unlink, AlignJustify, AlignCenterVertical, Footprints, Trophy, Edit3, Check, X, Palette, Clock, Hourglass, Ruler, CloudLightning, MoveUpRight, Move, Lightbulb } from 'lucide-react';
+import { Sparkles, FileDown, Wrench, Play, Pause, Square, Zap, RefreshCw, Database, Activity, Target, BrainCircuit, Settings2, Sliders, Layers, Microscope, Binary, Timer, Unlink, AlignJustify, AlignCenterVertical, Footprints, Trophy, Edit3, Check, X, Palette, Clock, Hourglass, Ruler, CloudLightning, MoveUpRight, Move, Lightbulb, MessageSquare, Send, ImagePlus } from 'lucide-react';
 import {
   LANGUAGE_MENU_TEXT,
   LANGUAGE_OPTIONS,
@@ -397,6 +397,112 @@ function topKByScore(items, K, getScore) {
   return heap.map(x => x[1]);
 }
 
+const FEEDBACK_ENDPOINT = "https://formsubmit.co/gxu30726@gmail.com";
+const FEEDBACK_IFRAME_NAME = "autocombo-feedback-submit-frame";
+const FEEDBACK_MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+
+const FEEDBACK_COUNTRY_NAMES_ZH = {
+  TW: "台灣",
+  CN: "中國",
+  HK: "香港",
+  MO: "澳門",
+  JP: "日本",
+  US: "美國",
+};
+
+const uniqueParts = (parts) => {
+  const seen = new Set();
+  return parts.filter((part) => {
+    const value = String(part || "").trim();
+    if (!value || seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
+};
+
+const feedbackCountryName = (countryCode, fallback) => {
+  const code = String(countryCode || "").trim().toUpperCase();
+  return FEEDBACK_COUNTRY_NAMES_ZH[code] || String(fallback || "").trim();
+};
+
+const feedbackLocationFromIpApi = (data) => ({
+  ip: data?.ip,
+  area: uniqueParts([
+    feedbackCountryName(data?.country_code, data?.country_name),
+    data?.region,
+    data?.city,
+  ]).join(" "),
+});
+
+const feedbackLocationFromIpWho = (data) => ({
+  ip: data?.ip,
+  area: uniqueParts([
+    feedbackCountryName(data?.country_code, data?.country),
+    data?.region,
+    data?.city,
+  ]).join(" "),
+});
+
+const fetchFeedbackJson = async (url, timeoutMs = 2500) => {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    window.clearTimeout(timeout);
+  }
+};
+
+const getFeedbackClientLine = async () => {
+  if (typeof window === "undefined" || typeof fetch !== "function") {
+    return "#(未知 IP) 未知地區";
+  }
+
+  const endpoints = [
+    { url: "https://ipapi.co/json/", format: feedbackLocationFromIpApi },
+    { url: "https://ipwho.is/", format: feedbackLocationFromIpWho },
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      const data = await fetchFeedbackJson(endpoint.url);
+      const result = endpoint.format(data);
+      if (result.ip || result.area) {
+        return `#(${result.ip || "未知 IP"}) ${result.area || "未知地區"}`;
+      }
+    } catch {
+      // Try the next provider.
+    }
+  }
+
+  return "#(未知 IP) 未知地區";
+};
+
+const bytesToReadableSize = (bytes) => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 KB";
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+};
+
+const makeClipboardImageName = (type, index) => {
+  const ext = String(type || "").split("/")[1] || "png";
+  return `clipboard-image-${Date.now()}-${index + 1}.${ext.replace("jpeg", "jpg")}`;
+};
+
+const withFeedbackFileInputFiles = (input, files) => {
+  if (!input || typeof DataTransfer === "undefined") return false;
+
+  const transfer = new DataTransfer();
+  files.forEach((file) => transfer.items.add(file));
+  input.files = transfer.files;
+  return true;
+};
+
 const App = () => {
 
 const [language, setLanguage] = useState(
@@ -405,6 +511,38 @@ const [language, setLanguage] = useState(
 const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
 const [languageMenuPosition, setLanguageMenuPosition] = useState({ left: 16, top: 48 });
 const languageButtonRef = useRef(null);
+const [feedbackOpen, setFeedbackOpen] = useState(false);
+const [feedbackMessage, setFeedbackMessage] = useState("");
+const [feedbackEmail, setFeedbackEmail] = useState("");
+const [feedbackFiles, setFeedbackFiles] = useState([]);
+const [feedbackStatus, setFeedbackStatus] = useState("");
+const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+const feedbackFormRef = useRef(null);
+const feedbackFileRef = useRef(null);
+const feedbackClientRef = useRef(null);
+const feedbackPageRef = useRef(null);
+const feedbackLanguageRef = useRef(null);
+const feedbackTimeRef = useRef(null);
+const feedbackBrowserRef = useRef(null);
+const feedbackIframePendingRef = useRef(false);
+const feedbackPreviewItems = React.useMemo(() => {
+  const canCreatePreview =
+    typeof URL !== "undefined" && typeof URL.createObjectURL === "function";
+
+  return feedbackFiles.map((file, index) => ({
+    file,
+    index,
+    url: canCreatePreview ? URL.createObjectURL(file) : "",
+  }));
+}, [feedbackFiles]);
+
+useEffect(() => {
+  return () => {
+    feedbackPreviewItems.forEach((item) => {
+      if (item.url) URL.revokeObjectURL(item.url);
+    });
+  };
+}, [feedbackPreviewItems]);
 
 const updateLanguageMenuPosition = useCallback(() => {
   if (typeof window === "undefined") return;
@@ -508,6 +646,133 @@ const handleLanguageChange = useCallback((nextLanguage) => {
   }
   setLanguageMenuOpen(false);
 }, []);
+
+const openFeedbackModal = useCallback(() => {
+  setFeedbackStatus("");
+  setFeedbackOpen(true);
+}, []);
+
+const closeFeedbackModal = useCallback(() => {
+  if (feedbackSubmitting) return;
+  setFeedbackOpen(false);
+}, [feedbackSubmitting]);
+
+const syncFeedbackFiles = useCallback((files, { writeInput = true } = {}) => {
+  const nextFiles = files.filter((file) => file?.type?.startsWith("image/"));
+
+  if (writeInput && !withFeedbackFileInputFiles(feedbackFileRef.current, nextFiles)) {
+    setFeedbackStatus("目前瀏覽器無法同步剪貼簿圖片，請改用選擇圖片。");
+    return false;
+  }
+
+  setFeedbackFiles(nextFiles);
+  return true;
+}, []);
+
+const handleFeedbackFileChange = useCallback((event) => {
+  const selectedFiles = Array.from(event.target.files || []);
+  const imageFiles = selectedFiles.filter((file) => file?.type?.startsWith("image/"));
+
+  if (imageFiles.length !== selectedFiles.length) {
+    setFeedbackStatus("附件只能選擇圖片檔。");
+    if (imageFiles.length === 0 || !withFeedbackFileInputFiles(event.target, imageFiles)) {
+      event.target.value = "";
+      setFeedbackFiles([]);
+      return;
+    }
+    setFeedbackFiles(imageFiles);
+    return;
+  }
+
+  syncFeedbackFiles(imageFiles, { writeInput: false });
+}, [syncFeedbackFiles]);
+
+const handleFeedbackPaste = useCallback((event) => {
+  const pastedImages = Array.from(event.clipboardData?.items || [])
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item, index) => {
+      const file = item.getAsFile();
+      if (!file) return null;
+      return new File([file], makeClipboardImageName(file.type, index), { type: file.type });
+    })
+    .filter(Boolean);
+
+  if (!pastedImages.length) return;
+
+  event.preventDefault();
+  const mergedFiles = [...feedbackFiles, ...pastedImages];
+  const totalFileSize = mergedFiles.reduce((sum, file) => sum + file.size, 0);
+
+  if (totalFileSize > FEEDBACK_MAX_UPLOAD_BYTES) {
+    setFeedbackStatus("圖片總大小不能超過 20MB。");
+    return;
+  }
+
+  if (syncFeedbackFiles(mergedFiles)) {
+    setFeedbackStatus(`已加入 ${pastedImages.length} 張貼上的圖片。`);
+  }
+}, [feedbackFiles, syncFeedbackFiles]);
+
+const removeFeedbackFile = useCallback((removeIndex) => {
+  syncFeedbackFiles(feedbackFiles.filter((_, index) => index !== removeIndex));
+}, [feedbackFiles, syncFeedbackFiles]);
+
+const handleFeedbackIframeLoad = useCallback(() => {
+  if (!feedbackIframePendingRef.current) return;
+
+  feedbackIframePendingRef.current = false;
+  setFeedbackSubmitting(false);
+  setFeedbackStatus("已送出。");
+  setFeedbackMessage("");
+  setFeedbackEmail("");
+  setFeedbackFiles([]);
+  if (feedbackFileRef.current) {
+    feedbackFileRef.current.value = "";
+  }
+}, []);
+
+const handleFeedbackSubmit = useCallback(async (event) => {
+  event.preventDefault();
+
+  if (!feedbackFormRef.current) {
+    setFeedbackStatus("表單尚未準備完成，請稍後再試。");
+    return;
+  }
+
+  const message = feedbackMessage.trim();
+  const totalFileSize = feedbackFiles.reduce((sum, file) => sum + file.size, 0);
+
+  if (!message && feedbackFiles.length === 0) {
+    setFeedbackStatus("請先輸入文字或選擇圖片。");
+    return;
+  }
+
+  if (totalFileSize > FEEDBACK_MAX_UPLOAD_BYTES) {
+    setFeedbackStatus("圖片總大小不能超過 20MB。");
+    return;
+  }
+
+  if (feedbackFiles.some((file) => !file.type.startsWith("image/"))) {
+    setFeedbackStatus("附件只能選擇圖片檔。");
+    return;
+  }
+
+  setFeedbackSubmitting(true);
+  setFeedbackStatus("正在取得使用者 IP 與地區...");
+
+  const clientLine = await getFeedbackClientLine();
+  const now = new Date().toLocaleString("zh-TW", { hour12: false });
+
+  if (feedbackClientRef.current) feedbackClientRef.current.value = clientLine;
+  if (feedbackPageRef.current) feedbackPageRef.current.value = window.location.href;
+  if (feedbackLanguageRef.current) feedbackLanguageRef.current.value = language;
+  if (feedbackTimeRef.current) feedbackTimeRef.current.value = now;
+  if (feedbackBrowserRef.current) feedbackBrowserRef.current.value = navigator.userAgent;
+
+  setFeedbackStatus("正在送出...");
+  feedbackIframePendingRef.current = true;
+  window.HTMLFormElement.prototype.submit.call(feedbackFormRef.current);
+}, [feedbackFiles, feedbackMessage, language]);
 
 const ghostIdRef = useRef(0);
 
@@ -15553,30 +15818,227 @@ const visualImg = Object.values(ORB_TYPES).find(
           </div>
         )}
 
-        <div className="solver-help-panel flex items-start gap-2 p-3 bg-indigo-500/5 rounded-2xl border border-indigo-500/20 text-xs text-neutral-400 leading-relaxed shadow-inner">
-          <Wrench size={18} className="text-indigo-500 shrink-0 mt-1" />
-          <div>
-            <strong className="text-indigo-400 block mb-1 text-base">
+        <div className="solver-help-panel flex items-start gap-3 p-3 bg-indigo-500/5 rounded-2xl border border-indigo-500/20 text-xs text-neutral-400 leading-relaxed shadow-inner">
+          <div className="solver-help-icon mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-indigo-400/20 bg-indigo-400/10">
+            <Wrench size={18} className="text-indigo-300" />
+          </div>
+          <div className="solver-help-content min-w-0 flex-1">
+            <strong className="solver-help-title text-indigo-300 block mb-1 text-sm font-black">
               使用說明
             </strong>
-            <strong className="block text-xs">
+            <strong className="solver-help-copy block text-xs font-semibold text-neutral-300">
               自動模式會依設定搜尋路徑，並在限制內盡量最佳化。
               結果會顯示首消/天降 Combo 與步數，便於比較。
               可切換 Combo 優先或步數優先。
             </strong>
 
-            <a
-              href="https://forum.gamer.com.tw/C.php?bsn=23805&snA=729214"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block mt-3 text-indigo-400 neon-link font-semibold tracking-wide text-base"
-            >
-              前往巴哈討論
-            </a>
+            <div className="solver-help-actions mt-3 flex flex-wrap items-center gap-2">
+              <a
+                href="https://forum.gamer.com.tw/C.php?bsn=23805&snA=729214"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="solver-help-action inline-flex h-9 items-center gap-1.5 rounded-lg border border-indigo-400/25 bg-indigo-400/10 px-3 text-sm font-black text-indigo-100 transition hover:border-indigo-300/50 hover:bg-indigo-400/15"
+              >
+                <MoveUpRight size={15} className="text-indigo-300" />
+                前往巴哈討論
+              </a>
+              <button
+                type="button"
+                onClick={openFeedbackModal}
+                className="solver-help-action inline-flex h-9 items-center gap-1.5 rounded-lg border border-indigo-400/25 bg-indigo-400/10 px-3 text-sm font-black text-indigo-100 transition hover:border-indigo-300/50 hover:bg-indigo-400/15"
+              >
+                <MessageSquare size={15} className="text-indigo-300" />
+                意見回饋
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </div>
+
+    {feedbackOpen &&
+      typeof document !== "undefined" &&
+      createPortal(
+        <div className="fixed inset-0 z-[2147483600] flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-white/10 bg-neutral-950 text-white shadow-2xl shadow-black/60">
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <MessageSquare size={20} className="text-cyan-300" />
+                <h2 className="text-lg font-black">意見回饋</h2>
+              </div>
+              <button
+                type="button"
+                onClick={closeFeedbackModal}
+                disabled={feedbackSubmitting}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-neutral-300 transition hover:bg-white/10 disabled:opacity-40"
+                aria-label="關閉"
+                title="關閉"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              ref={feedbackFormRef}
+              action={FEEDBACK_ENDPOINT}
+              method="POST"
+              encType="multipart/form-data"
+              target={FEEDBACK_IFRAME_NAME}
+              onSubmit={handleFeedbackSubmit}
+              className="space-y-4 px-5 py-5"
+            >
+              <input type="hidden" name="_subject" value="AutoCombo 意見回饋" />
+              <input type="hidden" name="_template" value="table" />
+              <input type="hidden" name="_captcha" value="false" />
+              <input type="text" name="_honey" className="hidden" tabIndex={-1} autoComplete="off" />
+              <input ref={feedbackClientRef} type="hidden" name="使用者 IP / 地區" />
+              <input ref={feedbackPageRef} type="hidden" name="頁面網址" />
+              <input ref={feedbackLanguageRef} type="hidden" name="目前語言" />
+              <input ref={feedbackTimeRef} type="hidden" name="送出時間" />
+              <input ref={feedbackBrowserRef} type="hidden" name="瀏覽器" />
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-black text-neutral-200">回覆信箱（可不填）</span>
+                <input
+                  type="email"
+                  name="email"
+                  value={feedbackEmail}
+                  onChange={(event) => setFeedbackEmail(event.target.value)}
+                  placeholder="example@email.com"
+                  className="w-full rounded-xl border border-white/10 bg-neutral-900 px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-neutral-600 focus:border-cyan-300/70"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-black text-neutral-200">回饋內容</span>
+                <textarea
+                  name="意見內容"
+                  value={feedbackMessage}
+                  onChange={(event) => setFeedbackMessage(event.target.value)}
+                  onPaste={handleFeedbackPaste}
+                  rows={6}
+                  placeholder="可以描述遇到的問題、期望功能，或直接貼上截圖。"
+                  className="min-h-36 w-full resize-y rounded-xl border border-white/10 bg-neutral-900 px-3 py-2.5 text-sm leading-relaxed text-white outline-none transition placeholder:text-neutral-600 focus:border-cyan-300/70"
+                />
+              </label>
+
+              <div className="block rounded-xl border border-dashed border-white/15 bg-white/[0.03] px-3 py-3">
+                <span className="mb-2 flex items-center gap-2 text-sm font-black text-neutral-200">
+                  <ImagePlus size={16} className="text-cyan-300" />
+                  圖片附件（可選檔或貼上，總大小 20MB 內）
+                </span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    ref={feedbackFileRef}
+                    type="file"
+                    name="attachment"
+                    accept="image/*"
+                    multiple
+                    onChange={handleFeedbackFileChange}
+                    className="sr-only"
+                    tabIndex={-1}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => feedbackFileRef.current?.click()}
+                    disabled={feedbackSubmitting}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg bg-cyan-400 px-3 text-sm font-black text-neutral-950 transition hover:bg-cyan-300 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    <ImagePlus size={16} />
+                    選擇圖片
+                  </button>
+                  <span className="text-xs font-bold text-neutral-400">
+                    {feedbackFiles.length > 0
+                      ? `已選擇 ${feedbackFiles.length} 張圖片`
+                      : "尚未選擇圖片"}
+                  </span>
+                </div>
+                {feedbackPreviewItems.length > 0 && (
+                  <div className="mt-3">
+                    <div className="mb-2 text-xs font-black text-neutral-300">
+                      圖片預覽
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {feedbackPreviewItems.map(({ file, index, url }) => (
+                        <div
+                          key={`${file.name}-${file.size}-${index}`}
+                          className="rounded-lg border border-white/10 bg-neutral-900/80 p-2 text-xs text-neutral-200"
+                        >
+                          <div className="aspect-video overflow-hidden rounded-md border border-white/10 bg-black/30">
+                            {url ? (
+                              <img
+                                src={url}
+                                alt={file.name || "圖片預覽"}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full items-center justify-center text-cyan-300">
+                                <ImagePlus size={22} />
+                              </div>
+                            )}
+                          </div>
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="truncate font-bold" title={file.name}>
+                                {file.name}
+                              </div>
+                              <div className="mt-0.5 text-neutral-500">
+                                {bytesToReadableSize(file.size)}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeFeedbackFile(index)}
+                              className="shrink-0 rounded-md border border-white/10 px-2 py-1 font-black text-neutral-300 transition hover:bg-white/10"
+                              aria-label="移除"
+                              title="移除"
+                            >
+                              移除
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {feedbackStatus && (
+                <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-bold text-cyan-100">
+                  {feedbackStatus}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={closeFeedbackModal}
+                  disabled={feedbackSubmitting}
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-neutral-200 transition hover:bg-white/10 disabled:opacity-40"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  disabled={feedbackSubmitting}
+                  className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-4 py-2 text-sm font-black text-neutral-950 transition hover:bg-cyan-300 disabled:cursor-wait disabled:opacity-60"
+                >
+                  <Send size={16} />
+                  {feedbackSubmitting ? "傳送中..." : "傳送"}
+                </button>
+              </div>
+            </form>
+
+            <iframe
+              title="feedback submit"
+              name={FEEDBACK_IFRAME_NAME}
+              className="hidden"
+              onLoad={handleFeedbackIframeLoad}
+            />
+          </div>
+        </div>,
+        document.body
+      )}
 
     {solutionPreview && createPortal(
       <div
