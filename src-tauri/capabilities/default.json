@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Allow ComboAuto windows to exchange route data and control the transparent overlay window.",
+  "windows": ["main", "auto-turn-grid"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:event:allow-emit-to",
+    "core:event:allow-listen",
+    "core:window:default",
+    "core:window:allow-get-all-windows",
+    "core:window:allow-inner-position",
+    "core:window:allow-scale-factor",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-ignore-cursor-events",
+    "core:window:allow-show",
+    "core:webview:default",
+    "core:webview:allow-create-webview-window"
+  ]
+}

@@ -15,6 +15,12 @@ import pImg from './assets/p.png';
 import lImg from './assets/l.png';
 import dImg from './assets/d.png';
 import hImg from './assets/h.png';
+import padWImg from './assets/pad_w.png';
+import padFImg from './assets/pad_f.png';
+import padPImg from './assets/pad_p.png';
+import padLImg from './assets/pad_l.png';
+import padDImg from './assets/pad_d.png';
+import padHImg from './assets/pad_h.png';
 import x1Img from './assets/x1.png';
 import x2Img from './assets/x2.png';
 import n1Img from './assets/n1.png';
@@ -47,6 +53,14 @@ const ORB_TYPES = {
 const ORB_IDS = [0, 1, 2, 3, 4, 5];
 const ORB_LABELS = ["W", "F", "P", "L", "D", "H"];
 const ORB_ICON_IMGS = [wImg, fImg, pImg, lImg, dImg, hImg];
+const RECOGNITION_ORB_TEMPLATES = [
+  { id: ORB_TYPES.WATER.id, img: padWImg, key: "pad_water" },
+  { id: ORB_TYPES.FIRE.id, img: padFImg, key: "pad_fire" },
+  { id: ORB_TYPES.EARTH.id, img: padPImg, key: "pad_earth" },
+  { id: ORB_TYPES.LIGHT.id, img: padLImg, key: "pad_light" },
+  { id: ORB_TYPES.DARK.id, img: padDImg, key: "pad_dark" },
+  { id: ORB_TYPES.HEART.id, img: padHImg, key: "pad_heart" },
+];
 const RULE_CLEAR_MODE_LINE = "line";
 const RULE_CLEAR_MODE_CONNECTED = "connected";
 const RULE_CLEAR_MODES = [
@@ -1114,7 +1128,7 @@ const updateParam = (key, val) =>
 
 	  const prepare = async () => {
 		// 1) ?箸???type 撱箔???Image ?拐辣
-		const types = Object.values(ORB_TYPES);
+		const types = [...Object.values(ORB_TYPES), ...RECOGNITION_ORB_TEMPLATES];
 		for (const t of types) {
 		  if (!t.imgEl) {
 			const im = new Image();
@@ -1126,7 +1140,7 @@ const updateParam = (key, val) =>
 
 		// 2) 撱箸芋??DB
 		await Promise.all(types.map(t => ensureImageLoaded(t.imgEl)));
-		const built = await buildTemplateDB(ORB_TYPES);
+		const built = await buildTemplateDB(types);
 
 		if (!cancelled) {
 		  templateCacheRef.current = { ...built, ready: true };
@@ -12445,8 +12459,10 @@ const isProbablyEmptyCell = (imgData) => {
 	  // 雿?Ｚ??舫虜??銝???嚗???蝛箸嚗?
 	  return (mean < 35 && varY < 120);
 	};
-const buildTemplateDB = async (ORB_TYPES) => {
-	  const types = Object.values(ORB_TYPES);
+const buildTemplateDB = async (templateSources) => {
+	  const types = Array.isArray(templateSources)
+		? templateSources
+		: Object.values(templateSources);
 
 	  // 蝣箔?璅⊥?頛
 	  await Promise.all(types.map(t => ensureImageLoaded(t.imgEl || null)));
@@ -12464,7 +12480,7 @@ const buildTemplateDB = async (ORB_TYPES) => {
 		ctx.drawImage(t.imgEl, 0, 0, SIZE, SIZE);
 		const imgData = ctx.getImageData(0, 0, SIZE, SIZE);
 		const feat = featureFromImageData(imgData);
-		db.push({ id: t.id, feat });
+		db.push({ id: t.id, feat, key: t.key || `orb-${t.id}` });
 	  }
 	  return { db, size: SIZE };
 	};
