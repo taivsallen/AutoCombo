@@ -1,0 +1,119 @@
+{
+  "schema_version": 2,
+  "schema": "comboauto.teacher.policy-value-target.v1",
+  "generated_at": "2026-08-09T15:57:03.159Z",
+  "elapsed_sec": 0.115,
+  "config": {
+    "outputDir": "teacher_data_policy_compat_smoke",
+    "prefix": "compat",
+    "baseSeed": 12345,
+    "boards": 1,
+    "statesPerBoard": 2,
+    "rolloutSteps": 14,
+    "stepsLeftMin": 4,
+    "stepsLeftMax": 18,
+    "beamWidth": 80,
+    "maxNodes": 8000,
+    "scenarios": [
+      {
+        "id": "legacy-cli-scenario",
+        "target": 8,
+        "mode": "combo",
+        "priority": "combo",
+        "skyfall": false,
+        "diagonal": true,
+        "ruleProfile": {
+          "orbRules": [
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            }
+          ],
+          "requirements": []
+        },
+        "specials": []
+      }
+    ],
+    "policyTemperature": 250000,
+    "progressEvery": 1
+  },
+  "scenarios": [
+    {
+      "id": "legacy-cli-scenario",
+      "target": 8,
+      "mode": "combo",
+      "priority": "combo",
+      "skyfall": false,
+      "diagonal": true,
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    }
+  ],
+  "counts": {
+    "train": 2,
+    "valid": 0,
+    "test": 0,
+    "totalStates": 2,
+    "totalLabelExpansions": 8683,
+    "byScenario": {
+      "legacy-cli-scenario": {
+        "boards": 1,
+        "states": 2,
+        "solved": 0
+      }
+    }
+  },
+  "files": {
+    "train": "teacher_data_policy_compat_smoke\\compat.train.jsonl",
+    "valid": "teacher_data_policy_compat_smoke\\compat.valid.jsonl",
+    "test": "teacher_data_policy_compat_smoke\\compat.test.jsonl"
+  }
+}

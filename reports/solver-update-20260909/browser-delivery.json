@@ -1,0 +1,120 @@
+{
+  "recordedAt": {
+    "current_time": "2026-09-09 10:32:49 UTC"
+  },
+  "sourceSha256": "cf02dfa0e8701bfb5083c052e6bf1244272fee73845e4fb4ec523e3edd70c7ca",
+  "bundle": "dist/assets/index-xHgFhQjn.js",
+  "environment": {
+    "cpu": "Intel Core i5-9300H",
+    "browser": "Codex in-app browser; exact engine version not captured",
+    "url": "http://127.0.0.1:4173/AutoCombo/?deliveryValidation=final",
+    "build": "npm run build + npm run preview",
+    "visibleTab": true
+  },
+  "method": "Real button clicks using browser automation; timings read from rendered DOM data-solver-runtime-ms / delivered-ms / ready-ms. One fresh-page solve then six random-board solves. No other benchmark ran concurrently.",
+  "timingDefinitions": {
+    "core": "beamSolve entry to result",
+    "delivered": "solve click handler entry to caller result",
+    "ready": "solve click handler entry to useLayoutEffect after result DOM commit"
+  },
+  "metrics": {
+    "core": {
+      "n": 7,
+      "min": 118.60000002384186,
+      "p50": 123.60000002384186,
+      "max": 135.19999998807907,
+      "over160": 0
+    },
+    "delivered": {
+      "n": 7,
+      "min": 130.9000000357628,
+      "p50": 136.30000001192093,
+      "max": 150.29999995231628,
+      "over160": 0
+    },
+    "ready": {
+      "n": 7,
+      "min": 135.70000004768372,
+      "p50": 140.5,
+      "max": 156.29999995231628,
+      "over160": 0
+    }
+  },
+  "rows": [
+    {
+      "sample": "first",
+      "diagonal": true,
+      "skyfall": true,
+      "core": 135.19999998807907,
+      "delivered": 150.29999995231628,
+      "ready": 156.29999995231628
+    },
+    {
+      "sample": "warm-1",
+      "diagonal": true,
+      "skyfall": true,
+      "core": 118.60000002384186,
+      "delivered": 130.9000000357628,
+      "ready": 135.70000004768372
+    },
+    {
+      "sample": "warm-2",
+      "diagonal": true,
+      "skyfall": true,
+      "core": 123.60000002384186,
+      "delivered": 136.30000001192093,
+      "ready": 141.9000000357628
+    },
+    {
+      "sample": "no-diagonal-1",
+      "diagonal": false,
+      "skyfall": true,
+      "core": 134.80000001192093,
+      "delivered": 147.5,
+      "ready": 152.30000001192093
+    },
+    {
+      "sample": "no-diagonal-2",
+      "diagonal": false,
+      "skyfall": true,
+      "core": 124.09999996423721,
+      "delivered": 136.5999999642372,
+      "ready": 140.5
+    },
+    {
+      "sample": "no-skyfall-1",
+      "diagonal": false,
+      "skyfall": false,
+      "core": 119,
+      "delivered": 131.19999998807907,
+      "ready": 136.5999999642372
+    },
+    {
+      "sample": "no-skyfall-2",
+      "diagonal": false,
+      "skyfall": false,
+      "core": 123.39999997615814,
+      "delivered": 136.19999998807907,
+      "ready": 139.39999997615814
+    }
+  ],
+  "cache": {
+    "core": 0,
+    "delivered": 0.30000001192092896,
+    "ready": 3.199999988079071
+  },
+  "functionalChecks": [
+    "Diagonal on/off works as a binary toggle.",
+    "Skyfall on/off; no-skyfall results display N+0.",
+    "Top10 slots show distinct found signatures; missing groups are not fabricated.",
+    "Partial result status remains explicit.",
+    "Selecting #3 3+0 / 2 steps updates stats; playback shows total 3 combos / 9 orbs / 2 steps.",
+    "Repeated identical request uses cache with distinct zero-core timing."
+  ],
+  "limitations": [
+    "Seven samples are a smoke test, not a p99 service guarantee.",
+    "Random UI boards were not saved; exact UI workload replay is unavailable. Seeded core and oracle reports are separately reproducible.",
+    "DOM commit is not proof of physical screen paint.",
+    "No previous-version browser UI comparison; no cross-device claim."
+  ]
+}

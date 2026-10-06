@@ -1,0 +1,63 @@
+{
+  "generatedAt": "2026-08-10",
+  "scope": "web-dev-only",
+  "candidateModel": "public/policy_value_target_expanded_stratified_balanced.onnx",
+  "sourceCorpus": {
+    "file": "teacher_data_policy_expanded_stratified/expanded_stratified.test.jsonl",
+    "totalRows": 960,
+    "uniqueBoards": 869,
+    "sampledBoards": 12,
+    "sampling": "evenly-spaced-v1"
+  },
+  "protocol": {
+    "warmupCasesPerVariant": 1,
+    "repetitions": 3,
+    "interleaved": [
+      "baseline",
+      "candidate_w160",
+      "candidate_w80",
+      "candidate_w40"
+    ],
+    "beamWidth": 120,
+    "maxNodes": 8000,
+    "searchSeed": 20260613,
+    "gatePassed": true
+  },
+  "summaries": {
+    "baseline": {
+      "avgMs": 246.71388885709973,
+      "p95Ms": 510,
+      "successRate": 0.3888888888888889,
+      "requirementRate": 0.75,
+      "avgNodes": 4787.527777777777
+    },
+    "candidate_w160": {
+      "avgMs": 236.37685193838897,
+      "p95Ms": 492.4000005722046,
+      "successRate": 0.4722222222222222,
+      "requirementRate": 0.75,
+      "avgNodes": 4724.972222222223
+    },
+    "candidate_w80": {
+      "avgMs": 241.50833333863153,
+      "p95Ms": 499.69999980926514,
+      "successRate": 0.4444444444444444,
+      "requirementRate": 0.75,
+      "avgNodes": 4944.944444444444
+    },
+    "candidate_w40": {
+      "avgMs": 251.03703705469766,
+      "p95Ms": 486.80000019073486,
+      "successRate": 0.3888888888888889,
+      "requirementRate": 0.75,
+      "avgNodes": 5154.166666666667
+    }
+  },
+  "interpretation": {
+    "candidate_w160SuccessDelta": 0.08333333333333331,
+    "candidate_w80SuccessDelta": 0.05555555555555558,
+    "requirementNonRegression": true,
+    "defaultChanged": false,
+    "limitation": "This is a held-out synthetic training corpus, not captured production traffic."
+  }
+}

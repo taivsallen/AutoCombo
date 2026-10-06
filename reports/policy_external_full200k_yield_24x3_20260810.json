@@ -1,0 +1,61 @@
+{
+  "generatedAt": "2026-08-10",
+  "scope": "web-dev-only",
+  "candidateModel": "public/policy_value_target_expanded_stratified_balanced.onnx",
+  "protocol": {
+    "boardSet": "external",
+    "sourceFile": "solver-bench/full200k_test_initial.jsonl",
+    "sourceBoards": 1559,
+    "sourceRows": 1559,
+    "sampledBoards": 24,
+    "sampling": "evenly-spaced-v1",
+    "runs": 3,
+    "runSemantics": "same-page repeated runs",
+    "independentSessionNote": "reload the page for independent runtime sessions",
+    "repetitionsPerRun": 3,
+    "beamWidth": 120,
+    "maxNodes": 8000,
+    "searchSeed": 20260613,
+    "browserYield": true
+  },
+  "runSummaries": [
+    {
+      "run": 1,
+      "baseline": { "avgMs": 165.54166662693024, "p95Ms": 368.1000003814697, "successRate": 0.16666666666666666, "requirementRate": 0.4583333333333333 },
+      "candidate_w160": { "avgMs": 163.63657406524376, "p95Ms": 349.3999996185303, "successRate": 0.1111111111111111, "requirementRate": 0.4583333333333333 },
+      "candidate_w80": { "avgMs": 162.6365740608286, "p95Ms": 337.19999980926514, "successRate": 0.19444444444444445, "requirementRate": 0.4583333333333333 },
+      "candidate_w40": { "avgMs": 161.5467592963466, "p95Ms": 327.80000019073486, "successRate": 0.2222222222222222, "requirementRate": 0.4583333333333333 }
+    },
+    {
+      "run": 2,
+      "baseline": { "avgMs": 167.05648146735297, "p95Ms": 354.79999923706055, "successRate": 0.16666666666666666, "requirementRate": 0.4583333333333333 },
+      "candidate_w160": { "avgMs": 162.8046296349278, "p95Ms": 340, "successRate": 0.1111111111111111, "requirementRate": 0.4583333333333333 },
+      "candidate_w80": { "avgMs": 165.4453703209206, "p95Ms": 346, "successRate": 0.19444444444444445, "requirementRate": 0.4583333333333333 },
+      "candidate_w40": { "avgMs": 167.44398152828217, "p95Ms": 343, "successRate": 0.2222222222222222, "requirementRate": 0.4583333333333333 }
+    },
+    {
+      "run": 3,
+      "baseline": { "avgMs": 167.6254629470684, "p95Ms": 359.20000076293945, "successRate": 0.16666666666666666, "requirementRate": 0.4583333333333333 },
+      "candidate_w160": { "avgMs": 164.9259259524169, "p95Ms": 339.4000005722046, "successRate": 0.1111111111111111, "requirementRate": 0.4583333333333333 },
+      "candidate_w80": { "avgMs": 164.0245370335049, "p95Ms": 328.30000019073486, "successRate": 0.19444444444444445, "requirementRate": 0.4583333333333333 },
+      "candidate_w40": { "avgMs": 165.6180555290646, "p95Ms": 340.80000019073486, "successRate": 0.2222222222222222, "requirementRate": 0.4583333333333333 }
+    }
+  ],
+  "aggregate": {
+    "baseline": { "cases": 648, "avgMs": 166.74120368045052, "p95Ms": 361.8999996185303, "successRate": 0.16666666666666666, "requirementRate": 0.4583333333333333 },
+    "candidate_w160": { "cases": 648, "avgMs": 163.7890432175295, "p95Ms": 343.6000003814697, "successRate": 0.1111111111111111, "requirementRate": 0.4583333333333333 },
+    "candidate_w80": { "cases": 648, "avgMs": 164.0354938050847, "p95Ms": 337.3999996185303, "successRate": 0.19444444444444445, "requirementRate": 0.4583333333333333 },
+    "candidate_w40": { "cases": 648, "avgMs": 164.86959878456446, "p95Ms": 334.69999980926514, "successRate": 0.2222222222222222, "requirementRate": 0.4583333333333333 }
+  },
+  "gate": {
+    "trackedVariant": "candidate_w160",
+    "pass": false,
+    "recommendedVariant": "candidate_w40",
+    "recommendationPolicy": "maximize successRate, then minimize p95Ms, then minimize learnedPolicyWeight",
+    "passingVariants": ["candidate_w80", "candidate_w40"],
+    "candidate_w160": { "successNonRegression": false, "requirementNonRegression": true, "p95WithinTenPercent": true, "pass": false },
+    "candidate_w80": { "successNonRegression": true, "requirementNonRegression": true, "p95WithinTenPercent": true, "pass": true },
+    "candidate_w40": { "successNonRegression": true, "requirementNonRegression": true, "p95WithinTenPercent": true, "pass": true }
+  },
+  "defaultChanged": false
+}

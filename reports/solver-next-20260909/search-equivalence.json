@@ -1,0 +1,168 @@
+{
+  "status": "PASS",
+  "scope": "Same 1200-node / 6-step offline search; no timed refinement",
+  "sourceMetadata": {
+    "baseline": {
+      "path": "reports/solver-next-20260909/baseline/App.jsx",
+      "sourceReadAt": "2026-09-09T12:37:08.028Z",
+      "sha256": "cf02dfa0e8701bfb5083c052e6bf1244272fee73845e4fb4ec523e3edd70c7ca"
+    },
+    "candidate": {
+      "path": "src/App.jsx",
+      "sourceReadAt": "2026-09-09T12:37:08.405Z",
+      "sha256": "9326b1bc2472004edefd81afad2d8bc03cdcd19477c521ffa026ac00fc9b85e2"
+    }
+  },
+  "rows": [
+    {
+      "id": "ordinary-1",
+      "equal": true,
+      "groups": 9
+    },
+    {
+      "id": "ordinary-2",
+      "equal": true,
+      "groups": 9
+    },
+    {
+      "id": "ordinary-3",
+      "equal": true,
+      "groups": 9
+    },
+    {
+      "id": "ordinary-4",
+      "equal": true,
+      "groups": 8
+    },
+    {
+      "id": "ordinary-5",
+      "equal": true,
+      "groups": 7
+    },
+    {
+      "id": "no_diagonal-1",
+      "equal": true,
+      "groups": 5
+    },
+    {
+      "id": "no_diagonal-2",
+      "equal": true,
+      "groups": 4
+    },
+    {
+      "id": "no_diagonal-3",
+      "equal": true,
+      "groups": 5
+    },
+    {
+      "id": "no_diagonal-4",
+      "equal": true,
+      "groups": 4
+    },
+    {
+      "id": "no_diagonal-5",
+      "equal": true,
+      "groups": 10
+    },
+    {
+      "id": "no_skyfall-1",
+      "equal": true,
+      "groups": 4
+    },
+    {
+      "id": "no_skyfall-2",
+      "equal": true,
+      "groups": 4
+    },
+    {
+      "id": "no_skyfall-3",
+      "equal": true,
+      "groups": 4
+    },
+    {
+      "id": "no_skyfall-4",
+      "equal": true,
+      "groups": 4
+    },
+    {
+      "id": "no_skyfall-5",
+      "equal": true,
+      "groups": 5
+    },
+    {
+      "id": "row0_start_markers-1",
+      "equal": true,
+      "groups": 5
+    },
+    {
+      "id": "row0_start_markers-2",
+      "equal": true,
+      "groups": 3
+    },
+    {
+      "id": "row0_start_markers-3",
+      "equal": true,
+      "groups": 5
+    },
+    {
+      "id": "row0_start_markers-4",
+      "equal": true,
+      "groups": 3
+    },
+    {
+      "id": "row0_start_markers-5",
+      "equal": true,
+      "groups": 4
+    },
+    {
+      "id": "ordered_requirement-1",
+      "equal": true,
+      "groups": 5
+    },
+    {
+      "id": "ordered_requirement-2",
+      "equal": true,
+      "groups": 8
+    },
+    {
+      "id": "ordered_requirement-3",
+      "equal": true,
+      "groups": 10
+    },
+    {
+      "id": "ordered_requirement-4",
+      "equal": true,
+      "groups": 6
+    },
+    {
+      "id": "ordered_requirement-5",
+      "equal": true,
+      "groups": 10
+    },
+    {
+      "id": "special_shape-1",
+      "equal": true,
+      "groups": 7
+    },
+    {
+      "id": "special_shape-2",
+      "equal": true,
+      "groups": 10
+    },
+    {
+      "id": "special_shape-3",
+      "equal": true,
+      "groups": 9
+    },
+    {
+      "id": "special_shape-4",
+      "equal": true,
+      "groups": 6
+    },
+    {
+      "id": "special_shape-5",
+      "equal": true,
+      "groups": 10
+    }
+  ]
+}

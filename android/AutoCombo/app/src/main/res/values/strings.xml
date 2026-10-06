@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">AutoCombo</string>
+    <string name="camera_permission">Capture a board image for local recognition.</string>
+    <string name="accessibility_service_description">執行 AutoCombo 選定的轉珠路徑</string>
+</resources>

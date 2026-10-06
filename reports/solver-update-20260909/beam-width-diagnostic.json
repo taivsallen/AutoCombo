@@ -1,0 +1,261 @@
+{
+  "note": "Development diagnostic on previously used boards; not holdout evidence",
+  "rows": [
+    {
+      "i": 0,
+      "width": 32,
+      "combo": 7,
+      "ms": 131.42219999999998,
+      "steps": 11,
+      "repair": 0
+    },
+    {
+      "i": 0,
+      "width": 64,
+      "combo": 7,
+      "ms": 131.4185,
+      "steps": 11,
+      "repair": 0
+    },
+    {
+      "i": 0,
+      "width": 120,
+      "combo": 6,
+      "ms": 130.14990000000012,
+      "steps": 6,
+      "repair": 2
+    },
+    {
+      "i": 0,
+      "width": 440,
+      "combo": 7,
+      "ms": 136.58310000000006,
+      "steps": 5,
+      "repair": 0
+    },
+    {
+      "i": 1,
+      "width": 64,
+      "combo": 7,
+      "ms": 132.62390000000005,
+      "steps": 18,
+      "repair": 1
+    },
+    {
+      "i": 1,
+      "width": 120,
+      "combo": 6,
+      "ms": 130.13419999999996,
+      "steps": 9,
+      "repair": 1
+    },
+    {
+      "i": 1,
+      "width": 440,
+      "combo": 6,
+      "ms": 129.26859999999988,
+      "steps": 7,
+      "repair": 0
+    },
+    {
+      "i": 1,
+      "width": 32,
+      "combo": 7,
+      "ms": 124.76950000000011,
+      "steps": 18,
+      "repair": 1
+    },
+    {
+      "i": 2,
+      "width": 120,
+      "combo": 6,
+      "ms": 133.2130000000002,
+      "steps": 15,
+      "repair": 3
+    },
+    {
+      "i": 2,
+      "width": 440,
+      "combo": 5,
+      "ms": 128.51670000000013,
+      "steps": 7,
+      "repair": 0
+    },
+    {
+      "i": 2,
+      "width": 32,
+      "combo": 7,
+      "ms": 126.82799999999997,
+      "steps": 27,
+      "repair": 1
+    },
+    {
+      "i": 2,
+      "width": 64,
+      "combo": 7,
+      "ms": 133.51400000000012,
+      "steps": 22,
+      "repair": 0
+    },
+    {
+      "i": 3,
+      "width": 440,
+      "combo": 4,
+      "ms": 129.29529999999977,
+      "steps": 4,
+      "repair": 0
+    },
+    {
+      "i": 3,
+      "width": 32,
+      "combo": 5,
+      "ms": 138.04260000000022,
+      "steps": 20,
+      "repair": 2
+    },
+    {
+      "i": 3,
+      "width": 64,
+      "combo": 5,
+      "ms": 130.91330000000016,
+      "steps": 17,
+      "repair": 2
+    },
+    {
+      "i": 3,
+      "width": 120,
+      "combo": 6,
+      "ms": 135.0974000000001,
+      "steps": 15,
+      "repair": 0
+    },
+    {
+      "i": 4,
+      "width": 32,
+      "combo": 6,
+      "ms": 130.2118999999998,
+      "steps": 23,
+      "repair": 9
+    },
+    {
+      "i": 4,
+      "width": 64,
+      "combo": 5,
+      "ms": 130.96630000000005,
+      "steps": 14,
+      "repair": 7
+    },
+    {
+      "i": 4,
+      "width": 120,
+      "combo": 5,
+      "ms": 130.57910000000038,
+      "steps": 12,
+      "repair": 2
+    },
+    {
+      "i": 4,
+      "width": 440,
+      "combo": 6,
+      "ms": 130.70450000000028,
+      "steps": 6,
+      "repair": 0
+    },
+    {
+      "i": 5,
+      "width": 64,
+      "combo": 7,
+      "ms": 134.36439999999993,
+      "steps": 20,
+      "repair": 5
+    },
+    {
+      "i": 5,
+      "width": 120,
+      "combo": 7,
+      "ms": 131.50099999999975,
+      "steps": 15,
+      "repair": 1
+    },
+    {
+      "i": 5,
+      "width": 440,
+      "combo": 4,
+      "ms": 128.50639999999976,
+      "steps": 7,
+      "repair": 0
+    },
+    {
+      "i": 5,
+      "width": 32,
+      "combo": 6,
+      "ms": 134.89139999999998,
+      "steps": 17,
+      "repair": 4
+    },
+    {
+      "i": 6,
+      "width": 120,
+      "combo": 5,
+      "ms": 130.2483000000002,
+      "steps": 14,
+      "repair": 2
+    },
+    {
+      "i": 6,
+      "width": 440,
+      "combo": 5,
+      "ms": 128.48949999999968,
+      "steps": 7,
+      "repair": 0
+    },
+    {
+      "i": 6,
+      "width": 32,
+      "combo": 6,
+      "ms": 130.92239999999947,
+      "steps": 22,
+      "repair": 5
+    },
+    {
+      "i": 6,
+      "width": 64,
+      "combo": 6,
+      "ms": 133.2455,
+      "steps": 20,
+      "repair": 0
+    },
+    {
+      "i": 7,
+      "width": 440,
+      "combo": 5,
+      "ms": 131.8681999999999,
+      "steps": 6,
+      "repair": 0
+    },
+    {
+      "i": 7,
+      "width": 32,
+      "combo": 7,
+      "ms": 127.51299999999992,
+      "steps": 23,
+      "repair": 5
+    },
+    {
+      "i": 7,
+      "width": 64,
+      "combo": 7,
+      "ms": 133.52280000000064,
+      "steps": 22,
+      "repair": 3
+    },
+    {
+      "i": 7,
+      "width": 120,
+      "combo": 7,
+      "ms": 130.78999999999996,
+      "steps": 17,
+      "repair": 1
+    }
+  ]
+}

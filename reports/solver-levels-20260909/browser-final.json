@@ -1,0 +1,179 @@
+{
+  "recordedAt": "2026-09-09T13:14:35.301887+00:00",
+  "sourceSha256": "341c0cabce7c8bad06dfac40fc6ae7b7b89ae9f43cbc43e008393ce59b3f8daa",
+  "bundle": "dist/assets/index-C_nGN09l.js",
+  "environment": {
+    "cpu": "Intel Core i5-9300H",
+    "browser": "Codex in-app browser; engine version not captured",
+    "production": true,
+    "url": "http://127.0.0.1:4173/AutoCombo/?levels=final"
+  },
+  "method": "Real sequential UI clicks on two boards, Lv1 through Lv5 per board; no concurrent benchmark/build. Read rendered result DOM dataset. Values rounded to 0.1ms.",
+  "definitions": {
+    "coreMs": "beamSolve entry to result",
+    "deliveredMs": "request to result received",
+    "readyMs": "request to result DOM committed in useLayoutEffect"
+  },
+  "settings": {
+    "diagonal": true,
+    "skyfall": true,
+    "row0": true,
+    "priority": "steps",
+    "maxSteps": 80,
+    "initialTarget": "UI board upper bound"
+  },
+  "rows": [
+    {
+      "sample": "board-a-lv1",
+      "budgetMs": 160,
+      "effectiveBeam": 64,
+      "coreMs": 105.6,
+      "deliveredMs": 134.9,
+      "readyMs": 143.7
+    },
+    {
+      "sample": "board-a-lv2",
+      "budgetMs": 400,
+      "effectiveBeam": 64,
+      "coreMs": 367.3,
+      "deliveredMs": 380.0,
+      "readyMs": 383.4
+    },
+    {
+      "sample": "board-a-lv3",
+      "budgetMs": 800,
+      "effectiveBeam": 64,
+      "coreMs": 763.1,
+      "deliveredMs": 776.2,
+      "readyMs": 779.8
+    },
+    {
+      "sample": "board-a-lv4",
+      "budgetMs": 1600,
+      "effectiveBeam": 192,
+      "coreMs": 1556.4,
+      "deliveredMs": 1568.1,
+      "readyMs": 1572.9
+    },
+    {
+      "sample": "board-a-lv5",
+      "budgetMs": 3200,
+      "effectiveBeam": 192,
+      "coreMs": 3147.4,
+      "deliveredMs": 3160.2,
+      "readyMs": 3165.1
+    },
+    {
+      "sample": "board-b-lv1",
+      "budgetMs": 160,
+      "effectiveBeam": 64,
+      "coreMs": 130.4,
+      "deliveredMs": 142.2,
+      "readyMs": 150.4
+    },
+    {
+      "sample": "board-b-lv2",
+      "budgetMs": 400,
+      "effectiveBeam": 64,
+      "coreMs": 367.7,
+      "deliveredMs": 381.1,
+      "readyMs": 383.9
+    },
+    {
+      "sample": "board-b-lv3",
+      "budgetMs": 800,
+      "effectiveBeam": 64,
+      "coreMs": 763.6,
+      "deliveredMs": 779.0,
+      "readyMs": 783.4
+    },
+    {
+      "sample": "board-b-lv4",
+      "budgetMs": 1600,
+      "effectiveBeam": 192,
+      "coreMs": 1555.4,
+      "deliveredMs": 1568.1,
+      "readyMs": 1571.9
+    },
+    {
+      "sample": "board-b-lv5",
+      "budgetMs": 3200,
+      "effectiveBeam": 192,
+      "coreMs": 3147.1,
+      "deliveredMs": 3160.2,
+      "readyMs": 3162.6
+    }
+  ],
+  "byLevel": {
+    "Lv1": {
+      "budgetMs": 160,
+      "samples": 2,
+      "maxCoreMs": 130.4,
+      "minReadyMs": 143.7,
+      "maxReadyMs": 150.4,
+      "lateReady": 0
+    },
+    "Lv2": {
+      "budgetMs": 400,
+      "samples": 2,
+      "maxCoreMs": 367.7,
+      "minReadyMs": 383.4,
+      "maxReadyMs": 383.9,
+      "lateReady": 0
+    },
+    "Lv3": {
+      "budgetMs": 800,
+      "samples": 2,
+      "maxCoreMs": 763.6,
+      "minReadyMs": 779.8,
+      "maxReadyMs": 783.4,
+      "lateReady": 0
+    },
+    "Lv4": {
+      "budgetMs": 1600,
+      "samples": 2,
+      "maxCoreMs": 1556.4,
+      "minReadyMs": 1571.9,
+      "maxReadyMs": 1572.9,
+      "lateReady": 0
+    },
+    "Lv5": {
+      "budgetMs": 3200,
+      "samples": 2,
+      "maxCoreMs": 3147.4,
+      "minReadyMs": 3162.6,
+      "maxReadyMs": 3165.1,
+      "lateReady": 0
+    }
+  },
+  "cancellationRegression": {
+    "observedRunningLv5": true,
+    "changedTo": "Lv1",
+    "afterCancellation": {
+      "budgetMs": 160,
+      "runtimeAttribute": null,
+      "readyAttribute": null,
+      "solveDisabled": false,
+      "solveTitle": "盤面已變更，請重新求解"
+    },
+    "retry": {
+      "budgetMs": 160,
+      "effectiveBeam": 64,
+      "coreMs": 132.8,
+      "readyMs": 149.1
+    }
+  },
+  "verified": [
+    "Loaded bundle path read from document.scripts.",
+    "All five level labels and request budgets updated.",
+    "All ten measured DOM commits within their selected budget.",
+    "Switching level during an active Lv5 solve discarded the stale result and left retry enabled.",
+    "New Lv1 solve after cancellation completed normally."
+  ],
+  "limitations": [
+    "Two boards and ten runs are a smoke test, not tail-latency or cross-device guarantee.",
+    "Second random UI board was not saved; these are not controlled old/new-version A/B timings.",
+    "DOM commit is not physical screen paint.",
+    "Core CLI fixtures use different initial targets/mode settings from UI; do not directly compare their latencies."
+  ]
+}

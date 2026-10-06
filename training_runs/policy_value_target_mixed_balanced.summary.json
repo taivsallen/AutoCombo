@@ -1,0 +1,2199 @@
+{
+  "schema": "comboauto.teacher.policy-value-target.v1",
+  "input_dim": 397,
+  "checkpoint": "training_runs\\policy_value_target_mixed_balanced.pt",
+  "onnx": "public\\policy_value_target_mixed_balanced.onnx",
+  "sampling": {
+    "mode": "balanced",
+    "power": 1.0,
+    "weights_by_scenario": {
+      "combo-connected-diagonal": 0.0021929824561403508,
+      "combo-line-diagonal": 0.0021551724137931034,
+      "combo-line-orthogonal": 0.0021929824561403508,
+      "combo-line-skyfall-diagonal": 0.0021551724137931034,
+      "combo-line-skyfall-orthogonal": 0.0021929824561403508,
+      "combo-min-four-fire": 0.0021929824561403508,
+      "requirement-line-diagonal": 0.002232142857142857
+    }
+  },
+  "datasets": {
+    "train": {
+      "items": 3200,
+      "scenario_counts": {
+        "combo-connected-diagonal": 456,
+        "combo-line-diagonal": 464,
+        "combo-line-orthogonal": 456,
+        "combo-line-skyfall-diagonal": 464,
+        "combo-line-skyfall-orthogonal": 456,
+        "combo-min-four-fire": 456,
+        "requirement-line-diagonal": 448
+      }
+    },
+    "valid": {
+      "items": 400,
+      "scenario_counts": {
+        "combo-connected-diagonal": 56,
+        "combo-line-diagonal": 56,
+        "combo-line-orthogonal": 64,
+        "combo-line-skyfall-diagonal": 56,
+        "combo-line-skyfall-orthogonal": 56,
+        "combo-min-four-fire": 56,
+        "requirement-line-diagonal": 56
+      }
+    },
+    "test": {
+      "items": 400,
+      "scenario_counts": {
+        "combo-connected-diagonal": 56,
+        "combo-line-diagonal": 56,
+        "combo-line-orthogonal": 56,
+        "combo-line-skyfall-diagonal": 56,
+        "combo-line-skyfall-orthogonal": 56,
+        "combo-min-four-fire": 56,
+        "requirement-line-diagonal": 64
+      }
+    }
+  },
+  "valid": {
+    "loss": 2.642548084259033,
+    "policy_top1": 0.3725,
+    "policy_top3": 0.7325,
+    "value_mae": 0.09231978416442871,
+    "target_accuracy": 0.3358333333333333,
+    "by_scenario": {
+      "combo-connected-diagonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.35714285714285715,
+        "policy_top3": 0.625,
+        "value_mae": 0.09347972480048027,
+        "target_accuracy": 0.3238095238095238
+      },
+      "combo-line-diagonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.35714285714285715,
+        "policy_top3": 0.6428571428571429,
+        "value_mae": 0.08265752298757434,
+        "target_accuracy": 0.3416666666666667
+      },
+      "combo-line-orthogonal": {
+        "items": 64,
+        "active_items": 64,
+        "policy_top1": 0.359375,
+        "policy_top3": 0.9375,
+        "value_mae": 0.09803274902515113,
+        "target_accuracy": 0.30885416666666665
+      },
+      "combo-line-skyfall-diagonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.375,
+        "policy_top3": 0.6964285714285714,
+        "value_mae": 0.09758077668292182,
+        "target_accuracy": 0.3952380952380952
+      },
+      "combo-line-skyfall-orthogonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.44642857142857145,
+        "policy_top3": 0.8392857142857143,
+        "value_mae": 0.08906063517289502,
+        "target_accuracy": 0.30178571428571427
+      },
+      "combo-min-four-fire": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.4107142857142857,
+        "policy_top3": 0.6964285714285714,
+        "value_mae": 0.09948512060301644,
+        "target_accuracy": 0.3375
+      },
+      "requirement-line-diagonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.30357142857142855,
+        "policy_top3": 0.6607142857142857,
+        "value_mae": 0.0851257722824812,
+        "target_accuracy": 0.3458333333333333
+      }
+    }
+  },
+  "test": {
+    "loss": 2.649925947189331,
+    "policy_top1": 0.325,
+    "policy_top3": 0.6875,
+    "value_mae": 0.09266195297241211,
+    "target_accuracy": 0.35033333333333333,
+    "by_scenario": {
+      "combo-connected-diagonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.23214285714285715,
+        "policy_top3": 0.6428571428571429,
+        "value_mae": 0.08255014681656446,
+        "target_accuracy": 0.3482142857142857
+      },
+      "combo-line-diagonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.4107142857142857,
+        "policy_top3": 0.6785714285714286,
+        "value_mae": 0.08948190603405237,
+        "target_accuracy": 0.3607142857142857
+      },
+      "combo-line-orthogonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.5714285714285714,
+        "policy_top3": 0.9464285714285714,
+        "value_mae": 0.0896292000210711,
+        "target_accuracy": 0.35535714285714287
+      },
+      "combo-line-skyfall-diagonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.30357142857142855,
+        "policy_top3": 0.6964285714285714,
+        "value_mae": 0.1036949107822563,
+        "target_accuracy": 0.32083333333333336
+      },
+      "combo-line-skyfall-orthogonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.4107142857142857,
+        "policy_top3": 0.8571428571428571,
+        "value_mae": 0.09506920099790607,
+        "target_accuracy": 0.3607142857142857
+      },
+      "combo-min-four-fire": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.21428571428571427,
+        "policy_top3": 0.5178571428571429,
+        "value_mae": 0.09202426824984807,
+        "target_accuracy": 0.3464285714285714
+      },
+      "requirement-line-diagonal": {
+        "items": 64,
+        "active_items": 64,
+        "policy_top1": 0.15625,
+        "policy_top3": 0.5,
+        "value_mae": 0.09574376506498083,
+        "target_accuracy": 0.35885416666666664
+      }
+    }
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 2.814274387359619,
+      "valid_loss": 2.773981809616089,
+      "valid_policy_top1": 0.37,
+      "valid_policy_top3": 0.75,
+      "valid_value_mae": 0.10925627708435058,
+      "valid_target_accuracy": 0.19441666666666665,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.39285714285714285,
+          "policy_top3": 0.7678571428571429,
+          "value_mae": 0.12018052102731806,
+          "target_accuracy": 0.1869047619047619
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.7678571428571429,
+          "value_mae": 0.12397536775097251,
+          "target_accuracy": 0.19702380952380952
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.3125,
+          "policy_top3": 0.875,
+          "value_mae": 0.09301053680246696,
+          "target_accuracy": 0.20260416666666667
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.12445825058966875,
+          "target_accuracy": 0.22857142857142856
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.39285714285714285,
+          "policy_top3": 0.875,
+          "value_mae": 0.09823710145428777,
+          "target_accuracy": 0.19464285714285715
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.7321428571428571,
+          "value_mae": 0.09444973138826233,
+          "target_accuracy": 0.18392857142857144
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.625,
+          "value_mae": 0.11280327755957842,
+          "target_accuracy": 0.16607142857142856
+        }
+      }
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.6995505809783937,
+      "valid_loss": 2.7255303859710693,
+      "valid_policy_top1": 0.38,
+      "valid_policy_top3": 0.755,
+      "valid_value_mae": 0.09907059669494629,
+      "valid_target_accuracy": 0.241,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.39285714285714285,
+          "policy_top3": 0.7142857142857143,
+          "value_mae": 0.08943854944248285,
+          "target_accuracy": 0.22142857142857142
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.39285714285714285,
+          "policy_top3": 0.75,
+          "value_mae": 0.09659358859062195,
+          "target_accuracy": 0.24583333333333332
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.359375,
+          "policy_top3": 0.9375,
+          "value_mae": 0.0963091604062356,
+          "target_accuracy": 0.23229166666666667
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.39285714285714285,
+          "policy_top3": 0.625,
+          "value_mae": 0.11640920177368182,
+          "target_accuracy": 0.28095238095238095
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.4107142857142857,
+          "policy_top3": 0.7142857142857143,
+          "value_mae": 0.09720719299678292,
+          "target_accuracy": 0.21964285714285714
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.75,
+          "value_mae": 0.10480039613321424,
+          "target_accuracy": 0.2648809523809524
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.7678571428571429,
+          "value_mae": 0.09313055626781923,
+          "target_accuracy": 0.22321428571428573
+        }
+      }
+    },
+    {
+      "epoch": 3,
+      "train_loss": 2.581865739822388,
+      "valid_loss": 2.6838717460632324,
+      "valid_policy_top1": 0.375,
+      "valid_policy_top3": 0.7175,
+      "valid_value_mae": 0.10232986450195312,
+      "valid_target_accuracy": 0.28258333333333335,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.23214285714285715,
+          "policy_top3": 0.5714285714285714,
+          "value_mae": 0.09597522332998258,
+          "target_accuracy": 0.2720238095238095
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.44642857142857145,
+          "policy_top3": 0.7678571428571429,
+          "value_mae": 0.08605821789907557,
+          "target_accuracy": 0.28869047619047616
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.40625,
+          "policy_top3": 0.90625,
+          "value_mae": 0.10737319779582322,
+          "target_accuracy": 0.2635416666666667
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.4107142857142857,
+          "policy_top3": 0.6785714285714286,
+          "value_mae": 0.10785266331263951,
+          "target_accuracy": 0.31607142857142856
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.6428571428571429,
+          "value_mae": 0.10597855065550123,
+          "target_accuracy": 0.2648809523809524
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.75,
+          "value_mae": 0.11752907013786691,
+          "target_accuracy": 0.30892857142857144
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.6785714285714286,
+          "value_mae": 0.09482161447937999,
+          "target_accuracy": 0.26666666666666666
+        }
+      }
+    },
+    {
+      "epoch": 4,
+      "train_loss": 2.4573870277404786,
+      "valid_loss": 2.638105630874634,
+      "valid_policy_top1": 0.3125,
+      "valid_policy_top3": 0.685,
+      "valid_value_mae": 0.09809968948364257,
+      "valid_target_accuracy": 0.2995833333333333,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.125,
+          "policy_top3": 0.48214285714285715,
+          "value_mae": 0.09809813535373126,
+          "target_accuracy": 0.2988095238095238
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.32142857142857145,
+          "policy_top3": 0.6071428571428571,
+          "value_mae": 0.09310677707461375,
+          "target_accuracy": 0.3053571428571429
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.46875,
+          "policy_top3": 0.890625,
+          "value_mae": 0.09814051102148369,
+          "target_accuracy": 0.28177083333333336
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.7321428571428571,
+          "value_mae": 0.1128727890151952,
+          "target_accuracy": 0.33095238095238094
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.26785714285714285,
+          "policy_top3": 0.7857142857142857,
+          "value_mae": 0.09561825018110019,
+          "target_accuracy": 0.2714285714285714
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.6428571428571429,
+          "value_mae": 0.10148087276944093,
+          "target_accuracy": 0.3107142857142857
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.26785714285714285,
+          "policy_top3": 0.625,
+          "value_mae": 0.08737466191606862,
+          "target_accuracy": 0.3005952380952381
+        }
+      }
+    },
+    {
+      "epoch": 5,
+      "train_loss": 2.355529441833496,
+      "valid_loss": 2.5933687686920166,
+      "valid_policy_top1": 0.3025,
+      "valid_policy_top3": 0.7175,
+      "valid_value_mae": 0.09518095970153809,
+      "valid_target_accuracy": 0.31833333333333336,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.17857142857142858,
+          "policy_top3": 0.6071428571428571,
+          "value_mae": 0.09092942026576825,
+          "target_accuracy": 0.2970238095238095
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.30357142857142855,
+          "policy_top3": 0.6428571428571429,
+          "value_mae": 0.08250666516167778,
+          "target_accuracy": 0.3196428571428571
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.375,
+          "policy_top3": 0.9375,
+          "value_mae": 0.10270014056004584,
+          "target_accuracy": 0.2859375
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.32142857142857145,
+          "policy_top3": 0.6964285714285714,
+          "value_mae": 0.0955422771429377,
+          "target_accuracy": 0.3755952380952381
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.75,
+          "value_mae": 0.09088393972654428,
+          "target_accuracy": 0.30416666666666664
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.30357142857142855,
+          "policy_top3": 0.7142857142857143,
+          "value_mae": 0.1144067181407341,
+          "target_accuracy": 0.325
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.26785714285714285,
+          "policy_top3": 0.6428571428571429,
+          "value_mae": 0.08822343631514482,
+          "target_accuracy": 0.3255952380952381
+        }
+      }
+    },
+    {
+      "epoch": 6,
+      "train_loss": 2.2900660705566405,
+      "valid_loss": 2.642548084259033,
+      "valid_policy_top1": 0.3725,
+      "valid_policy_top3": 0.7325,
+      "valid_value_mae": 0.09231978416442871,
+      "valid_target_accuracy": 0.3358333333333333,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.625,
+          "value_mae": 0.09347972480048027,
+          "target_accuracy": 0.3238095238095238
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.6428571428571429,
+          "value_mae": 0.08265752298757434,
+          "target_accuracy": 0.3416666666666667
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.359375,
+          "policy_top3": 0.9375,
+          "value_mae": 0.09803274902515113,
+          "target_accuracy": 0.30885416666666665
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.6964285714285714,
+          "value_mae": 0.09758077668292182,
+          "target_accuracy": 0.3952380952380952
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.44642857142857145,
+          "policy_top3": 0.8392857142857143,
+          "value_mae": 0.08906063517289502,
+          "target_accuracy": 0.30178571428571427
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.4107142857142857,
+          "policy_top3": 0.6964285714285714,
+          "value_mae": 0.09948512060301644,
+          "target_accuracy": 0.3375
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.30357142857142855,
+          "policy_top3": 0.6607142857142857,
+          "value_mae": 0.0851257722824812,
+          "target_accuracy": 0.3458333333333333
+        }
+      }
+    },
+    {
+      "epoch": 7,
+      "train_loss": 2.2346114921569824,
+      "valid_loss": 2.5994873046875,
+      "valid_policy_top1": 0.335,
+      "valid_policy_top3": 0.6775,
+      "valid_value_mae": 0.0919366455078125,
+      "valid_target_accuracy": 0.35408333333333336,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.23214285714285715,
+          "policy_top3": 0.6071428571428571,
+          "value_mae": 0.09136878958504115,
+          "target_accuracy": 0.32083333333333336
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.26785714285714285,
+          "policy_top3": 0.5714285714285714,
+          "value_mae": 0.08250822752181973,
+          "target_accuracy": 0.35
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.359375,
+          "policy_top3": 0.828125,
+          "value_mae": 0.09427719097584486,
+          "target_accuracy": 0.3385416666666667
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.6607142857142857,
+          "value_mae": 0.09939886636233755,
+          "target_accuracy": 0.4017857142857143
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.44642857142857145,
+          "policy_top3": 0.7678571428571429,
+          "value_mae": 0.09087176754006318,
+          "target_accuracy": 0.33690476190476193
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.4107142857142857,
+          "policy_top3": 0.6785714285714286,
+          "value_mae": 0.10157085529395513,
+          "target_accuracy": 0.3607142857142857
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.26785714285714285,
+          "policy_top3": 0.6071428571428571,
+          "value_mae": 0.08322647054280553,
+          "target_accuracy": 0.37202380952380953
+        }
+      }
+    },
+    {
+      "epoch": 8,
+      "train_loss": 2.1906357288360594,
+      "valid_loss": 2.591568946838379,
+      "valid_policy_top1": 0.335,
+      "valid_policy_top3": 0.685,
+      "valid_value_mae": 0.09010248184204102,
+      "valid_target_accuracy": 0.3680833333333333,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.21428571428571427,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.08385562018624373,
+          "target_accuracy": 0.3345238095238095
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.32142857142857145,
+          "policy_top3": 0.5535714285714286,
+          "value_mae": 0.077003113925457,
+          "target_accuracy": 0.3607142857142857
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.359375,
+          "policy_top3": 0.859375,
+          "value_mae": 0.09480811929097399,
+          "target_accuracy": 0.3567708333333333
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.30357142857142855,
+          "policy_top3": 0.6785714285714286,
+          "value_mae": 0.09617806332451957,
+          "target_accuracy": 0.4
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.48214285714285715,
+          "policy_top3": 0.8392857142857143,
+          "value_mae": 0.09042744079072561,
+          "target_accuracy": 0.37976190476190474
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.3392857142857143,
+          "policy_top3": 0.6428571428571429,
+          "value_mae": 0.10551361912595374,
+          "target_accuracy": 0.37142857142857144
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.32142857142857145,
+          "policy_top3": 0.6071428571428571,
+          "value_mae": 0.08225917869380542,
+          "target_accuracy": 0.375
+        }
+      }
+    },
+    {
+      "epoch": 9,
+      "train_loss": 2.113053379058838,
+      "valid_loss": 2.5695207118988037,
+      "valid_policy_top1": 0.3025,
+      "valid_policy_top3": 0.6875,
+      "valid_value_mae": 0.08889341354370117,
+      "valid_target_accuracy": 0.38175,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.23214285714285715,
+          "policy_top3": 0.5535714285714286,
+          "value_mae": 0.08371624669858388,
+          "target_accuracy": 0.35059523809523807
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.26785714285714285,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.07578559698803085,
+          "target_accuracy": 0.3892857142857143
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.296875,
+          "policy_top3": 0.84375,
+          "value_mae": 0.09487934550270438,
+          "target_accuracy": 0.36770833333333336
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.7142857142857143,
+          "value_mae": 0.09476102542664323,
+          "target_accuracy": 0.40773809523809523
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.8035714285714286,
+          "value_mae": 0.09249170670019728,
+          "target_accuracy": 0.37202380952380953
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.3392857142857143,
+          "policy_top3": 0.7142857142857143,
+          "value_mae": 0.0991045923105308,
+          "target_accuracy": 0.40654761904761905
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.25,
+          "policy_top3": 0.5714285714285714,
+          "value_mae": 0.08066026926306742,
+          "target_accuracy": 0.38035714285714284
+        }
+      }
+    },
+    {
+      "epoch": 10,
+      "train_loss": 2.067682123184204,
+      "valid_loss": 2.5740773677825928,
+      "valid_policy_top1": 0.2875,
+      "valid_policy_top3": 0.6825,
+      "valid_value_mae": 0.08853213310241699,
+      "valid_target_accuracy": 0.39816666666666667,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.26785714285714285,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.08190271584317088,
+          "target_accuracy": 0.3517857142857143
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.16071428571428573,
+          "policy_top3": 0.5357142857142857,
+          "value_mae": 0.07299886577363525,
+          "target_accuracy": 0.4089285714285714
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.265625,
+          "policy_top3": 0.875,
+          "value_mae": 0.09793777711456642,
+          "target_accuracy": 0.38958333333333334
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.2857142857142857,
+          "policy_top3": 0.6785714285714286,
+          "value_mae": 0.09656780718692712,
+          "target_accuracy": 0.425
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.42857142857142855,
+          "policy_top3": 0.8392857142857143,
+          "value_mae": 0.09347619994410447,
+          "target_accuracy": 0.3970238095238095
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.6607142857142857,
+          "value_mae": 0.09348133678681084,
+          "target_accuracy": 0.40773809523809523
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.25,
+          "policy_top3": 0.5714285714285714,
+          "value_mae": 0.0820165732210236,
+          "target_accuracy": 0.4083333333333333
+        }
+      }
+    },
+    {
+      "epoch": 11,
+      "train_loss": 2.025977602005005,
+      "valid_loss": 2.6262826919555664,
+      "valid_policy_top1": 0.3275,
+      "valid_policy_top3": 0.6675,
+      "valid_value_mae": 0.08978322982788085,
+      "valid_target_accuracy": 0.40358333333333335,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.6607142857142857,
+          "value_mae": 0.08100530365481973,
+          "target_accuracy": 0.3726190476190476
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.23214285714285715,
+          "policy_top3": 0.5178571428571429,
+          "value_mae": 0.0761380881470229,
+          "target_accuracy": 0.4166666666666667
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.296875,
+          "policy_top3": 0.859375,
+          "value_mae": 0.10135811078362167,
+          "target_accuracy": 0.39947916666666666
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.3392857142857143,
+          "policy_top3": 0.625,
+          "value_mae": 0.09265903855807014,
+          "target_accuracy": 0.41785714285714287
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.42857142857142855,
+          "policy_top3": 0.8035714285714286,
+          "value_mae": 0.09356983857495445,
+          "target_accuracy": 0.38095238095238093
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.39285714285714285,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.10106538621974843,
+          "target_accuracy": 0.4238095238095238
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.25,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.08103329322433897,
+          "target_accuracy": 0.4142857142857143
+        }
+      }
+    },
+    {
+      "epoch": 12,
+      "train_loss": 1.9768091201782227,
+      "valid_loss": 2.6428184509277344,
+      "valid_policy_top1": 0.3225,
+      "valid_policy_top3": 0.675,
+      "valid_value_mae": 0.08723893165588378,
+      "valid_target_accuracy": 0.4093333333333333,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.26785714285714285,
+          "policy_top3": 0.6785714285714286,
+          "value_mae": 0.07859756252063173,
+          "target_accuracy": 0.37976190476190474
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.21428571428571427,
+          "policy_top3": 0.5178571428571429,
+          "value_mae": 0.07445622448410306,
+          "target_accuracy": 0.42797619047619045
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.28125,
+          "policy_top3": 0.875,
+          "value_mae": 0.09364218113478273,
+          "target_accuracy": 0.4005208333333333
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.4642857142857143,
+          "policy_top3": 0.6428571428571429,
+          "value_mae": 0.09699185917686139,
+          "target_accuracy": 0.41904761904761906
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.42857142857142855,
+          "policy_top3": 0.7678571428571429,
+          "value_mae": 0.08953778146366988,
+          "target_accuracy": 0.3898809523809524
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.30357142857142855,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.09288664641124862,
+          "target_accuracy": 0.4261904761904762
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.30357142857142855,
+          "policy_top3": 0.625,
+          "value_mae": 0.08364554487967066,
+          "target_accuracy": 0.4232142857142857
+        }
+      }
+    },
+    {
+      "epoch": 13,
+      "train_loss": 1.97890944480896,
+      "valid_loss": 2.6044211387634277,
+      "valid_policy_top1": 0.2575,
+      "valid_policy_top3": 0.6525,
+      "valid_value_mae": 0.09177016258239747,
+      "valid_target_accuracy": 0.4171666666666667,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.21428571428571427,
+          "policy_top3": 0.6607142857142857,
+          "value_mae": 0.0815793219288545,
+          "target_accuracy": 0.38392857142857145
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.48214285714285715,
+          "value_mae": 0.07415304585759129,
+          "target_accuracy": 0.4363095238095238
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.28125,
+          "policy_top3": 0.875,
+          "value_mae": 0.1052086092531681,
+          "target_accuracy": 0.4046875
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.32142857142857145,
+          "policy_top3": 0.6785714285714286,
+          "value_mae": 0.09450047336784857,
+          "target_accuracy": 0.43273809523809526
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.39285714285714285,
+          "policy_top3": 0.75,
+          "value_mae": 0.0981867441774479,
+          "target_accuracy": 0.4017857142857143
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.23214285714285715,
+          "policy_top3": 0.5535714285714286,
+          "value_mae": 0.10107285522722773,
+          "target_accuracy": 0.430952380952381
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.16071428571428573,
+          "policy_top3": 0.5357142857142857,
+          "value_mae": 0.08577026413487536,
+          "target_accuracy": 0.43154761904761907
+        }
+      }
+    },
+    {
+      "epoch": 14,
+      "train_loss": 1.9360534954071045,
+      "valid_loss": 2.623016595840454,
+      "valid_policy_top1": 0.2525,
+      "valid_policy_top3": 0.655,
+      "valid_value_mae": 0.08804590225219727,
+      "valid_target_accuracy": 0.42291666666666666,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.6607142857142857,
+          "value_mae": 0.0767343295738101,
+          "target_accuracy": 0.3952380952380952
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.21428571428571427,
+          "policy_top3": 0.5178571428571429,
+          "value_mae": 0.07533577091193625,
+          "target_accuracy": 0.44226190476190474
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.21875,
+          "policy_top3": 0.875,
+          "value_mae": 0.09706422861199826,
+          "target_accuracy": 0.42135416666666664
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.30357142857142855,
+          "policy_top3": 0.6785714285714286,
+          "value_mae": 0.0975783638257001,
+          "target_accuracy": 0.4363095238095238
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.3392857142857143,
+          "policy_top3": 0.7678571428571429,
+          "value_mae": 0.0906446548178792,
+          "target_accuracy": 0.4
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.30357142857142855,
+          "policy_top3": 0.5357142857142857,
+          "value_mae": 0.09327928695295538,
+          "target_accuracy": 0.4380952380952381
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.5178571428571429,
+          "value_mae": 0.0843963882486735,
+          "target_accuracy": 0.42738095238095236
+        }
+      }
+    },
+    {
+      "epoch": 15,
+      "train_loss": 1.8985092973709106,
+      "valid_loss": 2.592790126800537,
+      "valid_policy_top1": 0.225,
+      "valid_policy_top3": 0.61,
+      "valid_value_mae": 0.0903939151763916,
+      "valid_target_accuracy": 0.42583333333333334,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.17857142857142858,
+          "policy_top3": 0.5535714285714286,
+          "value_mae": 0.07890232865299497,
+          "target_accuracy": 0.3892857142857143
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.17857142857142858,
+          "policy_top3": 0.42857142857142855,
+          "value_mae": 0.0735595302789339,
+          "target_accuracy": 0.4446428571428571
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.203125,
+          "policy_top3": 0.78125,
+          "value_mae": 0.1033096075989306,
+          "target_accuracy": 0.4328125
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.21428571428571427,
+          "policy_top3": 0.6607142857142857,
+          "value_mae": 0.0961700403796775,
+          "target_accuracy": 0.44166666666666665
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.30357142857142855,
+          "policy_top3": 0.7678571428571429,
+          "value_mae": 0.09258799321417298,
+          "target_accuracy": 0.4113095238095238
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.30357142857142855,
+          "policy_top3": 0.5714285714285714,
+          "value_mae": 0.1046802591798561,
+          "target_accuracy": 0.43273809523809526
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.48214285714285715,
+          "value_mae": 0.08170258326988135,
+          "target_accuracy": 0.42738095238095236
+        }
+      }
+    },
+    {
+      "epoch": 16,
+      "train_loss": 1.884487543106079,
+      "valid_loss": 2.6321463584899902,
+      "valid_policy_top1": 0.255,
+      "valid_policy_top3": 0.6275,
+      "valid_value_mae": 0.08937968254089355,
+      "valid_target_accuracy": 0.42875,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.17857142857142858,
+          "policy_top3": 0.625,
+          "value_mae": 0.07732546615547367,
+          "target_accuracy": 0.4107142857142857
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.48214285714285715,
+          "value_mae": 0.07703439572027751,
+          "target_accuracy": 0.44047619047619047
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.1875,
+          "policy_top3": 0.8125,
+          "value_mae": 0.09707450232235715,
+          "target_accuracy": 0.41458333333333336
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.30357142857142855,
+          "policy_top3": 0.6428571428571429,
+          "value_mae": 0.10100326860057456,
+          "target_accuracy": 0.4392857142857143
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.32142857142857145,
+          "policy_top3": 0.75,
+          "value_mae": 0.09031271149537393,
+          "target_accuracy": 0.4172619047619048
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.3392857142857143,
+          "policy_top3": 0.5714285714285714,
+          "value_mae": 0.0998137943180544,
+          "target_accuracy": 0.45
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.26785714285714285,
+          "policy_top3": 0.48214285714285715,
+          "value_mae": 0.08199432605345335,
+          "target_accuracy": 0.430952380952381
+        }
+      }
+    },
+    {
+      "epoch": 17,
+      "train_loss": 1.852038779258728,
+      "valid_loss": 2.6815993785858154,
+      "valid_policy_top1": 0.295,
+      "valid_policy_top3": 0.68,
+      "valid_value_mae": 0.09081467628479004,
+      "valid_target_accuracy": 0.44325,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.21428571428571427,
+          "policy_top3": 0.7321428571428571,
+          "value_mae": 0.07769008952059916,
+          "target_accuracy": 0.42678571428571427
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.26785714285714285,
+          "policy_top3": 0.6071428571428571,
+          "value_mae": 0.08037231609757457,
+          "target_accuracy": 0.4577380952380952
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.234375,
+          "policy_top3": 0.859375,
+          "value_mae": 0.10004107578424737,
+          "target_accuracy": 0.4395833333333333
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.6607142857142857,
+          "value_mae": 0.09909047918128115,
+          "target_accuracy": 0.45357142857142857
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.4107142857142857,
+          "policy_top3": 0.8214285714285714,
+          "value_mae": 0.09318613320855158,
+          "target_accuracy": 0.4244047619047619
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.5357142857142857,
+          "value_mae": 0.10102727862873248,
+          "target_accuracy": 0.4607142857142857
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.23214285714285715,
+          "policy_top3": 0.5178571428571429,
+          "value_mae": 0.08297731068783573,
+          "target_accuracy": 0.44047619047619047
+        }
+      }
+    },
+    {
+      "epoch": 18,
+      "train_loss": 1.817012963294983,
+      "valid_loss": 2.6756176948547363,
+      "valid_policy_top1": 0.27,
+      "valid_policy_top3": 0.63,
+      "valid_value_mae": 0.08865793228149414,
+      "valid_target_accuracy": 0.4415833333333333,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.6071428571428571,
+          "value_mae": 0.07720887820635523,
+          "target_accuracy": 0.41369047619047616
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.16071428571428573,
+          "policy_top3": 0.5,
+          "value_mae": 0.08084617056218642,
+          "target_accuracy": 0.45535714285714285
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.25,
+          "policy_top3": 0.828125,
+          "value_mae": 0.0961499492987059,
+          "target_accuracy": 0.4505208333333333
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.32142857142857145,
+          "policy_top3": 0.6071428571428571,
+          "value_mae": 0.09674390784597822,
+          "target_accuracy": 0.4511904761904762
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.75,
+          "value_mae": 0.09159757709130645,
+          "target_accuracy": 0.4244047619047619
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.5178571428571429,
+          "value_mae": 0.0915838339632111,
+          "target_accuracy": 0.46130952380952384
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.23214285714285715,
+          "policy_top3": 0.5714285714285714,
+          "value_mae": 0.08540494068126593,
+          "target_accuracy": 0.43333333333333335
+        }
+      }
+    },
+    {
+      "epoch": 19,
+      "train_loss": 1.756360912322998,
+      "valid_loss": 2.7133355140686035,
+      "valid_policy_top1": 0.1975,
+      "valid_policy_top3": 0.6125,
+      "valid_value_mae": 0.08816043853759765,
+      "valid_target_accuracy": 0.44433333333333336,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.6071428571428571,
+          "value_mae": 0.07686864817515016,
+          "target_accuracy": 0.42797619047619045
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.14285714285714285,
+          "policy_top3": 0.48214285714285715,
+          "value_mae": 0.07810050881068621,
+          "target_accuracy": 0.4529761904761905
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.78125,
+          "value_mae": 0.09706801874563098,
+          "target_accuracy": 0.43802083333333336
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.21428571428571427,
+          "policy_top3": 0.625,
+          "value_mae": 0.09476796118542552,
+          "target_accuracy": 0.45
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.26785714285714285,
+          "policy_top3": 0.75,
+          "value_mae": 0.09091036194669348,
+          "target_accuracy": 0.4380952380952381
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.25,
+          "policy_top3": 0.5178571428571429,
+          "value_mae": 0.09443434347797718,
+          "target_accuracy": 0.45714285714285713
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.16071428571428573,
+          "policy_top3": 0.5,
+          "value_mae": 0.08370079905060786,
+          "target_accuracy": 0.44702380952380955
+        }
+      }
+    },
+    {
+      "epoch": 20,
+      "train_loss": 1.779573016166687,
+      "valid_loss": 2.7218995094299316,
+      "valid_policy_top1": 0.195,
+      "valid_policy_top3": 0.605,
+      "valid_value_mae": 0.09155649185180664,
+      "valid_target_accuracy": 0.44866666666666666,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.125,
+          "policy_top3": 0.5535714285714286,
+          "value_mae": 0.07976796178679381,
+          "target_accuracy": 0.4380952380952381
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.14285714285714285,
+          "policy_top3": 0.4642857142857143,
+          "value_mae": 0.08131104601281029,
+          "target_accuracy": 0.444047619047619
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.171875,
+          "policy_top3": 0.796875,
+          "value_mae": 0.10226253472501412,
+          "target_accuracy": 0.44895833333333335
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.5535714285714286,
+          "value_mae": 0.09554132326905217,
+          "target_accuracy": 0.45476190476190476
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.2857142857142857,
+          "policy_top3": 0.7321428571428571,
+          "value_mae": 0.09157040169728654,
+          "target_accuracy": 0.4452380952380952
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.23214285714285715,
+          "policy_top3": 0.6071428571428571,
+          "value_mae": 0.10375912327851568,
+          "target_accuracy": 0.4601190476190476
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.21428571428571427,
+          "policy_top3": 0.5,
+          "value_mae": 0.08515357432354774,
+          "target_accuracy": 0.4494047619047619
+        }
+      }
+    },
+    {
+      "epoch": 21,
+      "train_loss": 1.7770959329605103,
+      "valid_loss": 2.81048321723938,
+      "valid_policy_top1": 0.2175,
+      "valid_policy_top3": 0.64,
+      "valid_value_mae": 0.090765962600708,
+      "valid_target_accuracy": 0.44358333333333333,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.07889050843992404,
+          "target_accuracy": 0.425
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.125,
+          "policy_top3": 0.5357142857142857,
+          "value_mae": 0.08222127186932734,
+          "target_accuracy": 0.4494047619047619
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.140625,
+          "policy_top3": 0.828125,
+          "value_mae": 0.09929864702280611,
+          "target_accuracy": 0.44114583333333335
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.25,
+          "policy_top3": 0.625,
+          "value_mae": 0.09658499254978128,
+          "target_accuracy": 0.4636904761904762
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.39285714285714285,
+          "policy_top3": 0.7857142857142857,
+          "value_mae": 0.09022106203649725,
+          "target_accuracy": 0.43214285714285716
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.26785714285714285,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.09852297697216272,
+          "target_accuracy": 0.45476190476190476
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.16071428571428573,
+          "policy_top3": 0.5,
+          "value_mae": 0.0884032992513052,
+          "target_accuracy": 0.4392857142857143
+        }
+      }
+    },
+    {
+      "epoch": 22,
+      "train_loss": 1.7409301853179933,
+      "valid_loss": 2.75465989112854,
+      "valid_policy_top1": 0.2125,
+      "valid_policy_top3": 0.5925,
+      "valid_value_mae": 0.09245217323303223,
+      "valid_target_accuracy": 0.4494166666666667,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.16071428571428573,
+          "policy_top3": 0.44642857142857145,
+          "value_mae": 0.0808449974283576,
+          "target_accuracy": 0.43154761904761907
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.10714285714285714,
+          "policy_top3": 0.4642857142857143,
+          "value_mae": 0.08177400180803877,
+          "target_accuracy": 0.4601190476190476
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.1875,
+          "policy_top3": 0.8125,
+          "value_mae": 0.09993347944691777,
+          "target_accuracy": 0.4395833333333333
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.25,
+          "policy_top3": 0.6071428571428571,
+          "value_mae": 0.09390381657119308,
+          "target_accuracy": 0.4595238095238095
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.3392857142857143,
+          "policy_top3": 0.7678571428571429,
+          "value_mae": 0.09351227399227875,
+          "target_accuracy": 0.44226190476190474
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.25,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.10733416277383055,
+          "target_accuracy": 0.4660714285714286
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.42857142857142855,
+          "value_mae": 0.08879371586122684,
+          "target_accuracy": 0.44821428571428573
+        }
+      }
+    },
+    {
+      "epoch": 23,
+      "train_loss": 1.700344214439392,
+      "valid_loss": 2.7556521892547607,
+      "valid_policy_top1": 0.2225,
+      "valid_policy_top3": 0.5775,
+      "valid_value_mae": 0.09126858711242676,
+      "valid_target_accuracy": 0.45408333333333334,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.17857142857142858,
+          "policy_top3": 0.48214285714285715,
+          "value_mae": 0.08136520494839974,
+          "target_accuracy": 0.43392857142857144
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.14285714285714285,
+          "policy_top3": 0.375,
+          "value_mae": 0.08236575592309237,
+          "target_accuracy": 0.4589285714285714
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.1875,
+          "policy_top3": 0.796875,
+          "value_mae": 0.09549283952219412,
+          "target_accuracy": 0.45
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.25,
+          "policy_top3": 0.625,
+          "value_mae": 0.09893986649279084,
+          "target_accuracy": 0.4630952380952381
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.30357142857142855,
+          "policy_top3": 0.7321428571428571,
+          "value_mae": 0.09430669560762388,
+          "target_accuracy": 0.45416666666666666
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.30357142857142855,
+          "policy_top3": 0.5714285714285714,
+          "value_mae": 0.09967656154185534,
+          "target_accuracy": 0.46726190476190477
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.42857142857142855,
+          "value_mae": 0.08612973242998123,
+          "target_accuracy": 0.4517857142857143
+        }
+      }
+    },
+    {
+      "epoch": 24,
+      "train_loss": 1.6852527236938477,
+      "valid_loss": 2.811176061630249,
+      "valid_policy_top1": 0.245,
+      "valid_policy_top3": 0.6425,
+      "valid_value_mae": 0.09175723075866699,
+      "valid_target_accuracy": 0.4569166666666667,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.23214285714285715,
+          "policy_top3": 0.6607142857142857,
+          "value_mae": 0.08243518355967742,
+          "target_accuracy": 0.43333333333333335
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.125,
+          "policy_top3": 0.4642857142857143,
+          "value_mae": 0.0823179726222796,
+          "target_accuracy": 0.46726190476190477
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.203125,
+          "policy_top3": 0.8125,
+          "value_mae": 0.10030542535241693,
+          "target_accuracy": 0.4505208333333333
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.2857142857142857,
+          "policy_top3": 0.6964285714285714,
+          "value_mae": 0.09966160210647754,
+          "target_accuracy": 0.4744047619047619
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.7857142857142857,
+          "value_mae": 0.092812205631552,
+          "target_accuracy": 0.45595238095238094
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.32142857142857145,
+          "policy_top3": 0.5714285714285714,
+          "value_mae": 0.0977106284616249,
+          "target_accuracy": 0.4577380952380952
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.48214285714285715,
+          "value_mae": 0.08583639063207167,
+          "target_accuracy": 0.4601190476190476
+        }
+      }
+    },
+    {
+      "epoch": 25,
+      "train_loss": 1.6518619918823243,
+      "valid_loss": 2.799665927886963,
+      "valid_policy_top1": 0.2575,
+      "valid_policy_top3": 0.6525,
+      "valid_value_mae": 0.09336810111999512,
+      "valid_target_accuracy": 0.45975,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.14285714285714285,
+          "policy_top3": 0.625,
+          "value_mae": 0.08255686637546335,
+          "target_accuracy": 0.43273809523809526
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.5,
+          "value_mae": 0.07963605863707406,
+          "target_accuracy": 0.4642857142857143
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.21875,
+          "policy_top3": 0.875,
+          "value_mae": 0.11118738271761686,
+          "target_accuracy": 0.4640625
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.30357142857142855,
+          "policy_top3": 0.6428571428571429,
+          "value_mae": 0.09576296081234302,
+          "target_accuracy": 0.4726190476190476
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.39285714285714285,
+          "policy_top3": 0.75,
+          "value_mae": 0.0947971453091928,
+          "target_accuracy": 0.4654761904761905
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.32142857142857145,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.10087570222094655,
+          "target_accuracy": 0.46130952380952384
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.23214285714285715,
+          "policy_top3": 0.5535714285714286,
+          "value_mae": 0.08621499175205827,
+          "target_accuracy": 0.45714285714285713
+        }
+      }
+    },
+    {
+      "epoch": 26,
+      "train_loss": 1.6422020292282105,
+      "valid_loss": 2.852658748626709,
+      "valid_policy_top1": 0.28,
+      "valid_policy_top3": 0.665,
+      "valid_value_mae": 0.09099864959716797,
+      "valid_target_accuracy": 0.46341666666666664,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.6785714285714286,
+          "value_mae": 0.07737902039662004,
+          "target_accuracy": 0.44166666666666665
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.5178571428571429,
+          "value_mae": 0.08319886175117322,
+          "target_accuracy": 0.4654761904761905
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.203125,
+          "policy_top3": 0.90625,
+          "value_mae": 0.09676177438814193,
+          "target_accuracy": 0.4578125
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.6785714285714286,
+          "value_mae": 0.10808200628629752,
+          "target_accuracy": 0.4732142857142857
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.39285714285714285,
+          "policy_top3": 0.75,
+          "value_mae": 0.09264218767306634,
+          "target_accuracy": 0.4660714285714286
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.09320197167939373,
+          "target_accuracy": 0.46726190476190477
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.25,
+          "policy_top3": 0.5,
+          "value_mae": 0.08490138913371734,
+          "target_accuracy": 0.4732142857142857
+        }
+      }
+    },
+    {
+      "epoch": 27,
+      "train_loss": 1.6096367263793945,
+      "valid_loss": 2.85904598236084,
+      "valid_policy_top1": 0.265,
+      "valid_policy_top3": 0.635,
+      "valid_value_mae": 0.09219453811645507,
+      "valid_target_accuracy": 0.46291666666666664,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.17857142857142858,
+          "policy_top3": 0.6428571428571429,
+          "value_mae": 0.08013714264546122,
+          "target_accuracy": 0.44345238095238093
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.17857142857142858,
+          "policy_top3": 0.5,
+          "value_mae": 0.08053997258788773,
+          "target_accuracy": 0.46130952380952384
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.796875,
+          "value_mae": 0.1036928384564817,
+          "target_accuracy": 0.45416666666666666
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.32142857142857145,
+          "policy_top3": 0.6071428571428571,
+          "value_mae": 0.09984729339235596,
+          "target_accuracy": 0.4744047619047619
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.42857142857142855,
+          "policy_top3": 0.7678571428571429,
+          "value_mae": 0.09010272027392473,
+          "target_accuracy": 0.4636904761904762
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.1052243464759418,
+          "target_accuracy": 0.46130952380952384
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.25,
+          "policy_top3": 0.5178571428571429,
+          "value_mae": 0.0841748580735709,
+          "target_accuracy": 0.48333333333333334
+        }
+      }
+    },
+    {
+      "epoch": 28,
+      "train_loss": 1.6186184072494507,
+      "valid_loss": 2.8906946182250977,
+      "valid_policy_top1": 0.225,
+      "valid_policy_top3": 0.62,
+      "valid_value_mae": 0.09187606811523437,
+      "valid_target_accuracy": 0.4676666666666667,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.08928571428571429,
+          "policy_top3": 0.6071428571428571,
+          "value_mae": 0.08133838831314019,
+          "target_accuracy": 0.4452380952380952
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.16071428571428573,
+          "policy_top3": 0.5,
+          "value_mae": 0.08502953080460429,
+          "target_accuracy": 0.4708333333333333
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.140625,
+          "policy_top3": 0.796875,
+          "value_mae": 0.0999754968797788,
+          "target_accuracy": 0.46979166666666666
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.2857142857142857,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.10086365769218121,
+          "target_accuracy": 0.48035714285714287
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.39285714285714285,
+          "policy_top3": 0.75,
+          "value_mae": 0.08983423617402357,
+          "target_accuracy": 0.46964285714285714
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.26785714285714285,
+          "policy_top3": 0.6071428571428571,
+          "value_mae": 0.10018523569617953,
+          "target_accuracy": 0.46904761904761905
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.25,
+          "policy_top3": 0.4642857142857143,
+          "value_mae": 0.0847489029568221,
+          "target_accuracy": 0.46845238095238095
+        }
+      }
+    },
+    {
+      "epoch": 29,
+      "train_loss": 1.5991307449340821,
+      "valid_loss": 2.9114296436309814,
+      "valid_policy_top1": 0.2625,
+      "valid_policy_top3": 0.6475,
+      "valid_value_mae": 0.09163078308105468,
+      "valid_target_accuracy": 0.46925,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.14285714285714285,
+          "policy_top3": 0.6607142857142857,
+          "value_mae": 0.08145863522908517,
+          "target_accuracy": 0.45595238095238094
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.125,
+          "policy_top3": 0.5178571428571429,
+          "value_mae": 0.0845849074290267,
+          "target_accuracy": 0.47023809523809523
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.84375,
+          "value_mae": 0.099314744991716,
+          "target_accuracy": 0.46979166666666666
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.4107142857142857,
+          "policy_top3": 0.6607142857142857,
+          "value_mae": 0.09945397238646235,
+          "target_accuracy": 0.48928571428571427
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.4107142857142857,
+          "policy_top3": 0.7678571428571429,
+          "value_mae": 0.09167789548103299,
+          "target_accuracy": 0.46785714285714286
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.5714285714285714,
+          "value_mae": 0.09930267238191196,
+          "target_accuracy": 0.46904761904761905
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.23214285714285715,
+          "policy_top3": 0.48214285714285715,
+          "value_mae": 0.0845249322509127,
+          "target_accuracy": 0.4625
+        }
+      }
+    },
+    {
+      "epoch": 30,
+      "train_loss": 1.556852617263794,
+      "valid_loss": 2.9762723445892334,
+      "valid_policy_top1": 0.26,
+      "valid_policy_top3": 0.645,
+      "valid_value_mae": 0.09098748207092285,
+      "valid_target_accuracy": 0.4741666666666667,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.16071428571428573,
+          "policy_top3": 0.6964285714285714,
+          "value_mae": 0.08010858496917146,
+          "target_accuracy": 0.45416666666666666
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.19642857142857142,
+          "policy_top3": 0.48214285714285715,
+          "value_mae": 0.08472938070605908,
+          "target_accuracy": 0.4738095238095238
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.171875,
+          "policy_top3": 0.8125,
+          "value_mae": 0.09692777250893414,
+          "target_accuracy": 0.4713541666666667
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.35714285714285715,
+          "policy_top3": 0.6785714285714286,
+          "value_mae": 0.10051499220675655,
+          "target_accuracy": 0.4869047619047619
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.7678571428571429,
+          "value_mae": 0.09380360622890294,
+          "target_accuracy": 0.47619047619047616
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.3392857142857143,
+          "policy_top3": 0.5535714285714286,
+          "value_mae": 0.09612649033910461,
+          "target_accuracy": 0.4797619047619048
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.23214285714285715,
+          "policy_top3": 0.5,
+          "value_mae": 0.08385293405236942,
+          "target_accuracy": 0.4773809523809524
+        }
+      }
+    }
+  ]
+}

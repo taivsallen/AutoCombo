@@ -1,0 +1,108 @@
+{
+  "method": "Paired percentile bootstrap clustered by underlying color board; scenarios/repeats stay together",
+  "seed": 539364199,
+  "resamples": 5000,
+  "independent_boards": 30,
+  "trial_pairs": 90,
+  "source_report": "reports\\solver-next-20260909\\holdout-final.json",
+  "sourceMetadata": {
+    "baseline": {
+      "path": "reports/solver-next-20260909/baseline/App.jsx",
+      "sourceReadAt": "2026-09-09T12:31:40.559Z",
+      "sha256": "cf02dfa0e8701bfb5083c052e6bf1244272fee73845e4fb4ec523e3edd70c7ca",
+      "dependencies": [
+        {
+          "import": "./solver/pathReplay",
+          "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-next-20260909\\baseline\\solver\\pathReplay.js",
+          "sha256": "a1d6db9782a725856adf34b3f35cf25b62cf3e4a850bfba237f13e152e702c89",
+          "source": "source_adjacent"
+        },
+        {
+          "import": "./solver/comboBound",
+          "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-next-20260909\\baseline\\solver\\comboBound.js",
+          "sha256": "d1f237c759e8fd31105fa81cd45b5217c8500fb4ff6108aea1b69905ba7c9283",
+          "source": "source_adjacent"
+        },
+        {
+          "import": "./solver/solutionRanking",
+          "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-next-20260909\\baseline\\solver\\solutionRanking.js",
+          "sha256": "53ea760c689db4eddbac6bce404c04dc46808032afab7800b9e95b69f0599242",
+          "source": "source_adjacent"
+        }
+      ]
+    },
+    "candidate": {
+      "path": "src/App.jsx",
+      "sourceReadAt": "2026-09-09T12:31:40.914Z",
+      "sha256": "9326b1bc2472004edefd81afad2d8bc03cdcd19477c521ffa026ac00fc9b85e2",
+      "dependencies": [
+        {
+          "import": "./solver/pathRefinement",
+          "path": "D:\\桌面\\code\\ComboAuto\\src\\solver\\pathRefinement.js",
+          "sha256": "40fb187075d824c5f84e38a8a3752dba8a9c33ae6a9617613413675bc3b1d482",
+          "source": "source_adjacent"
+        },
+        {
+          "import": "./solver/pathReplay",
+          "path": "D:\\桌面\\code\\ComboAuto\\src\\solver\\pathReplay.js",
+          "sha256": "a1d6db9782a725856adf34b3f35cf25b62cf3e4a850bfba237f13e152e702c89",
+          "source": "source_adjacent"
+        },
+        {
+          "import": "./solver/comboBound",
+          "path": "D:\\桌面\\code\\ComboAuto\\src\\solver\\comboBound.js",
+          "sha256": "d1f237c759e8fd31105fa81cd45b5217c8500fb4ff6108aea1b69905ba7c9283",
+          "source": "source_adjacent"
+        },
+        {
+          "import": "./solver/solutionRanking",
+          "path": "D:\\桌面\\code\\ComboAuto\\src\\solver\\solutionRanking.js",
+          "sha256": "53ea760c689db4eddbac6bce404c04dc46808032afab7800b9e95b69f0599242",
+          "source": "source_adjacent"
+        }
+      ]
+    }
+  },
+  "metrics": {
+    "median_latency_reduction_fraction": {
+      "observed": 0.16882416761965047,
+      "ci95": [
+        0.037537981464445196,
+        0.25048729429506383
+      ]
+    },
+    "p95_latency_reduction_fraction": {
+      "observed": 0.038265737634587904,
+      "ci95": [
+        0.007096386468308032,
+        0.050807758972958354
+      ]
+    },
+    "all_requirements_success_rate_delta": {
+      "observed": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "net_quality_win_rate": {
+      "observed": 0.06666666666666667,
+      "ci95": [
+        0.011111111111111112,
+        0.14444444444444443
+      ]
+    },
+    "mean_step_delta_per_pair": {
+      "observed": 0.001754850088183421,
+      "ci95": [
+        -0.03117283950617284,
+        0.032918871252204586
+      ]
+    }
+  },
+  "limitations": [
+    "Conditional on this suite/device; not a cross-device guarantee.",
+    "Group steps use each trial-pair mean, not treating every signature as independent.",
+    "No assertion that all individual cases improved, and no promotion gate is implied."
+  ]
+}

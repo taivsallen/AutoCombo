@@ -1,0 +1,631 @@
+{
+  "schema_version": 2,
+  "schema": "comboauto.teacher.policy-value-target.v1",
+  "generated_at": "2026-08-09T15:55:45.512Z",
+  "elapsed_sec": 4.624,
+  "config": {
+    "outputDir": "teacher_data_policy_mixed_smoke",
+    "prefix": "mixed",
+    "baseSeed": 12345,
+    "boards": 35,
+    "statesPerBoard": 2,
+    "rolloutSteps": 14,
+    "stepsLeftMin": 4,
+    "stepsLeftMax": 18,
+    "beamWidth": 40,
+    "maxNodes": 2000,
+    "scenarios": [
+      {
+        "id": "combo-line-orthogonal",
+        "target": 8,
+        "mode": "combo",
+        "priority": "combo",
+        "skyfall": false,
+        "diagonal": false,
+        "ruleProfile": {
+          "orbRules": [
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            }
+          ],
+          "requirements": []
+        },
+        "specials": []
+      },
+      {
+        "id": "combo-line-diagonal",
+        "target": 8,
+        "mode": "combo",
+        "priority": "combo",
+        "skyfall": false,
+        "diagonal": true,
+        "ruleProfile": {
+          "orbRules": [
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            }
+          ],
+          "requirements": []
+        },
+        "specials": []
+      },
+      {
+        "id": "combo-line-skyfall-diagonal",
+        "target": 8,
+        "mode": "combo",
+        "priority": "combo",
+        "skyfall": true,
+        "diagonal": true,
+        "ruleProfile": {
+          "orbRules": [
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            }
+          ],
+          "requirements": []
+        },
+        "specials": []
+      },
+      {
+        "id": "combo-line-skyfall-orthogonal",
+        "target": 8,
+        "mode": "combo",
+        "priority": "combo",
+        "skyfall": true,
+        "diagonal": false,
+        "ruleProfile": {
+          "orbRules": [
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            }
+          ],
+          "requirements": []
+        },
+        "specials": []
+      },
+      {
+        "id": "combo-connected-diagonal",
+        "target": 6,
+        "mode": "combo",
+        "priority": "combo",
+        "skyfall": false,
+        "diagonal": true,
+        "ruleProfile": {
+          "orbRules": [
+            {
+              "minClear": 3,
+              "clearMode": "connected"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "connected"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "connected"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "connected"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "connected"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "connected"
+            }
+          ],
+          "requirements": []
+        },
+        "specials": []
+      },
+      {
+        "id": "combo-min-four-fire",
+        "target": 6,
+        "mode": "combo",
+        "priority": "combo",
+        "skyfall": false,
+        "diagonal": true,
+        "ruleProfile": {
+          "orbRules": [
+            {
+              "minClear": 4,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            }
+          ],
+          "requirements": []
+        },
+        "specials": []
+      },
+      {
+        "id": "requirement-line-diagonal",
+        "target": 6,
+        "mode": "combo",
+        "priority": "combo",
+        "skyfall": false,
+        "diagonal": true,
+        "ruleProfile": {
+          "orbRules": [
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            },
+            {
+              "minClear": 3,
+              "clearMode": "line"
+            }
+          ],
+          "requirements": [
+            {
+              "orb": 0,
+              "size": 3,
+              "count": 1,
+              "match": "exact"
+            },
+            {
+              "orb": 1,
+              "size": 3,
+              "count": 1,
+              "match": "atLeast"
+            }
+          ]
+        },
+        "specials": []
+      }
+    ],
+    "policyTemperature": 250000,
+    "progressEvery": 7
+  },
+  "scenarios": [
+    {
+      "id": "combo-line-orthogonal",
+      "target": 8,
+      "mode": "combo",
+      "priority": "combo",
+      "skyfall": false,
+      "diagonal": false,
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    },
+    {
+      "id": "combo-line-diagonal",
+      "target": 8,
+      "mode": "combo",
+      "priority": "combo",
+      "skyfall": false,
+      "diagonal": true,
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    },
+    {
+      "id": "combo-line-skyfall-diagonal",
+      "target": 8,
+      "mode": "combo",
+      "priority": "combo",
+      "skyfall": true,
+      "diagonal": true,
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    },
+    {
+      "id": "combo-line-skyfall-orthogonal",
+      "target": 8,
+      "mode": "combo",
+      "priority": "combo",
+      "skyfall": true,
+      "diagonal": false,
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    },
+    {
+      "id": "combo-connected-diagonal",
+      "target": 6,
+      "mode": "combo",
+      "priority": "combo",
+      "skyfall": false,
+      "diagonal": true,
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "connected"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "connected"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "connected"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "connected"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "connected"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "connected"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    },
+    {
+      "id": "combo-min-four-fire",
+      "target": 6,
+      "mode": "combo",
+      "priority": "combo",
+      "skyfall": false,
+      "diagonal": true,
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 4,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    },
+    {
+      "id": "requirement-line-diagonal",
+      "target": 6,
+      "mode": "combo",
+      "priority": "combo",
+      "skyfall": false,
+      "diagonal": true,
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": [
+          {
+            "orb": 0,
+            "size": 3,
+            "count": 1,
+            "match": "exact"
+          },
+          {
+            "orb": 1,
+            "size": 3,
+            "count": 1,
+            "match": "atLeast"
+          }
+        ]
+      },
+      "specials": []
+    }
+  ],
+  "counts": {
+    "train": 58,
+    "valid": 6,
+    "test": 6,
+    "totalStates": 70,
+    "totalLabelExpansions": 98702,
+    "byScenario": {
+      "combo-line-orthogonal": {
+        "boards": 5,
+        "states": 10,
+        "solved": 0
+      },
+      "combo-line-diagonal": {
+        "boards": 5,
+        "states": 10,
+        "solved": 0
+      },
+      "combo-line-skyfall-diagonal": {
+        "boards": 5,
+        "states": 10,
+        "solved": 0
+      },
+      "combo-line-skyfall-orthogonal": {
+        "boards": 5,
+        "states": 10,
+        "solved": 0
+      },
+      "combo-connected-diagonal": {
+        "boards": 5,
+        "states": 10,
+        "solved": 1
+      },
+      "combo-min-four-fire": {
+        "boards": 5,
+        "states": 10,
+        "solved": 1
+      },
+      "requirement-line-diagonal": {
+        "boards": 5,
+        "states": 10,
+        "solved": 0
+      }
+    }
+  },
+  "files": {
+    "train": "teacher_data_policy_mixed_smoke\\mixed.train.jsonl",
+    "valid": "teacher_data_policy_mixed_smoke\\mixed.valid.jsonl",
+    "test": "teacher_data_policy_mixed_smoke\\mixed.test.jsonl"
+  }
+}

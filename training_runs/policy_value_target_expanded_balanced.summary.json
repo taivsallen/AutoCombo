@@ -1,0 +1,1951 @@
+{
+  "schema": "comboauto.teacher.policy-value-target.v1",
+  "input_dim": 397,
+  "checkpoint": "training_runs/policy_value_target_expanded_balanced.pt",
+  "onnx": "public/policy_value_target_expanded_balanced.onnx",
+  "sampling": {
+    "mode": "balanced",
+    "power": 1.0,
+    "weights_by_scenario": {
+      "combo-connected-diagonal": 0.0015625,
+      "combo-line-diagonal": 0.0015625,
+      "combo-line-horizontal": 0.0015625,
+      "combo-line-orthogonal": 0.0015625,
+      "combo-line-skyfall-diagonal": 0.0015625,
+      "combo-line-skyfall-orthogonal": 0.0015625,
+      "combo-line-vertical": 0.0015625,
+      "combo-min-five-fire": 0.0015625,
+      "combo-min-four-fire": 0.0015625,
+      "requirement-line-diagonal": 0.0015625,
+      "requirement-two-exact": 0.0015625,
+      "steps-line-diagonal": 0.0015625
+    }
+  },
+  "datasets": {
+    "train": {
+      "items": 7680,
+      "scenario_counts": {
+        "combo-connected-diagonal": 640,
+        "combo-line-diagonal": 640,
+        "combo-line-horizontal": 640,
+        "combo-line-orthogonal": 640,
+        "combo-line-skyfall-diagonal": 640,
+        "combo-line-skyfall-orthogonal": 640,
+        "combo-line-vertical": 640,
+        "combo-min-five-fire": 640,
+        "combo-min-four-fire": 640,
+        "requirement-line-diagonal": 640,
+        "requirement-two-exact": 640,
+        "steps-line-diagonal": 640
+      }
+    },
+    "valid": {
+      "items": 960,
+      "scenario_counts": {
+        "combo-line-diagonal": 160,
+        "combo-line-horizontal": 160,
+        "combo-line-skyfall-orthogonal": 160,
+        "combo-min-four-fire": 160,
+        "requirement-two-exact": 160,
+        "steps-line-diagonal": 160
+      }
+    },
+    "test": {
+      "items": 960,
+      "scenario_counts": {
+        "combo-connected-diagonal": 160,
+        "combo-line-orthogonal": 160,
+        "combo-line-skyfall-diagonal": 160,
+        "combo-line-vertical": 160,
+        "combo-min-five-fire": 160,
+        "requirement-line-diagonal": 160
+      }
+    }
+  },
+  "valid": {
+    "loss": 2.5262503623962402,
+    "policy_top1": 0.28958333333333336,
+    "policy_top3": 0.6885416666666667,
+    "value_mae": 0.08934637705485025,
+    "target_accuracy": 0.5508680555555555,
+    "by_scenario": {
+      "combo-line-diagonal": {
+        "items": 160,
+        "active_items": 160,
+        "policy_top1": 0.225,
+        "policy_top3": 0.63125,
+        "value_mae": 0.08875300490763038,
+        "target_accuracy": 0.5479166666666667
+      },
+      "combo-line-horizontal": {
+        "items": 160,
+        "active_items": 160,
+        "policy_top1": 0.48125,
+        "policy_top3": 0.93125,
+        "value_mae": 0.08440186837688088,
+        "target_accuracy": 0.5647916666666667
+      },
+      "combo-line-skyfall-orthogonal": {
+        "items": 160,
+        "active_items": 160,
+        "policy_top1": 0.51875,
+        "policy_top3": 0.93125,
+        "value_mae": 0.09584806929342449,
+        "target_accuracy": 0.55875
+      },
+      "combo-min-four-fire": {
+        "items": 160,
+        "active_items": 160,
+        "policy_top1": 0.2125,
+        "policy_top3": 0.575,
+        "value_mae": 0.08741041468456387,
+        "target_accuracy": 0.53875
+      },
+      "requirement-two-exact": {
+        "items": 160,
+        "active_items": 160,
+        "policy_top1": 0.15625,
+        "policy_top3": 0.5125,
+        "value_mae": 0.08767017903737724,
+        "target_accuracy": 0.5552083333333333
+      },
+      "steps-line-diagonal": {
+        "items": 160,
+        "active_items": 160,
+        "policy_top1": 0.14375,
+        "policy_top3": 0.55,
+        "value_mae": 0.0919947435730137,
+        "target_accuracy": 0.5397916666666667
+      }
+    }
+  },
+  "test": {
+    "loss": 2.727839946746826,
+    "policy_top1": 0.22083333333333333,
+    "policy_top3": 0.609375,
+    "value_mae": 0.0872327963511149,
+    "target_accuracy": 0.5560763888888889,
+    "by_scenario": {
+      "combo-connected-diagonal": {
+        "items": 160,
+        "active_items": 160,
+        "policy_top1": 0.13125,
+        "policy_top3": 0.59375,
+        "value_mae": 0.08515160945244134,
+        "target_accuracy": 0.565
+      },
+      "combo-line-orthogonal": {
+        "items": 160,
+        "active_items": 160,
+        "policy_top1": 0.41875,
+        "policy_top3": 0.925,
+        "value_mae": 0.07934248907258734,
+        "target_accuracy": 0.5629166666666666
+      },
+      "combo-line-skyfall-diagonal": {
+        "items": 160,
+        "active_items": 160,
+        "policy_top1": 0.26875,
+        "policy_top3": 0.58125,
+        "value_mae": 0.0907695485278964,
+        "target_accuracy": 0.544375
+      },
+      "combo-line-vertical": {
+        "items": 160,
+        "active_items": 160,
+        "policy_top1": 0.1875,
+        "policy_top3": 0.5,
+        "value_mae": 0.09998057053890079,
+        "target_accuracy": 0.564375
+      },
+      "combo-min-five-fire": {
+        "items": 160,
+        "active_items": 160,
+        "policy_top1": 0.14375,
+        "policy_top3": 0.54375,
+        "value_mae": 0.08768448422197253,
+        "target_accuracy": 0.5520833333333334
+      },
+      "requirement-line-diagonal": {
+        "items": 160,
+        "active_items": 160,
+        "policy_top1": 0.175,
+        "policy_top3": 0.5125,
+        "value_mae": 0.0804680521832779,
+        "target_accuracy": 0.5477083333333334
+      }
+    }
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 2.825072002410889,
+      "valid_loss": 2.7681069374084473,
+      "valid_policy_top1": 0.459375,
+      "valid_policy_top3": 0.7177083333333333,
+      "valid_value_mae": 0.11610045433044433,
+      "valid_target_accuracy": 0.21861111111111112,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.5,
+          "policy_top3": 0.7125,
+          "value_mae": 0.11109609503764659,
+          "target_accuracy": 0.211875
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.5625,
+          "policy_top3": 0.8625,
+          "value_mae": 0.10449314300203696,
+          "target_accuracy": 0.23229166666666667
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.64375,
+          "policy_top3": 0.925,
+          "value_mae": 0.11639068550430239,
+          "target_accuracy": 0.21583333333333332
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.375,
+          "policy_top3": 0.63125,
+          "value_mae": 0.11483765642624348,
+          "target_accuracy": 0.205625
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.28125,
+          "policy_top3": 0.56875,
+          "value_mae": 0.12590376227162778,
+          "target_accuracy": 0.21770833333333334
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.39375,
+          "policy_top3": 0.60625,
+          "value_mae": 0.1238814165815711,
+          "target_accuracy": 0.22833333333333333
+        }
+      }
+    },
+    {
+      "epoch": 2,
+      "train_loss": 2.73060572942098,
+      "valid_loss": 2.676767349243164,
+      "valid_policy_top1": 0.2625,
+      "valid_policy_top3": 0.6927083333333334,
+      "valid_value_mae": 0.10276209513346354,
+      "valid_target_accuracy": 0.28770833333333334,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.2875,
+          "policy_top3": 0.6625,
+          "value_mae": 0.09780781643930822,
+          "target_accuracy": 0.2775
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.41875,
+          "policy_top3": 0.9125,
+          "value_mae": 0.10035613790387288,
+          "target_accuracy": 0.28
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.36875,
+          "policy_top3": 0.89375,
+          "value_mae": 0.10974249492865056,
+          "target_accuracy": 0.28708333333333336
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.2125,
+          "policy_top3": 0.575,
+          "value_mae": 0.09624223643913865,
+          "target_accuracy": 0.27875
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.16875,
+          "policy_top3": 0.575,
+          "value_mae": 0.10473488196730614,
+          "target_accuracy": 0.305625
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.11875,
+          "policy_top3": 0.5375,
+          "value_mae": 0.10768901545088738,
+          "target_accuracy": 0.2972916666666667
+        }
+      }
+    },
+    {
+      "epoch": 3,
+      "train_loss": 2.594925594329834,
+      "valid_loss": 2.5778911113739014,
+      "valid_policy_top1": 0.23125,
+      "valid_policy_top3": 0.621875,
+      "valid_value_mae": 0.10481160481770833,
+      "valid_target_accuracy": 0.32652777777777775,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.2625,
+          "policy_top3": 0.6125,
+          "value_mae": 0.11137036781292409,
+          "target_accuracy": 0.3252083333333333
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.31875,
+          "policy_top3": 0.90625,
+          "value_mae": 0.09284255523234605,
+          "target_accuracy": 0.32
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.35,
+          "policy_top3": 0.81875,
+          "value_mae": 0.1174655816052109,
+          "target_accuracy": 0.32
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.11875,
+          "policy_top3": 0.5125,
+          "value_mae": 0.10172811672091484,
+          "target_accuracy": 0.3177083333333333
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.16875,
+          "policy_top3": 0.4125,
+          "value_mae": 0.10199926868081093,
+          "target_accuracy": 0.35625
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.16875,
+          "policy_top3": 0.46875,
+          "value_mae": 0.103463738062419,
+          "target_accuracy": 0.32
+        }
+      }
+    },
+    {
+      "epoch": 4,
+      "train_loss": 2.474561913808187,
+      "valid_loss": 2.513510227203369,
+      "valid_policy_top1": 0.24583333333333332,
+      "valid_policy_top3": 0.6364583333333333,
+      "valid_value_mae": 0.09852681159973145,
+      "valid_target_accuracy": 0.36961805555555555,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.24375,
+          "policy_top3": 0.59375,
+          "value_mae": 0.10011059520766138,
+          "target_accuracy": 0.36541666666666667
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.38125,
+          "policy_top3": 0.9375,
+          "value_mae": 0.09110172623768449,
+          "target_accuracy": 0.3460416666666667
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.34375,
+          "policy_top3": 0.91875,
+          "value_mae": 0.11099329022690654,
+          "target_accuracy": 0.34625
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15,
+          "policy_top3": 0.46875,
+          "value_mae": 0.09534625860396773,
+          "target_accuracy": 0.3777083333333333
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1875,
+          "policy_top3": 0.41875,
+          "value_mae": 0.09360543461516499,
+          "target_accuracy": 0.4039583333333333
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.16875,
+          "policy_top3": 0.48125,
+          "value_mae": 0.10000356016680598,
+          "target_accuracy": 0.37833333333333335
+        }
+      }
+    },
+    {
+      "epoch": 5,
+      "train_loss": 2.382903258005778,
+      "valid_loss": 2.450822353363037,
+      "valid_policy_top1": 0.1875,
+      "valid_policy_top3": 0.553125,
+      "valid_value_mae": 0.09694883028666178,
+      "valid_target_accuracy": 0.4001388888888889,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1625,
+          "policy_top3": 0.5,
+          "value_mae": 0.09446446492802352,
+          "target_accuracy": 0.39416666666666667
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.24375,
+          "policy_top3": 0.85,
+          "value_mae": 0.09163526946213096,
+          "target_accuracy": 0.3695833333333333
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.33125,
+          "policy_top3": 0.76875,
+          "value_mae": 0.10832170363282785,
+          "target_accuracy": 0.39895833333333336
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.45625,
+          "value_mae": 0.0948322722921148,
+          "target_accuracy": 0.41020833333333334
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.14375,
+          "policy_top3": 0.40625,
+          "value_mae": 0.09142149323597551,
+          "target_accuracy": 0.43
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.0875,
+          "policy_top3": 0.3375,
+          "value_mae": 0.10101776965893805,
+          "target_accuracy": 0.39791666666666664
+        }
+      }
+    },
+    {
+      "epoch": 6,
+      "train_loss": 2.3193595886230467,
+      "valid_loss": 2.4350502490997314,
+      "valid_policy_top1": 0.23958333333333334,
+      "valid_policy_top3": 0.6666666666666666,
+      "valid_value_mae": 0.0958739678064982,
+      "valid_target_accuracy": 0.4232638888888889,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.19375,
+          "policy_top3": 0.6375,
+          "value_mae": 0.0963331458857283,
+          "target_accuracy": 0.4245833333333333
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.3125,
+          "policy_top3": 0.94375,
+          "value_mae": 0.09122501034289598,
+          "target_accuracy": 0.38708333333333333
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.425,
+          "policy_top3": 0.88125,
+          "value_mae": 0.10571449871640652,
+          "target_accuracy": 0.41770833333333335
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.19375,
+          "policy_top3": 0.5625,
+          "value_mae": 0.0932829295983538,
+          "target_accuracy": 0.4275
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.175,
+          "policy_top3": 0.48125,
+          "value_mae": 0.08905185414478183,
+          "target_accuracy": 0.4560416666666667
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1375,
+          "policy_top3": 0.49375,
+          "value_mae": 0.0996363707119599,
+          "target_accuracy": 0.4266666666666667
+        }
+      }
+    },
+    {
+      "epoch": 7,
+      "train_loss": 2.2626193523406983,
+      "valid_loss": 2.4190988540649414,
+      "valid_policy_top1": 0.1625,
+      "valid_policy_top3": 0.6052083333333333,
+      "valid_value_mae": 0.09635710716247559,
+      "valid_target_accuracy": 0.4489236111111111,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.125,
+          "policy_top3": 0.58125,
+          "value_mae": 0.0968601561151445,
+          "target_accuracy": 0.44916666666666666
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.23125,
+          "policy_top3": 0.9375,
+          "value_mae": 0.09127428443171084,
+          "target_accuracy": 0.42833333333333334
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.26875,
+          "policy_top3": 0.79375,
+          "value_mae": 0.10751165724359453,
+          "target_accuracy": 0.441875
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1375,
+          "policy_top3": 0.53125,
+          "value_mae": 0.08991518749389797,
+          "target_accuracy": 0.4502083333333333
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.10625,
+          "policy_top3": 0.40625,
+          "value_mae": 0.09113964771386236,
+          "target_accuracy": 0.471875
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.10625,
+          "policy_top3": 0.38125,
+          "value_mae": 0.10144169160630553,
+          "target_accuracy": 0.45208333333333334
+        }
+      }
+    },
+    {
+      "epoch": 8,
+      "train_loss": 2.2236334800720217,
+      "valid_loss": 2.4251391887664795,
+      "valid_policy_top1": 0.18645833333333334,
+      "valid_policy_top3": 0.5635416666666667,
+      "valid_value_mae": 0.09621435801188151,
+      "valid_target_accuracy": 0.45913194444444444,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.5625,
+          "value_mae": 0.09702735468745231,
+          "target_accuracy": 0.45666666666666667
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.26875,
+          "policy_top3": 0.90625,
+          "value_mae": 0.0911635646596551,
+          "target_accuracy": 0.44104166666666667
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.31875,
+          "policy_top3": 0.74375,
+          "value_mae": 0.1051985741360113,
+          "target_accuracy": 0.4579166666666667
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1375,
+          "policy_top3": 0.48125,
+          "value_mae": 0.09396014367230236,
+          "target_accuracy": 0.4579166666666667
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.10625,
+          "policy_top3": 0.34375,
+          "value_mae": 0.08837341689504682,
+          "target_accuracy": 0.4766666666666667
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.13125,
+          "policy_top3": 0.34375,
+          "value_mae": 0.10156307690776885,
+          "target_accuracy": 0.46458333333333335
+        }
+      }
+    },
+    {
+      "epoch": 9,
+      "train_loss": 2.187031141916911,
+      "valid_loss": 2.400076150894165,
+      "valid_policy_top1": 0.26458333333333334,
+      "valid_policy_top3": 0.675,
+      "valid_value_mae": 0.094965394337972,
+      "valid_target_accuracy": 0.47229166666666667,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.19375,
+          "policy_top3": 0.58125,
+          "value_mae": 0.0943669819040224,
+          "target_accuracy": 0.47041666666666665
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.50625,
+          "policy_top3": 0.95,
+          "value_mae": 0.0881902752444148,
+          "target_accuracy": 0.469375
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.41875,
+          "policy_top3": 0.9,
+          "value_mae": 0.10371081146877259,
+          "target_accuracy": 0.4689583333333333
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.2125,
+          "policy_top3": 0.60625,
+          "value_mae": 0.09343186400365085,
+          "target_accuracy": 0.46875
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.525,
+          "value_mae": 0.08962730683851987,
+          "target_accuracy": 0.4820833333333333
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1,
+          "policy_top3": 0.4875,
+          "value_mae": 0.10046512864064425,
+          "target_accuracy": 0.4741666666666667
+        }
+      }
+    },
+    {
+      "epoch": 10,
+      "train_loss": 2.1442920207977294,
+      "valid_loss": 2.410850763320923,
+      "valid_policy_top1": 0.259375,
+      "valid_policy_top3": 0.6479166666666667,
+      "valid_value_mae": 0.09397948582967122,
+      "valid_target_accuracy": 0.47989583333333335,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1875,
+          "policy_top3": 0.575,
+          "value_mae": 0.0935972010716796,
+          "target_accuracy": 0.49104166666666665
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.43125,
+          "policy_top3": 0.91875,
+          "value_mae": 0.08782263149041683,
+          "target_accuracy": 0.4708333333333333
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.45625,
+          "policy_top3": 0.89375,
+          "value_mae": 0.10317741823382676,
+          "target_accuracy": 0.469375
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.175,
+          "policy_top3": 0.53125,
+          "value_mae": 0.09193767686374485,
+          "target_accuracy": 0.474375
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.48125,
+          "value_mae": 0.08876424790360034,
+          "target_accuracy": 0.49541666666666667
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15,
+          "policy_top3": 0.4875,
+          "value_mae": 0.09857774809934199,
+          "target_accuracy": 0.47833333333333333
+        }
+      }
+    },
+    {
+      "epoch": 11,
+      "train_loss": 2.1037636756896974,
+      "valid_loss": 2.4057483673095703,
+      "valid_policy_top1": 0.19895833333333332,
+      "valid_policy_top3": 0.6354166666666666,
+      "valid_value_mae": 0.09386016527811686,
+      "valid_target_accuracy": 0.4913194444444444,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.16875,
+          "policy_top3": 0.6,
+          "value_mae": 0.0935464103007689,
+          "target_accuracy": 0.4922916666666667
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.325,
+          "policy_top3": 0.8875,
+          "value_mae": 0.08801111746579408,
+          "target_accuracy": 0.4864583333333333
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.30625,
+          "policy_top3": 0.9,
+          "value_mae": 0.10245930899400264,
+          "target_accuracy": 0.5002083333333334
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.175,
+          "policy_top3": 0.55625,
+          "value_mae": 0.09240609901025891,
+          "target_accuracy": 0.48375
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.125,
+          "policy_top3": 0.40625,
+          "value_mae": 0.08828836369793862,
+          "target_accuracy": 0.5035416666666667
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.09375,
+          "policy_top3": 0.4625,
+          "value_mae": 0.0984496857272461,
+          "target_accuracy": 0.4816666666666667
+        }
+      }
+    },
+    {
+      "epoch": 12,
+      "train_loss": 2.0786145528157554,
+      "valid_loss": 2.420377016067505,
+      "valid_policy_top1": 0.23125,
+      "valid_policy_top3": 0.6145833333333334,
+      "valid_value_mae": 0.09332348505655924,
+      "valid_target_accuracy": 0.5009375,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.19375,
+          "policy_top3": 0.5625,
+          "value_mae": 0.09271077683661133,
+          "target_accuracy": 0.5045833333333334
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.38125,
+          "policy_top3": 0.875,
+          "value_mae": 0.08807549776975065,
+          "target_accuracy": 0.4975
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.3,
+          "policy_top3": 0.85625,
+          "value_mae": 0.10188067441340536,
+          "target_accuracy": 0.5022916666666667
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.19375,
+          "policy_top3": 0.48125,
+          "value_mae": 0.09211382805369794,
+          "target_accuracy": 0.49145833333333333
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.425,
+          "value_mae": 0.087017791159451,
+          "target_accuracy": 0.515625
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1625,
+          "policy_top3": 0.4875,
+          "value_mae": 0.09814233484212309,
+          "target_accuracy": 0.49416666666666664
+        }
+      }
+    },
+    {
+      "epoch": 13,
+      "train_loss": 2.049774154027303,
+      "valid_loss": 2.386552572250366,
+      "valid_policy_top1": 0.2125,
+      "valid_policy_top3": 0.6364583333333333,
+      "valid_value_mae": 0.09306048552195231,
+      "valid_target_accuracy": 0.5052430555555556,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.18125,
+          "policy_top3": 0.5875,
+          "value_mae": 0.09169607134535909,
+          "target_accuracy": 0.5075
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.35625,
+          "policy_top3": 0.88125,
+          "value_mae": 0.08777501115109772,
+          "target_accuracy": 0.506875
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.2875,
+          "policy_top3": 0.86875,
+          "value_mae": 0.10257174242287874,
+          "target_accuracy": 0.5025
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1875,
+          "policy_top3": 0.5,
+          "value_mae": 0.091167975589633,
+          "target_accuracy": 0.495
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.11875,
+          "policy_top3": 0.4625,
+          "value_mae": 0.08854733020998537,
+          "target_accuracy": 0.51375
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.14375,
+          "policy_top3": 0.51875,
+          "value_mae": 0.09660476127173752,
+          "target_accuracy": 0.5058333333333334
+        }
+      }
+    },
+    {
+      "epoch": 14,
+      "train_loss": 2.0045264959335327,
+      "valid_loss": 2.390448808670044,
+      "valid_policy_top1": 0.26666666666666666,
+      "valid_policy_top3": 0.65,
+      "valid_value_mae": 0.09290035565694173,
+      "valid_target_accuracy": 0.5122916666666667,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.23125,
+          "policy_top3": 0.59375,
+          "value_mae": 0.09172904998995364,
+          "target_accuracy": 0.5110416666666666
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.45,
+          "policy_top3": 0.95,
+          "value_mae": 0.08685943083837629,
+          "target_accuracy": 0.5208333333333334
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.4125,
+          "policy_top3": 0.93125,
+          "value_mae": 0.10216640124563128,
+          "target_accuracy": 0.5175
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.19375,
+          "policy_top3": 0.5125,
+          "value_mae": 0.09214204219169915,
+          "target_accuracy": 0.49895833333333334
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1625,
+          "policy_top3": 0.4375,
+          "value_mae": 0.09051053950097412,
+          "target_accuracy": 0.5227083333333333
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15,
+          "policy_top3": 0.475,
+          "value_mae": 0.09399468088522553,
+          "target_accuracy": 0.5027083333333333
+        }
+      }
+    },
+    {
+      "epoch": 15,
+      "train_loss": 1.9800649086634319,
+      "valid_loss": 2.4200470447540283,
+      "valid_policy_top1": 0.19895833333333332,
+      "valid_policy_top3": 0.61875,
+      "valid_value_mae": 0.09250934918721516,
+      "valid_target_accuracy": 0.5195833333333333,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.175,
+          "policy_top3": 0.54375,
+          "value_mae": 0.09009423218667507,
+          "target_accuracy": 0.52
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.26875,
+          "policy_top3": 0.875,
+          "value_mae": 0.08714797666762024,
+          "target_accuracy": 0.5289583333333333
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.3,
+          "policy_top3": 0.85,
+          "value_mae": 0.10326131547335535,
+          "target_accuracy": 0.5189583333333333
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.16875,
+          "policy_top3": 0.48125,
+          "value_mae": 0.09047643856611103,
+          "target_accuracy": 0.5097916666666666
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.125,
+          "policy_top3": 0.44375,
+          "value_mae": 0.08941612537018954,
+          "target_accuracy": 0.5291666666666667
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.51875,
+          "value_mae": 0.09465998872183264,
+          "target_accuracy": 0.510625
+        }
+      }
+    },
+    {
+      "epoch": 16,
+      "train_loss": 1.9701334953308105,
+      "valid_loss": 2.4717047214508057,
+      "valid_policy_top1": 0.209375,
+      "valid_policy_top3": 0.6052083333333333,
+      "valid_value_mae": 0.091342560450236,
+      "valid_target_accuracy": 0.5181597222222222,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1625,
+          "policy_top3": 0.51875,
+          "value_mae": 0.08909689949359745,
+          "target_accuracy": 0.5089583333333333
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.34375,
+          "policy_top3": 0.84375,
+          "value_mae": 0.08581764032132924,
+          "target_accuracy": 0.5225
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.2875,
+          "policy_top3": 0.84375,
+          "value_mae": 0.10121245470363646,
+          "target_accuracy": 0.5204166666666666
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15,
+          "policy_top3": 0.48125,
+          "value_mae": 0.08844799003563822,
+          "target_accuracy": 0.5079166666666667
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.13125,
+          "policy_top3": 0.45,
+          "value_mae": 0.08954419556539506,
+          "target_accuracy": 0.53125
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.18125,
+          "policy_top3": 0.49375,
+          "value_mae": 0.09393619876354933,
+          "target_accuracy": 0.5179166666666667
+        }
+      }
+    },
+    {
+      "epoch": 17,
+      "train_loss": 1.9537237644195558,
+      "valid_loss": 2.4050650596618652,
+      "valid_policy_top1": 0.284375,
+      "valid_policy_top3": 0.6604166666666667,
+      "valid_value_mae": 0.09227698644002279,
+      "valid_target_accuracy": 0.5266319444444445,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.23125,
+          "policy_top3": 0.54375,
+          "value_mae": 0.08798180459998547,
+          "target_accuracy": 0.520625
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.50625,
+          "policy_top3": 0.95625,
+          "value_mae": 0.08655306729488074,
+          "target_accuracy": 0.5395833333333333
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.49375,
+          "policy_top3": 0.94375,
+          "value_mae": 0.09986504020635038,
+          "target_accuracy": 0.533125
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.16875,
+          "policy_top3": 0.5625,
+          "value_mae": 0.0926013303687796,
+          "target_accuracy": 0.5120833333333333
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15,
+          "policy_top3": 0.4625,
+          "value_mae": 0.09299455531872809,
+          "target_accuracy": 0.5327083333333333
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.49375,
+          "value_mae": 0.09366613265592605,
+          "target_accuracy": 0.5216666666666666
+        }
+      }
+    },
+    {
+      "epoch": 18,
+      "train_loss": 1.923890749613444,
+      "valid_loss": 2.46763277053833,
+      "valid_policy_top1": 0.240625,
+      "valid_policy_top3": 0.6458333333333334,
+      "valid_value_mae": 0.09172240098317465,
+      "valid_target_accuracy": 0.5334722222222222,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.175,
+          "policy_top3": 0.56875,
+          "value_mae": 0.08959445802029223,
+          "target_accuracy": 0.531875
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.41875,
+          "policy_top3": 0.8875,
+          "value_mae": 0.0861848083557561,
+          "target_accuracy": 0.549375
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.35625,
+          "policy_top3": 0.9375,
+          "value_mae": 0.10106361710932106,
+          "target_accuracy": 0.5422916666666666
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.21875,
+          "policy_top3": 0.51875,
+          "value_mae": 0.08914009793661534,
+          "target_accuracy": 0.5127083333333333
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.13125,
+          "policy_top3": 0.48125,
+          "value_mae": 0.08962810123339296,
+          "target_accuracy": 0.5375
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.14375,
+          "policy_top3": 0.48125,
+          "value_mae": 0.09472332983277738,
+          "target_accuracy": 0.5270833333333333
+        }
+      }
+    },
+    {
+      "epoch": 19,
+      "train_loss": 1.880591630935669,
+      "valid_loss": 2.4403271675109863,
+      "valid_policy_top1": 0.21041666666666667,
+      "valid_policy_top3": 0.6333333333333333,
+      "valid_value_mae": 0.09040220578511556,
+      "valid_target_accuracy": 0.5337152777777778,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.2125,
+          "policy_top3": 0.59375,
+          "value_mae": 0.08865780311170965,
+          "target_accuracy": 0.535
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.33125,
+          "policy_top3": 0.90625,
+          "value_mae": 0.08547791340388358,
+          "target_accuracy": 0.5472916666666666
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.30625,
+          "policy_top3": 0.85625,
+          "value_mae": 0.09972543364856393,
+          "target_accuracy": 0.539375
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.46875,
+          "value_mae": 0.08857624032534658,
+          "target_accuracy": 0.5179166666666667
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.13125,
+          "policy_top3": 0.475,
+          "value_mae": 0.08732229368761182,
+          "target_accuracy": 0.5404166666666667
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.125,
+          "policy_top3": 0.5,
+          "value_mae": 0.09265354264061898,
+          "target_accuracy": 0.5222916666666667
+        }
+      }
+    },
+    {
+      "epoch": 20,
+      "train_loss": 1.8816408077875773,
+      "valid_loss": 2.459402322769165,
+      "valid_policy_top1": 0.23541666666666666,
+      "valid_policy_top3": 0.6395833333333333,
+      "valid_value_mae": 0.09098604520161947,
+      "valid_target_accuracy": 0.5377777777777778,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.19375,
+          "policy_top3": 0.5625,
+          "value_mae": 0.08873837522696704,
+          "target_accuracy": 0.5377083333333333
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.41875,
+          "policy_top3": 0.86875,
+          "value_mae": 0.08655811913777142,
+          "target_accuracy": 0.551875
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.33125,
+          "policy_top3": 0.90625,
+          "value_mae": 0.09987768314313143,
+          "target_accuracy": 0.5439583333333333
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.19375,
+          "policy_top3": 0.5125,
+          "value_mae": 0.08807535374071448,
+          "target_accuracy": 0.526875
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.11875,
+          "policy_top3": 0.41875,
+          "value_mae": 0.08778880292084068,
+          "target_accuracy": 0.5404166666666667
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.56875,
+          "value_mae": 0.09487789173144848,
+          "target_accuracy": 0.5258333333333334
+        }
+      }
+    },
+    {
+      "epoch": 21,
+      "train_loss": 1.8536844889322917,
+      "valid_loss": 2.454643726348877,
+      "valid_policy_top1": 0.22395833333333334,
+      "valid_policy_top3": 0.6125,
+      "valid_value_mae": 0.09263499577840169,
+      "valid_target_accuracy": 0.541875,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.14375,
+          "policy_top3": 0.50625,
+          "value_mae": 0.08880490569863468,
+          "target_accuracy": 0.5366666666666666
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.40625,
+          "policy_top3": 0.9,
+          "value_mae": 0.08746527510229499,
+          "target_accuracy": 0.5564583333333334
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.39375,
+          "policy_top3": 0.91875,
+          "value_mae": 0.10134061435237526,
+          "target_accuracy": 0.5483333333333333
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.13125,
+          "policy_top3": 0.46875,
+          "value_mae": 0.08972305178176612,
+          "target_accuracy": 0.5291666666666667
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1125,
+          "policy_top3": 0.45,
+          "value_mae": 0.09160125202033668,
+          "target_accuracy": 0.5479166666666667
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.43125,
+          "value_mae": 0.09687486395705491,
+          "target_accuracy": 0.5327083333333333
+        }
+      }
+    },
+    {
+      "epoch": 22,
+      "train_loss": 1.8393877188364665,
+      "valid_loss": 2.4511210918426514,
+      "valid_policy_top1": 0.19375,
+      "valid_policy_top3": 0.5979166666666667,
+      "valid_value_mae": 0.09057902495066325,
+      "valid_target_accuracy": 0.5414583333333334,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.11875,
+          "policy_top3": 0.4875,
+          "value_mae": 0.08878944446332752,
+          "target_accuracy": 0.5385416666666667
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.30625,
+          "policy_top3": 0.88125,
+          "value_mae": 0.08550320398062468,
+          "target_accuracy": 0.5610416666666667
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.275,
+          "policy_top3": 0.875,
+          "value_mae": 0.09904621662572026,
+          "target_accuracy": 0.5527083333333334
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.175,
+          "policy_top3": 0.48125,
+          "value_mae": 0.08578678001649678,
+          "target_accuracy": 0.52625
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.13125,
+          "policy_top3": 0.43125,
+          "value_mae": 0.0880267322761938,
+          "target_accuracy": 0.5447916666666667
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.43125,
+          "value_mae": 0.09632175986189395,
+          "target_accuracy": 0.5254166666666666
+        }
+      }
+    },
+    {
+      "epoch": 23,
+      "train_loss": 1.815672500928243,
+      "valid_loss": 2.479991912841797,
+      "valid_policy_top1": 0.27395833333333336,
+      "valid_policy_top3": 0.6885416666666667,
+      "valid_value_mae": 0.0900204340616862,
+      "valid_target_accuracy": 0.5451388888888888,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.2375,
+          "policy_top3": 0.65625,
+          "value_mae": 0.08775116594042628,
+          "target_accuracy": 0.54
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.425,
+          "policy_top3": 0.9125,
+          "value_mae": 0.08482867674902081,
+          "target_accuracy": 0.56
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.46875,
+          "policy_top3": 0.9375,
+          "value_mae": 0.09636631722096353,
+          "target_accuracy": 0.5522916666666666
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.2,
+          "policy_top3": 0.51875,
+          "value_mae": 0.08830413236282766,
+          "target_accuracy": 0.5341666666666667
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.51875,
+          "value_mae": 0.08780062657315284,
+          "target_accuracy": 0.54625
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.5875,
+          "value_mae": 0.09507166335824876,
+          "target_accuracy": 0.538125
+        }
+      }
+    },
+    {
+      "epoch": 24,
+      "train_loss": 1.79940820535024,
+      "valid_loss": 2.511543035507202,
+      "valid_policy_top1": 0.20625,
+      "valid_policy_top3": 0.6479166666666667,
+      "valid_value_mae": 0.0897767702738444,
+      "valid_target_accuracy": 0.5473611111111111,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.18125,
+          "policy_top3": 0.575,
+          "value_mae": 0.08712687720544636,
+          "target_accuracy": 0.549375
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.35,
+          "policy_top3": 0.91875,
+          "value_mae": 0.08495680775959044,
+          "target_accuracy": 0.5633333333333334
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.2875,
+          "policy_top3": 0.85625,
+          "value_mae": 0.09702817066572607,
+          "target_accuracy": 0.5491666666666667
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.13125,
+          "policy_top3": 0.49375,
+          "value_mae": 0.08675832208245993,
+          "target_accuracy": 0.531875
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1375,
+          "policy_top3": 0.5375,
+          "value_mae": 0.08741476375143975,
+          "target_accuracy": 0.548125
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15,
+          "policy_top3": 0.50625,
+          "value_mae": 0.09537563466001302,
+          "target_accuracy": 0.5422916666666666
+        }
+      }
+    },
+    {
+      "epoch": 25,
+      "train_loss": 1.783422629038493,
+      "valid_loss": 2.5286905765533447,
+      "valid_policy_top1": 0.3125,
+      "valid_policy_top3": 0.6833333333333333,
+      "valid_value_mae": 0.08991758028666179,
+      "valid_target_accuracy": 0.5485416666666667,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.25625,
+          "policy_top3": 0.625,
+          "value_mae": 0.08822451748419553,
+          "target_accuracy": 0.54625
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.5,
+          "policy_top3": 0.89375,
+          "value_mae": 0.08545540140476078,
+          "target_accuracy": 0.5654166666666667
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.5,
+          "policy_top3": 0.91875,
+          "value_mae": 0.09706932385452091,
+          "target_accuracy": 0.5558333333333333
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.25625,
+          "policy_top3": 0.5625,
+          "value_mae": 0.08701343480497599,
+          "target_accuracy": 0.530625
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1625,
+          "policy_top3": 0.525,
+          "value_mae": 0.08738959333859384,
+          "target_accuracy": 0.553125
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.2,
+          "policy_top3": 0.575,
+          "value_mae": 0.09435317533789203,
+          "target_accuracy": 0.54
+        }
+      }
+    },
+    {
+      "epoch": 26,
+      "train_loss": 1.7812009493509928,
+      "valid_loss": 2.5007243156433105,
+      "valid_policy_top1": 0.196875,
+      "valid_policy_top3": 0.615625,
+      "valid_value_mae": 0.08931427001953125,
+      "valid_target_accuracy": 0.5501736111111111,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.13125,
+          "policy_top3": 0.55,
+          "value_mae": 0.08922706628218294,
+          "target_accuracy": 0.5489583333333333
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.3125,
+          "policy_top3": 0.9,
+          "value_mae": 0.08495741884689778,
+          "target_accuracy": 0.5677083333333334
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.3125,
+          "policy_top3": 0.90625,
+          "value_mae": 0.09653866158332676,
+          "target_accuracy": 0.558125
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.16875,
+          "policy_top3": 0.4375,
+          "value_mae": 0.08556203811895102,
+          "target_accuracy": 0.5360416666666666
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.13125,
+          "policy_top3": 0.44375,
+          "value_mae": 0.08638271144591272,
+          "target_accuracy": 0.55125
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.125,
+          "policy_top3": 0.45625,
+          "value_mae": 0.09321769741363824,
+          "target_accuracy": 0.5389583333333333
+        }
+      }
+    },
+    {
+      "epoch": 27,
+      "train_loss": 1.7681557416915894,
+      "valid_loss": 2.5262503623962402,
+      "valid_policy_top1": 0.28958333333333336,
+      "valid_policy_top3": 0.6885416666666667,
+      "valid_value_mae": 0.08934637705485025,
+      "valid_target_accuracy": 0.5508680555555555,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.225,
+          "policy_top3": 0.63125,
+          "value_mae": 0.08875300490763038,
+          "target_accuracy": 0.5479166666666667
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.48125,
+          "policy_top3": 0.93125,
+          "value_mae": 0.08440186837688088,
+          "target_accuracy": 0.5647916666666667
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.51875,
+          "policy_top3": 0.93125,
+          "value_mae": 0.09584806929342449,
+          "target_accuracy": 0.55875
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.2125,
+          "policy_top3": 0.575,
+          "value_mae": 0.08741041468456387,
+          "target_accuracy": 0.53875
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.5125,
+          "value_mae": 0.08767017903737724,
+          "target_accuracy": 0.5552083333333333
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.14375,
+          "policy_top3": 0.55,
+          "value_mae": 0.0919947435730137,
+          "target_accuracy": 0.5397916666666667
+        }
+      }
+    },
+    {
+      "epoch": 28,
+      "train_loss": 1.7650474150975546,
+      "valid_loss": 2.5153472423553467,
+      "valid_policy_top1": 0.21354166666666666,
+      "valid_policy_top3": 0.6229166666666667,
+      "valid_value_mae": 0.089236052831014,
+      "valid_target_accuracy": 0.5537152777777777,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.14375,
+          "policy_top3": 0.51875,
+          "value_mae": 0.08693599917460233,
+          "target_accuracy": 0.5533333333333333
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.3875,
+          "policy_top3": 0.90625,
+          "value_mae": 0.08505473991390318,
+          "target_accuracy": 0.5627083333333334
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.30625,
+          "policy_top3": 0.8875,
+          "value_mae": 0.09675409568008035,
+          "target_accuracy": 0.555625
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.175,
+          "policy_top3": 0.46875,
+          "value_mae": 0.08572366905864329,
+          "target_accuracy": 0.5414583333333334
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.13125,
+          "policy_top3": 0.45625,
+          "value_mae": 0.08700808843132109,
+          "target_accuracy": 0.5597916666666667
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1375,
+          "policy_top3": 0.5,
+          "value_mae": 0.09393974179401994,
+          "target_accuracy": 0.549375
+        }
+      }
+    },
+    {
+      "epoch": 29,
+      "train_loss": 1.7442750374476115,
+      "valid_loss": 2.5490434169769287,
+      "valid_policy_top1": 0.19791666666666666,
+      "valid_policy_top3": 0.5875,
+      "valid_value_mae": 0.088780148824056,
+      "valid_target_accuracy": 0.5548611111111111,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.11875,
+          "policy_top3": 0.49375,
+          "value_mae": 0.08644465545658023,
+          "target_accuracy": 0.5502083333333333
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.35,
+          "policy_top3": 0.875,
+          "value_mae": 0.0850697165587917,
+          "target_accuracy": 0.573125
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.275,
+          "policy_top3": 0.8625,
+          "value_mae": 0.0958258694037795,
+          "target_accuracy": 0.5583333333333333
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.4375,
+          "value_mae": 0.08507829371374101,
+          "target_accuracy": 0.5416666666666666
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15,
+          "policy_top3": 0.4125,
+          "value_mae": 0.08619292383082211,
+          "target_accuracy": 0.5572916666666666
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1375,
+          "policy_top3": 0.44375,
+          "value_mae": 0.0940694248653017,
+          "target_accuracy": 0.5485416666666667
+        }
+      }
+    },
+    {
+      "epoch": 30,
+      "train_loss": 1.7368834575017293,
+      "valid_loss": 2.5229594707489014,
+      "valid_policy_top1": 0.24270833333333333,
+      "valid_policy_top3": 0.6354166666666666,
+      "valid_value_mae": 0.08942278226216634,
+      "valid_target_accuracy": 0.5565625,
+      "valid_by_scenario": {
+        "combo-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15625,
+          "policy_top3": 0.5625,
+          "value_mae": 0.08717906086239964,
+          "target_accuracy": 0.556875
+        },
+        "combo-line-horizontal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.43125,
+          "policy_top3": 0.9,
+          "value_mae": 0.08534310434479267,
+          "target_accuracy": 0.5672916666666666
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.4,
+          "policy_top3": 0.91875,
+          "value_mae": 0.09512310673017055,
+          "target_accuracy": 0.5625
+        },
+        "combo-min-four-fire": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.1875,
+          "policy_top3": 0.48125,
+          "value_mae": 0.08609049189835787,
+          "target_accuracy": 0.5435416666666667
+        },
+        "requirement-two-exact": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.13125,
+          "policy_top3": 0.45625,
+          "value_mae": 0.086729896790348,
+          "target_accuracy": 0.5641666666666667
+        },
+        "steps-line-diagonal": {
+          "items": 160,
+          "active_items": 160,
+          "policy_top1": 0.15,
+          "policy_top3": 0.49375,
+          "value_mae": 0.09607104834867641,
+          "target_accuracy": 0.545
+        }
+      }
+    }
+  ]
+}

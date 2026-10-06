@@ -1,0 +1,208 @@
+{
+  "generatedAt": "2026-08-10T13:28:40.406Z",
+  "scope": "web-dev-only",
+  "reports": [
+    {
+      "file": "D:\\桌面\\code\\ComboAuto\\reports\\policy_external_full200k_yield_24x3_20260810.json",
+      "boardSet": "external",
+      "corpusSource": "solver-bench/full200k_test_initial.jsonl",
+      "cases": 648,
+      "gate": {
+        "trackedVariant": "candidate_w160",
+        "pass": false,
+        "recommendedVariant": "candidate_w40",
+        "recommendationPolicy": "maximize successRate, then minimize p95Ms, then minimize learnedPolicyWeight",
+        "passingVariants": [
+          "candidate_w80",
+          "candidate_w40"
+        ],
+        "candidate_w160": {
+          "successNonRegression": false,
+          "requirementNonRegression": true,
+          "p95WithinTenPercent": true,
+          "pass": false
+        },
+        "candidate_w80": {
+          "successNonRegression": true,
+          "requirementNonRegression": true,
+          "p95WithinTenPercent": true,
+          "pass": true
+        },
+        "candidate_w40": {
+          "successNonRegression": true,
+          "requirementNonRegression": true,
+          "p95WithinTenPercent": true,
+          "pass": true
+        }
+      },
+      "variants": {
+        "baseline": {
+          "cases": 648,
+          "avgMs": 166.74120368045052,
+          "p95Ms": 361.8999996185303,
+          "successRate": 0.16666666666666666,
+          "requirementRate": 0.4583333333333333,
+          "avgMsDeltaPct": 0,
+          "p95MsDeltaPct": 0,
+          "successRateDelta": 0,
+          "requirementRateDelta": 0
+        },
+        "candidate_w160": {
+          "cases": 648,
+          "avgMs": 163.7890432175295,
+          "p95Ms": 343.6000003814697,
+          "successRate": 0.1111111111111111,
+          "requirementRate": 0.4583333333333333,
+          "avgMsDeltaPct": -0.017705044690565306,
+          "p95MsDeltaPct": -0.05056645276692489,
+          "successRateDelta": -0.05555555555555555,
+          "requirementRateDelta": 0
+        },
+        "candidate_w80": {
+          "cases": 648,
+          "avgMs": 164.0354938050847,
+          "p95Ms": 337.3999996185303,
+          "successRate": 0.19444444444444445,
+          "requirementRate": 0.4583333333333333,
+          "avgMsDeltaPct": -0.016227002178484586,
+          "p95MsDeltaPct": -0.06769825925897993,
+          "successRateDelta": 0.02777777777777779,
+          "requirementRateDelta": 0
+        },
+        "candidate_w40": {
+          "cases": 648,
+          "avgMs": 164.86959878456446,
+          "p95Ms": 334.69999980926514,
+          "successRate": 0.2222222222222222,
+          "requirementRate": 0.4583333333333333,
+          "avgMsDeltaPct": -0.011224609482086284,
+          "p95MsDeltaPct": -0.07515888322170759,
+          "successRateDelta": 0.05555555555555555,
+          "requirementRateDelta": 0
+        }
+      }
+    },
+    {
+      "file": "D:\\桌面\\code\\ComboAuto\\reports\\policy_proxy_web_expanded_stratified_20260810.json",
+      "boardSet": "external",
+      "corpusSource": "solver-bench/proxy_web_corpus_20260810.jsonl",
+      "cases": 864,
+      "gate": {
+        "trackedVariant": "candidate_w160",
+        "pass": false,
+        "recommendedVariant": "candidate_w40",
+        "recommendationPolicy": "maximize successRate, then minimize p95Ms, then minimize learnedPolicyWeight",
+        "passingVariants": [
+          "candidate_w40"
+        ],
+        "candidates": {
+          "candidate_w160": {
+            "variant": "candidate_w160",
+            "successNonRegression": false,
+            "requirementNonRegression": true,
+            "p95WithinTenPercent": true,
+            "pass": false
+          },
+          "candidate_w80": {
+            "variant": "candidate_w80",
+            "successNonRegression": true,
+            "requirementNonRegression": true,
+            "p95WithinTenPercent": false,
+            "pass": false
+          },
+          "candidate_w40": {
+            "variant": "candidate_w40",
+            "successNonRegression": true,
+            "requirementNonRegression": true,
+            "p95WithinTenPercent": true,
+            "pass": true
+          }
+        }
+      },
+      "variants": {
+        "baseline": {
+          "cases": 864,
+          "avgMs": 200.03275462964774,
+          "p95Ms": 409.80000000074506,
+          "successRate": 0.2013888888888889,
+          "requirementRate": 0.6041666666666666,
+          "avgMsDeltaPct": 0,
+          "p95MsDeltaPct": 0,
+          "successRateDelta": 0,
+          "requirementRateDelta": 0
+        },
+        "candidate_w160": {
+          "cases": 864,
+          "avgMs": 215.23495370372527,
+          "p95Ms": 405.59999999962747,
+          "successRate": 0.19444444444444445,
+          "requirementRate": 0.6041666666666666,
+          "avgMsDeltaPct": 0.0759985488487811,
+          "p95MsDeltaPct": -0.010248901906076016,
+          "successRateDelta": -0.0069444444444444475,
+          "requirementRateDelta": 0
+        },
+        "candidate_w80": {
+          "cases": 864,
+          "avgMs": 218.70162037034794,
+          "p95Ms": 459,
+          "successRate": 0.2048611111111111,
+          "requirementRate": 0.6041666666666666,
+          "avgMsDeltaPct": 0.09332904391215739,
+          "p95MsDeltaPct": 0.12005856515169715,
+          "successRateDelta": 0.00347222222222221,
+          "requirementRateDelta": 0
+        },
+        "candidate_w40": {
+          "cases": 864,
+          "avgMs": 205.36423611110592,
+          "p95Ms": 422.5,
+          "successRate": 0.2152777777777778,
+          "requirementRate": 0.6041666666666666,
+          "avgMsDeltaPct": 0.026653042354634362,
+          "p95MsDeltaPct": 0.030990727182117744,
+          "successRateDelta": 0.013888888888888895,
+          "requirementRateDelta": 0
+        }
+      }
+    }
+  ],
+  "crossProxyGate": {
+    "candidate_w40": [
+      {
+        "file": "D:\\桌面\\code\\ComboAuto\\reports\\policy_external_full200k_yield_24x3_20260810.json",
+        "pass": true,
+        "successNonRegression": true,
+        "requirementNonRegression": true,
+        "p95WithinTenPercent": true
+      },
+      {
+        "file": "D:\\桌面\\code\\ComboAuto\\reports\\policy_proxy_web_expanded_stratified_20260810.json",
+        "pass": true,
+        "successNonRegression": true,
+        "requirementNonRegression": true,
+        "p95WithinTenPercent": true
+      }
+    ],
+    "candidate_w160": [
+      {
+        "file": "D:\\桌面\\code\\ComboAuto\\reports\\policy_external_full200k_yield_24x3_20260810.json",
+        "pass": false,
+        "successNonRegression": false,
+        "requirementNonRegression": true,
+        "p95WithinTenPercent": true
+      },
+      {
+        "file": "D:\\桌面\\code\\ComboAuto\\reports\\policy_proxy_web_expanded_stratified_20260810.json",
+        "pass": false,
+        "successNonRegression": false,
+        "requirementNonRegression": true,
+        "p95WithinTenPercent": true
+      }
+    ],
+    "w40PassesAll": true,
+    "w160PassesAll": false,
+    "stableRecommendation": "candidate_w40"
+  },
+  "decision": "w40 is the only candidate that passes all currently available proxy reports; do not promote until real Web capture is validated."
+}

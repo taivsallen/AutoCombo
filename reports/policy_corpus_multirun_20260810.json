@@ -1,0 +1,42 @@
+{
+  "generatedAt": "2026-08-10",
+  "scope": "web-dev-only",
+  "candidateModel": "public/policy_value_target_expanded_stratified_balanced.onnx",
+  "protocol": {
+    "boardSet": "corpus",
+    "sourceFile": "fixed_test_suite.json",
+    "sourceBoards": 4000,
+    "sampledBoards": 12,
+    "runs": 2,
+    "runSemantics": "same-page repeated runs",
+    "independentSessionNote": "reload the page for independent runtime sessions",
+    "repetitionsPerRun": 3,
+    "beamWidth": 120,
+    "maxNodes": 8000,
+    "searchSeed": 20260613
+  },
+  "runSummaries": [
+    {
+      "run": 1,
+      "baseline": { "avgMs": 106.375, "p95Ms": 244.70000076293945, "successRate": 0.2777777777777778, "requirementRate": 0.5833333333333334 },
+      "candidate_w160": { "avgMs": 112.84814819583187, "p95Ms": 245.80000019073486, "successRate": 0.3055555555555556, "requirementRate": 0.5833333333333334 },
+      "candidate_w80": { "avgMs": 109.6064814903118, "p95Ms": 237.89999961853027, "successRate": 0.3055555555555556, "requirementRate": 0.5833333333333334 },
+      "candidate_w40": { "avgMs": 109.04166665783634, "p95Ms": 243.5, "successRate": 0.2777777777777778, "requirementRate": 0.5833333333333334 }
+    },
+    {
+      "run": 2,
+      "baseline": { "avgMs": 106.8499999664448, "p95Ms": 235.89999961853027, "successRate": 0.2777777777777778, "requirementRate": 0.5833333333333334 },
+      "candidate_w160": { "avgMs": 110.51574073014436, "p95Ms": 241.10000038146973, "successRate": 0.3055555555555556, "requirementRate": 0.5833333333333334 },
+      "candidate_w80": { "avgMs": 108.8185185149864, "p95Ms": 244.80000019073486, "successRate": 0.3055555555555556, "requirementRate": 0.5833333333333334 },
+      "candidate_w40": { "avgMs": 107.55185192602652, "p95Ms": 239.60000038146973, "successRate": 0.2777777777777778, "requirementRate": 0.5833333333333334 }
+    }
+  ],
+  "aggregate": {
+    "baseline": { "avgMs": 106.61249998322239, "p95Ms": 239.30000019073486, "successRate": 0.2777777777777778, "requirementRate": 0.5833333333333334 },
+    "candidate_w160": { "avgMs": 111.68194446298811, "p95Ms": 243.5999994277954, "successRate": 0.3055555555555556, "requirementRate": 0.5833333333333334 },
+    "candidate_w80": { "avgMs": 109.2125000026491, "p95Ms": 244.80000019073486, "successRate": 0.3055555555555556, "requirementRate": 0.5833333333333334 },
+    "candidate_w40": { "avgMs": 108.29675929193144, "p95Ms": 241.20000076293945, "successRate": 0.2777777777777778, "requirementRate": 0.5833333333333334 }
+  },
+  "gatePassed": true,
+  "defaultChanged": false
+}

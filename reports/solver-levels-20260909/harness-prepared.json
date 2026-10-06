@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-09T12:59:39.542Z",
+  "cases": [
+    {
+      "id": "ordinary-1",
+      "scenario": "ordinary",
+      "boardIndex": 0,
+      "board": [
+        [
+          4,
+          5,
+          3,
+          5,
+          4,
+          2
+        ],
+        [
+          5,
+          4,
+          0,
+          4,
+          3,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          4,
+          5,
+          1
+        ],
+        [
+          1,
+          2,
+          4,
+          5,
+          3,
+          1
+        ],
+        [
+          4,
+          1,
+          4,
+          1,
+          3,
+          3
+        ],
+        [
+          4,
+          2,
+          2,
+          2,
+          5,
+          0
+        ]
+      ],
+      "boardHash": "7df0dfb6bb4026b47e96bcf0f127cde9eac4155cc07c85d7b855595b53816d86",
+      "searchSeed": 3267457980,
+      "diagonal": true,
+      "skyfall": true,
+      "useRow0": false,
+      "initTargetCombo": 6,
+      "target": 10,
+      "mode": "free",
+      "priority": "steps",
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": [],
+      "fixturePriority": "combo",
+      "maxSteps": 80
+    }
+  ],
+  "profiles": [
+    {
+      "level": 1,
+      "label": "極速",
+      "timeBudgetMs": 160,
+      "beamWidth": 64,
+      "maxNodes": 50000,
+      "repairReserveMs": 32,
+      "finalReserveMs": 18,
+      "repairMaxAttempts": 128
+    },
+    {
+      "level": 2,
+      "label": "輕量",
+      "timeBudgetMs": 400,
+      "beamWidth": 96,
+      "maxNodes": 90000,
+      "repairReserveMs": 64,
+      "finalReserveMs": 20,
+      "repairMaxAttempts": 256
+    },
+    {
+      "level": 3,
+      "label": "平衡",
+      "timeBudgetMs": 800,
+      "beamWidth": 128,
+      "maxNodes": 145000,
+      "repairReserveMs": 120,
+      "finalReserveMs": 24,
+      "repairMaxAttempts": 512
+    },
+    {
+      "level": 4,
+      "label": "高精",
+      "timeBudgetMs": 1600,
+      "beamWidth": 192,
+      "maxNodes": 240000,
+      "repairReserveMs": 220,
+      "finalReserveMs": 32,
+      "repairMaxAttempts": 768
+    },
+    {
+      "level": 5,
+      "label": "極限",
+      "timeBudgetMs": 3200,
+      "beamWidth": 256,
+      "maxNodes": 400000,
+      "repairReserveMs": 400,
+      "finalReserveMs": 40,
+      "repairMaxAttempts": 1024
+    }
+  ],
+  "config": {
+    "beamWidth": 440,
+    "maxSteps": 80,
+    "maxNodes": 50000,
+    "evalWorkers": 1,
+    "browserYield": false,
+    "humanPlanner": true,
+    "reversePlanner": true,
+    "reverseMaxSteps": 60,
+    "deferMoveMaterialization": true,
+    "cheapLocalGuidance": true,
+    "cheapLegacyReserve": 0.25,
+    "cheapEvalScale": 2,
+    "cheapEvalConstraintScale": 2.5,
+    "stepPenalty": 0,
+    "potentialWeight": 10,
+    "clearedWeight": 300,
+    "timeBudgetMs": 160,
+    "hardStepLimitEnabled": false,
+    "hardStepLimit": 80
+  },
+  "caseSetSha256": "a9bcaa3485f52c320a63cd82838f0416630eef1544247b29426324a2bda545f2",
+  "repeats": 1,
+  "independentBoards": 1,
+  "provenance": {
+    "mode": "saved_fixture_reuse",
+    "fixtureReport": "D:\\桌面\\code\\ComboAuto\\reports\\solver-next-20260909\\holdout-final.json",
+    "fixtureSha256": "688086470675424805289c09b36c4510540141ae0430d335b67266744a8eb304",
+    "holdoutClaim": false,
+    "priorityOverride": "steps",
+    "defaultMaxSteps": 80,
+    "profilePath": "D:\\桌面\\code\\ComboAuto\\src\\solver\\performanceLevels.js",
+    "profileSha256": "e2d88bd033743545f2f6f999d40a98ddf767326f2d7c0adfbf26e8c0e5fa0d2e"
+  },
+  "status": "PREPARED_NOT_BENCHMARKED",
+  "trials": []
+}

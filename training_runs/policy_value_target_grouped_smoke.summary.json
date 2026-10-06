@@ -1,0 +1,256 @@
+{
+  "schema": "comboauto.teacher.policy-value-target.v1",
+  "input_dim": 397,
+  "checkpoint": "training_runs\\policy_value_target_grouped_smoke.pt",
+  "onnx": "public\\policy_value_target_grouped_smoke.onnx",
+  "sampling": {
+    "mode": "balanced",
+    "power": 1.0,
+    "weights_by_scenario": {
+      "combo-connected-diagonal": 0.0021929824561403508,
+      "combo-line-diagonal": 0.0021551724137931034,
+      "combo-line-orthogonal": 0.0021929824561403508,
+      "combo-line-skyfall-diagonal": 0.0021551724137931034,
+      "combo-line-skyfall-orthogonal": 0.0021929824561403508,
+      "combo-min-four-fire": 0.0021929824561403508,
+      "requirement-line-diagonal": 0.002232142857142857
+    }
+  },
+  "datasets": {
+    "train": {
+      "items": 3200,
+      "scenario_counts": {
+        "combo-connected-diagonal": 456,
+        "combo-line-diagonal": 464,
+        "combo-line-orthogonal": 456,
+        "combo-line-skyfall-diagonal": 464,
+        "combo-line-skyfall-orthogonal": 456,
+        "combo-min-four-fire": 456,
+        "requirement-line-diagonal": 448
+      }
+    },
+    "valid": {
+      "items": 400,
+      "scenario_counts": {
+        "combo-connected-diagonal": 56,
+        "combo-line-diagonal": 56,
+        "combo-line-orthogonal": 64,
+        "combo-line-skyfall-diagonal": 56,
+        "combo-line-skyfall-orthogonal": 56,
+        "combo-min-four-fire": 56,
+        "requirement-line-diagonal": 56
+      }
+    },
+    "test": {
+      "items": 400,
+      "scenario_counts": {
+        "combo-connected-diagonal": 56,
+        "combo-line-diagonal": 56,
+        "combo-line-orthogonal": 56,
+        "combo-line-skyfall-diagonal": 56,
+        "combo-line-skyfall-orthogonal": 56,
+        "combo-min-four-fire": 56,
+        "requirement-line-diagonal": 64
+      }
+    }
+  },
+  "valid": {
+    "loss": 2.773981809616089,
+    "policy_top1": 0.37,
+    "policy_top3": 0.75,
+    "value_mae": 0.10925627708435058,
+    "target_accuracy": 0.19441666666666665,
+    "by_scenario": {
+      "combo-connected-diagonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.39285714285714285,
+        "policy_top3": 0.7678571428571429,
+        "value_mae": 0.12018052102731806,
+        "target_accuracy": 0.1869047619047619
+      },
+      "combo-line-diagonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.375,
+        "policy_top3": 0.7678571428571429,
+        "value_mae": 0.12397536775097251,
+        "target_accuracy": 0.19702380952380952
+      },
+      "combo-line-orthogonal": {
+        "items": 64,
+        "active_items": 64,
+        "policy_top1": 0.3125,
+        "policy_top3": 0.875,
+        "value_mae": 0.09301053680246696,
+        "target_accuracy": 0.20260416666666667
+      },
+      "combo-line-skyfall-diagonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.375,
+        "policy_top3": 0.5892857142857143,
+        "value_mae": 0.12445825058966875,
+        "target_accuracy": 0.22857142857142856
+      },
+      "combo-line-skyfall-orthogonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.39285714285714285,
+        "policy_top3": 0.875,
+        "value_mae": 0.09823710145428777,
+        "target_accuracy": 0.19464285714285715
+      },
+      "combo-min-four-fire": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.375,
+        "policy_top3": 0.7321428571428571,
+        "value_mae": 0.09444973138826233,
+        "target_accuracy": 0.18392857142857144
+      },
+      "requirement-line-diagonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.375,
+        "policy_top3": 0.625,
+        "value_mae": 0.11280327755957842,
+        "target_accuracy": 0.16607142857142856
+      }
+    }
+  },
+  "test": {
+    "loss": 2.7569022178649902,
+    "policy_top1": 0.3075,
+    "policy_top3": 0.7875,
+    "value_mae": 0.10940768241882325,
+    "target_accuracy": 0.20425,
+    "by_scenario": {
+      "combo-connected-diagonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.25,
+        "policy_top3": 0.6785714285714286,
+        "value_mae": 0.130120500789157,
+        "target_accuracy": 0.20476190476190476
+      },
+      "combo-line-diagonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.25,
+        "policy_top3": 0.7321428571428571,
+        "value_mae": 0.10406675023425903,
+        "target_accuracy": 0.21607142857142858
+      },
+      "combo-line-orthogonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.42857142857142855,
+        "policy_top3": 0.9285714285714286,
+        "value_mae": 0.1050900464345302,
+        "target_accuracy": 0.2154761904761905
+      },
+      "combo-line-skyfall-diagonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.5,
+        "policy_top3": 0.8035714285714286,
+        "value_mae": 0.12526119447180203,
+        "target_accuracy": 0.16547619047619047
+      },
+      "combo-line-skyfall-orthogonal": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.26785714285714285,
+        "policy_top3": 0.9821428571428571,
+        "value_mae": 0.09598230005108885,
+        "target_accuracy": 0.2011904761904762
+      },
+      "combo-min-four-fire": {
+        "items": 56,
+        "active_items": 56,
+        "policy_top1": 0.17857142857142858,
+        "policy_top3": 0.7142857142857143,
+        "value_mae": 0.09414857140343104,
+        "target_accuracy": 0.20535714285714285
+      },
+      "requirement-line-diagonal": {
+        "items": 64,
+        "active_items": 64,
+        "policy_top1": 0.28125,
+        "policy_top3": 0.6875,
+        "value_mae": 0.11096233216812834,
+        "target_accuracy": 0.21927083333333333
+      }
+    }
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 2.814274387359619,
+      "valid_loss": 2.773981809616089,
+      "valid_policy_top1": 0.37,
+      "valid_policy_top3": 0.75,
+      "valid_value_mae": 0.10925627708435058,
+      "valid_target_accuracy": 0.19441666666666665,
+      "valid_by_scenario": {
+        "combo-connected-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.39285714285714285,
+          "policy_top3": 0.7678571428571429,
+          "value_mae": 0.12018052102731806,
+          "target_accuracy": 0.1869047619047619
+        },
+        "combo-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.7678571428571429,
+          "value_mae": 0.12397536775097251,
+          "target_accuracy": 0.19702380952380952
+        },
+        "combo-line-orthogonal": {
+          "items": 64,
+          "active_items": 64,
+          "policy_top1": 0.3125,
+          "policy_top3": 0.875,
+          "value_mae": 0.09301053680246696,
+          "target_accuracy": 0.20260416666666667
+        },
+        "combo-line-skyfall-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.5892857142857143,
+          "value_mae": 0.12445825058966875,
+          "target_accuracy": 0.22857142857142856
+        },
+        "combo-line-skyfall-orthogonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.39285714285714285,
+          "policy_top3": 0.875,
+          "value_mae": 0.09823710145428777,
+          "target_accuracy": 0.19464285714285715
+        },
+        "combo-min-four-fire": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.7321428571428571,
+          "value_mae": 0.09444973138826233,
+          "target_accuracy": 0.18392857142857144
+        },
+        "requirement-line-diagonal": {
+          "items": 56,
+          "active_items": 56,
+          "policy_top1": 0.375,
+          "policy_top3": 0.625,
+          "value_mae": 0.11280327755957842,
+          "target_accuracy": 0.16607142857142856
+        }
+      }
+    }
+  ]
+}

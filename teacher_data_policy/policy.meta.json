@@ -1,0 +1,36 @@
+{
+  "schema_version": 2,
+  "schema": "comboauto.teacher.policy-value-target.v1",
+  "generated_at": "2026-08-09T15:33:03.340Z",
+  "elapsed_sec": 186.523,
+  "config": {
+    "outputDir": "teacher_data_policy",
+    "prefix": "policy",
+    "baseSeed": 12345,
+    "boards": 1000,
+    "statesPerBoard": 8,
+    "rolloutSteps": 14,
+    "stepsLeftMin": 4,
+    "stepsLeftMax": 18,
+    "beamWidth": 80,
+    "maxNodes": 8000,
+    "target": 8,
+    "mode": "combo",
+    "skyfall": false,
+    "diagonal": true,
+    "policyTemperature": 250000,
+    "progressEvery": 100
+  },
+  "counts": {
+    "train": 6400,
+    "valid": 800,
+    "test": 800,
+    "totalStates": 8000,
+    "totalLabelExpansions": 29126621
+  },
+  "files": {
+    "train": "teacher_data_policy\\policy.train.jsonl",
+    "valid": "teacher_data_policy\\policy.valid.jsonl",
+    "test": "teacher_data_policy\\policy.test.jsonl"
+  }
+}

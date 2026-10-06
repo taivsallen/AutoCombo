@@ -1,0 +1,1303 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-09T13:06:11.323Z",
+  "cases": [
+    {
+      "id": "ordinary-1",
+      "scenario": "ordinary",
+      "boardIndex": 0,
+      "board": [
+        [
+          4,
+          5,
+          5,
+          0,
+          4,
+          3
+        ],
+        [
+          5,
+          1,
+          1,
+          3,
+          3,
+          5
+        ],
+        [
+          4,
+          4,
+          1,
+          4,
+          0,
+          3
+        ],
+        [
+          4,
+          0,
+          1,
+          1,
+          0,
+          3
+        ],
+        [
+          2,
+          4,
+          3,
+          3,
+          5,
+          2
+        ],
+        [
+          3,
+          1,
+          0,
+          2,
+          0,
+          5
+        ]
+      ],
+      "boardHash": "f97bb882080652acb1562b8b1a4b708f02a184fbe7d89170abe887f7a2d7a88f",
+      "searchSeed": 1741770799,
+      "diagonal": true,
+      "skyfall": true,
+      "useRow0": false,
+      "initTargetCombo": 6,
+      "target": 10,
+      "mode": "free",
+      "priority": "combo",
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    },
+    {
+      "id": "ordinary-2",
+      "scenario": "ordinary",
+      "boardIndex": 1,
+      "board": [
+        [
+          5,
+          5,
+          5,
+          2,
+          1,
+          4
+        ],
+        [
+          0,
+          5,
+          2,
+          3,
+          3,
+          1
+        ],
+        [
+          1,
+          2,
+          4,
+          4,
+          2,
+          1
+        ],
+        [
+          4,
+          3,
+          4,
+          3,
+          4,
+          4
+        ],
+        [
+          4,
+          3,
+          1,
+          5,
+          4,
+          3
+        ],
+        [
+          3,
+          4,
+          1,
+          4,
+          2,
+          4
+        ]
+      ],
+      "boardHash": "50364f0cef0ac239681d5e2f685be24887f087001c38fc886e71499301035201",
+      "searchSeed": 1920330982,
+      "diagonal": true,
+      "skyfall": true,
+      "useRow0": false,
+      "initTargetCombo": 6,
+      "target": 10,
+      "mode": "free",
+      "priority": "combo",
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    },
+    {
+      "id": "no_diagonal-1",
+      "scenario": "no_diagonal",
+      "boardIndex": 0,
+      "board": [
+        [
+          1,
+          4,
+          3,
+          5,
+          3,
+          3
+        ],
+        [
+          2,
+          3,
+          4,
+          0,
+          4,
+          0
+        ],
+        [
+          0,
+          3,
+          3,
+          5,
+          4,
+          4
+        ],
+        [
+          3,
+          3,
+          5,
+          0,
+          5,
+          2
+        ],
+        [
+          2,
+          4,
+          1,
+          4,
+          5,
+          0
+        ],
+        [
+          4,
+          4,
+          0,
+          5,
+          3,
+          3
+        ]
+      ],
+      "boardHash": "996806656f87605b849e4d3b05608e77f13901f68bd44a29313ac03392becec2",
+      "searchSeed": 3483808904,
+      "diagonal": false,
+      "skyfall": true,
+      "useRow0": false,
+      "initTargetCombo": 6,
+      "target": 10,
+      "mode": "free",
+      "priority": "combo",
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    },
+    {
+      "id": "no_diagonal-2",
+      "scenario": "no_diagonal",
+      "boardIndex": 1,
+      "board": [
+        [
+          1,
+          1,
+          4,
+          3,
+          5,
+          1
+        ],
+        [
+          1,
+          4,
+          5,
+          5,
+          0,
+          5
+        ],
+        [
+          4,
+          2,
+          0,
+          2,
+          5,
+          5
+        ],
+        [
+          3,
+          2,
+          1,
+          0,
+          2,
+          1
+        ],
+        [
+          3,
+          4,
+          0,
+          2,
+          4,
+          4
+        ],
+        [
+          4,
+          4,
+          4,
+          4,
+          4,
+          0
+        ]
+      ],
+      "boardHash": "1479ac516a133f3af01cd342d53d94c50f70cd82526bb91518a84443cc1b1682",
+      "searchSeed": 1463917413,
+      "diagonal": false,
+      "skyfall": true,
+      "useRow0": false,
+      "initTargetCombo": 6,
+      "target": 10,
+      "mode": "free",
+      "priority": "combo",
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    },
+    {
+      "id": "no_skyfall-1",
+      "scenario": "no_skyfall",
+      "boardIndex": 0,
+      "board": [
+        [
+          5,
+          4,
+          4,
+          5,
+          2,
+          4
+        ],
+        [
+          1,
+          3,
+          2,
+          2,
+          0,
+          5
+        ],
+        [
+          0,
+          4,
+          1,
+          1,
+          4,
+          0
+        ],
+        [
+          3,
+          5,
+          3,
+          3,
+          0,
+          5
+        ],
+        [
+          5,
+          4,
+          3,
+          2,
+          0,
+          4
+        ],
+        [
+          5,
+          1,
+          5,
+          5,
+          5,
+          0
+        ]
+      ],
+      "boardHash": "d1b9b80cc75ffcf08f0101d87d24975d77f2b4a2a6fa6b2c627bf0d6ea228f0d",
+      "searchSeed": 2751832871,
+      "diagonal": true,
+      "skyfall": false,
+      "useRow0": false,
+      "initTargetCombo": 6,
+      "target": 10,
+      "mode": "free",
+      "priority": "combo",
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    },
+    {
+      "id": "no_skyfall-2",
+      "scenario": "no_skyfall",
+      "boardIndex": 1,
+      "board": [
+        [
+          0,
+          1,
+          4,
+          1,
+          0,
+          2
+        ],
+        [
+          3,
+          5,
+          1,
+          0,
+          1,
+          0
+        ],
+        [
+          3,
+          1,
+          1,
+          5,
+          2,
+          3
+        ],
+        [
+          3,
+          0,
+          5,
+          2,
+          5,
+          4
+        ],
+        [
+          2,
+          4,
+          0,
+          3,
+          2,
+          1
+        ],
+        [
+          5,
+          2,
+          4,
+          4,
+          3,
+          2
+        ]
+      ],
+      "boardHash": "35c829084d7951d4ad5dd6f7e1f9abfd0530400228647b890fe930306cdc493f",
+      "searchSeed": 385339254,
+      "diagonal": true,
+      "skyfall": false,
+      "useRow0": false,
+      "initTargetCombo": 6,
+      "target": 10,
+      "mode": "free",
+      "priority": "combo",
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    },
+    {
+      "id": "row0_start_markers-1",
+      "scenario": "row0_start_markers",
+      "boardIndex": 0,
+      "board": [
+        [
+          0,
+          5,
+          100,
+          4,
+          4,
+          5
+        ],
+        [
+          4,
+          2,
+          0,
+          4,
+          5,
+          5
+        ],
+        [
+          3,
+          4,
+          5,
+          4,
+          11,
+          3
+        ],
+        [
+          4,
+          0,
+          221,
+          2,
+          1004,
+          3
+        ],
+        [
+          3,
+          1,
+          3,
+          5,
+          2002,
+          5
+        ],
+        [
+          1,
+          3,
+          1,
+          4,
+          0,
+          2
+        ]
+      ],
+      "boardHash": "7549b6f800f29d99607917f57081159d59f3a9d448cd341dbe0e3d79ebb68275",
+      "searchSeed": 3313834731,
+      "diagonal": true,
+      "skyfall": true,
+      "useRow0": true,
+      "initTargetCombo": 6,
+      "target": 10,
+      "mode": "free",
+      "priority": "combo",
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    },
+    {
+      "id": "row0_start_markers-2",
+      "scenario": "row0_start_markers",
+      "boardIndex": 1,
+      "board": [
+        [
+          4,
+          4,
+          104,
+          5,
+          0,
+          5
+        ],
+        [
+          4,
+          5,
+          4,
+          4,
+          5,
+          5
+        ],
+        [
+          3,
+          2,
+          0,
+          1,
+          10,
+          1
+        ],
+        [
+          0,
+          2,
+          220,
+          4,
+          1004,
+          0
+        ],
+        [
+          2,
+          4,
+          4,
+          1,
+          2005,
+          2
+        ],
+        [
+          2,
+          4,
+          1,
+          4,
+          4,
+          3
+        ]
+      ],
+      "boardHash": "bcd98c82a80fe7672d30624aff2910af9b8247be71e5671947184913144cdbfd",
+      "searchSeed": 1005729872,
+      "diagonal": true,
+      "skyfall": true,
+      "useRow0": true,
+      "initTargetCombo": 6,
+      "target": 10,
+      "mode": "free",
+      "priority": "combo",
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": []
+    },
+    {
+      "id": "ordered_requirement-1",
+      "scenario": "ordered_requirement",
+      "boardIndex": 0,
+      "board": [
+        [
+          5,
+          3,
+          2,
+          3,
+          3,
+          2
+        ],
+        [
+          5,
+          3,
+          4,
+          5,
+          0,
+          5
+        ],
+        [
+          2,
+          1,
+          3,
+          4,
+          5,
+          3
+        ],
+        [
+          1,
+          1,
+          0,
+          0,
+          0,
+          5
+        ],
+        [
+          1,
+          2,
+          2,
+          1,
+          2,
+          1
+        ],
+        [
+          0,
+          2,
+          1,
+          1,
+          4,
+          2
+        ]
+      ],
+      "boardHash": "56f31b0ab109bedeacbc37e57f14bbb85741fb91fa481747a607b7f6a7e02b60",
+      "searchSeed": 1271285781,
+      "diagonal": true,
+      "skyfall": true,
+      "useRow0": false,
+      "initTargetCombo": 6,
+      "target": 10,
+      "mode": "free",
+      "priority": "combo",
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": [
+          {
+            "orb": 1,
+            "size": 5,
+            "count": 1,
+            "match": "exact"
+          },
+          {
+            "orb": 0,
+            "size": 3,
+            "count": 2,
+            "match": "exact"
+          }
+        ]
+      },
+      "specials": []
+    },
+    {
+      "id": "ordered_requirement-2",
+      "scenario": "ordered_requirement",
+      "boardIndex": 1,
+      "board": [
+        [
+          5,
+          4,
+          2,
+          1,
+          4,
+          3
+        ],
+        [
+          0,
+          0,
+          5,
+          3,
+          2,
+          5
+        ],
+        [
+          5,
+          0,
+          4,
+          1,
+          3,
+          4
+        ],
+        [
+          4,
+          1,
+          2,
+          4,
+          4,
+          3
+        ],
+        [
+          0,
+          1,
+          2,
+          1,
+          5,
+          3
+        ],
+        [
+          5,
+          2,
+          1,
+          3,
+          4,
+          4
+        ]
+      ],
+      "boardHash": "9ca68dc5c0b6aa50afe3351dd713e0f8c743b4f76cb1170bdd12571a6e195ae2",
+      "searchSeed": 2661156729,
+      "diagonal": true,
+      "skyfall": true,
+      "useRow0": false,
+      "initTargetCombo": 6,
+      "target": 10,
+      "mode": "free",
+      "priority": "combo",
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": [
+          {
+            "orb": 1,
+            "size": 5,
+            "count": 1,
+            "match": "exact"
+          },
+          {
+            "orb": 0,
+            "size": 3,
+            "count": 2,
+            "match": "exact"
+          }
+        ]
+      },
+      "specials": []
+    },
+    {
+      "id": "special_shape-1",
+      "scenario": "special_shape",
+      "boardIndex": 0,
+      "board": [
+        [
+          3,
+          3,
+          1,
+          3,
+          0,
+          1
+        ],
+        [
+          5,
+          2,
+          3,
+          5,
+          3,
+          0
+        ],
+        [
+          3,
+          0,
+          5,
+          1,
+          0,
+          2
+        ],
+        [
+          1,
+          4,
+          3,
+          2,
+          4,
+          0
+        ],
+        [
+          5,
+          0,
+          1,
+          4,
+          4,
+          5
+        ],
+        [
+          4,
+          4,
+          0,
+          5,
+          2,
+          2
+        ]
+      ],
+      "boardHash": "1b619a99d8f3ab2ef9a7514d00f9cae1817cd62865576e5261d71e5702886568",
+      "searchSeed": 1924789841,
+      "diagonal": true,
+      "skyfall": true,
+      "useRow0": false,
+      "initTargetCombo": 6,
+      "target": 10,
+      "mode": "free",
+      "priority": "combo",
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": [
+        {
+          "type": "cross",
+          "orb": -1,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "special_shape-2",
+      "scenario": "special_shape",
+      "boardIndex": 1,
+      "board": [
+        [
+          4,
+          4,
+          1,
+          0,
+          0,
+          1
+        ],
+        [
+          4,
+          0,
+          3,
+          2,
+          0,
+          5
+        ],
+        [
+          3,
+          4,
+          3,
+          1,
+          3,
+          3
+        ],
+        [
+          2,
+          0,
+          5,
+          1,
+          1,
+          2
+        ],
+        [
+          2,
+          2,
+          3,
+          3,
+          0,
+          1
+        ],
+        [
+          0,
+          1,
+          4,
+          4,
+          5,
+          5
+        ]
+      ],
+      "boardHash": "2c69379c0e96a4b40937060f242fe9710c2c4f7f1c10ac0c129cb3910851da43",
+      "searchSeed": 2920339214,
+      "diagonal": true,
+      "skyfall": true,
+      "useRow0": false,
+      "initTargetCombo": 6,
+      "target": 10,
+      "mode": "free",
+      "priority": "combo",
+      "ruleProfile": {
+        "orbRules": [
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          },
+          {
+            "minClear": 3,
+            "clearMode": "line"
+          }
+        ],
+        "requirements": []
+      },
+      "specials": [
+        {
+          "type": "cross",
+          "orb": -1,
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "caseSetSha256": "ca9831d5ae7b6f5636102771475dc0622eaf73bba605c9d582541c45ea74e20f",
+  "config": {
+    "beamWidth": 440,
+    "maxSteps": 30,
+    "maxNodes": 50000,
+    "evalWorkers": 1,
+    "browserYield": false,
+    "humanPlanner": true,
+    "reversePlanner": true,
+    "reverseMaxSteps": 60,
+    "deferMoveMaterialization": true,
+    "cheapLocalGuidance": true,
+    "cheapLegacyReserve": 0.25,
+    "cheapEvalScale": 2,
+    "cheapEvalConstraintScale": 2.5,
+    "stepPenalty": 0,
+    "potentialWeight": 10,
+    "clearedWeight": 300,
+    "timeBudgetMs": 160
+  },
+  "provenance": {
+    "mode": "fresh_generated_holdout",
+    "seed": 539364303,
+    "exclusionSources": [
+      {
+        "path": "fixed_test_suite.json",
+        "sha256": "956a1d71eee81840b2253e6b7b8e13c4b57f32c48ddbcf0c6dbc67cebb45e4c6",
+        "rows": 4000,
+        "additionalDistinctBoards": 4000
+      },
+      {
+        "path": "public/solver-bench/proxy_web_corpus_20260810.jsonl",
+        "sha256": "8e079c30eaf3b7bf5b534d1a55d7ff97ca74db948363ec96547ff5e1d84e37d7",
+        "rows": 100,
+        "additionalDistinctBoards": 100
+      },
+      {
+        "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-update-20260909\\core-ab-delivery.json",
+        "sha256": "8b768d494b8ed829c30795bead1c3c9ad6ce035ea48ca1a76bb96173a5964618",
+        "rows": 30,
+        "additionalDistinctBoards": 30
+      },
+      {
+        "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-update-20260909\\core-ab-final.json",
+        "sha256": "1ce4626fa471bac1ec078c023d3f0369471e2a614bfef1b0f0e3c6bdbea6c283",
+        "rows": 30,
+        "additionalDistinctBoards": 30
+      },
+      {
+        "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-update-20260909\\core-ab-smoke.json",
+        "sha256": "915c213e31ac22a153a04f95a5b8daaa957163ea963e270dd0c6f744984a0b1f",
+        "rows": 6,
+        "additionalDistinctBoards": 0
+      },
+      {
+        "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-update-20260909\\oracle-comparison.json",
+        "sha256": "ea45246f7ccc550a5b0a1cfc3a635403d393e9d1cef153df8590cf58651e1ecb",
+        "rows": 18,
+        "additionalDistinctBoards": 18
+      },
+      {
+        "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-update-20260909\\reference-differential.json",
+        "sha256": "7cce03123c4d2416a3456a0f8a6d9e081e39b83548985f7f130be87f4df96f11",
+        "rows": 500,
+        "additionalDistinctBoards": 500
+      },
+      {
+        "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-next-20260909\\development-ab.json",
+        "sha256": "67db37945bc008b3613b95a200db70b4ca9cd875e965c96e9f9ea08b93211993",
+        "rows": 12,
+        "additionalDistinctBoards": 0
+      },
+      {
+        "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-next-20260909\\development-deletion-first.json",
+        "sha256": "8f9d3e226e5853b3e2fa2939bf53fbfdb4ddb14413b148d2df803c533bb71dfa",
+        "rows": 12,
+        "additionalDistinctBoards": 0
+      },
+      {
+        "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-next-20260909\\development-early128.json",
+        "sha256": "e4436eb33e028823348a2ea0aedfd924e8d9683c28b00a21378be1cae27fae76",
+        "rows": 12,
+        "additionalDistinctBoards": 0
+      },
+      {
+        "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-next-20260909\\development-early96.json",
+        "sha256": "e7b375de400b8ddc5585fafaff3d2518594f027d300454ad60bffeda1c712d9b",
+        "rows": 12,
+        "additionalDistinctBoards": 0
+      },
+      {
+        "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-next-20260909\\development-final.json",
+        "sha256": "0bba07cfdd8020de986e82e34f024885f094330ed0962a02146923f31d7ad692",
+        "rows": 12,
+        "additionalDistinctBoards": 0
+      },
+      {
+        "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-next-20260909\\holdout-ab.json",
+        "sha256": "123176fce117e1e8753a6adcbaaf0327b0a4dc41374658bb99d0d4fc27001d27",
+        "rows": 30,
+        "additionalDistinctBoards": 30
+      },
+      {
+        "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-next-20260909\\holdout-final.json",
+        "sha256": "688086470675424805289c09b36c4510540141ae0430d335b67266744a8eb304",
+        "rows": 30,
+        "additionalDistinctBoards": 30
+      },
+      {
+        "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-next-20260909\\oracle-comparison.json",
+        "sha256": "e01b26bbb8a443aee074ecf6d9d675748f942471104fc2472658dd925df714aa",
+        "rows": 18,
+        "additionalDistinctBoards": 0
+      },
+      {
+        "path": "D:\\桌面\\code\\ComboAuto\\reports\\solver-next-20260909\\reference-differential.json",
+        "sha256": "a4cf76ddd6bae98b038b5da75a30e746bb19390e157440adc90cf20c80c87f99",
+        "rows": 500,
+        "additionalDistinctBoards": 0
+      }
+    ],
+    "distinctExcludedBoards": 4738,
+    "overlaps": 0,
+    "generatedDuplicateBoards": 0
+  },
+  "independentBoards": 12,
+  "seed": 539364303,
+  "repeats": 3,
+  "budgetMs": 160,
+  "status": "PREPARED_NOT_BENCHMARKED",
+  "trials": []
+}

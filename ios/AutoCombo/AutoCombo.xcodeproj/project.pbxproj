@@ -1,0 +1,136 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* AutoComboApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* AutoComboApp.swift */; };
+		A10000000000000000000002 /* AutoComboViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* AutoComboViewModel.swift */; };
+		A10000000000000000000003 /* Orb.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* Orb.swift */; };
+		A10000000000000000000004 /* BoardEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* BoardEngine.swift */; };
+		A10000000000000000000005 /* SolverEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* SolverEngine.swift */; };
+		A10000000000000000000006 /* BoardImageRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* BoardImageRecognizer.swift */; };
+		A10000000000000000000007 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* NetworkMonitor.swift */; };
+		A10000000000000000000008 /* PersistenceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* PersistenceStore.swift */; };
+		A10000000000000000000009 /* ReplayExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* ReplayExporter.swift */; };
+		A10000000000000000000010 /* AppText.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* AppText.swift */; };
+		A10000000000000000000011 /* BoardEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* BoardEditorView.swift */; };
+		A10000000000000000000012 /* BoardImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* BoardImportView.swift */; };
+		A10000000000000000000013 /* BoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* BoardView.swift */; };
+		A10000000000000000000014 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* ContentView.swift */; };
+		A10000000000000000000015 /* FeedbackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* FeedbackView.swift */; };
+		A10000000000000000000016 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* SettingsView.swift */; };
+		A10000000000000000000017 /* TemplatesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* TemplatesView.swift */; };
+		A10000000000000000000018 /* water.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* water.png */; };
+		A10000000000000000000019 /* fire.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* fire.png */; };
+		A10000000000000000000020 /* earth.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023 /* earth.png */; };
+		A10000000000000000000021 /* light.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000024 /* light.png */; };
+		A10000000000000000000022 /* dark.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000025 /* dark.png */; };
+		A10000000000000000000023 /* heart.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000026 /* heart.png */; };
+		A10000000000000000000024 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000027 /* PrivacyInfo.xcprivacy */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* AutoComboApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoComboApp.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* AutoComboViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoComboViewModel.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 /* Orb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Orb.swift; sourceTree = "<group>"; };
+		A20000000000000000000004 /* BoardEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000005 /* SolverEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SolverEngine.swift; sourceTree = "<group>"; };
+		A20000000000000000000006 /* BoardImageRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardImageRecognizer.swift; sourceTree = "<group>"; };
+		A20000000000000000000007 /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
+		A20000000000000000000008 /* PersistenceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceStore.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* ReplayExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplayExporter.swift; sourceTree = "<group>"; };
+		A20000000000000000000010 /* AppText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppText.swift; sourceTree = "<group>"; };
+		A20000000000000000000011 /* BoardEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardEditorView.swift; sourceTree = "<group>"; };
+		A20000000000000000000012 /* BoardImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardImportView.swift; sourceTree = "<group>"; };
+		A20000000000000000000013 /* BoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardView.swift; sourceTree = "<group>"; };
+		A20000000000000000000014 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A20000000000000000000015 /* FeedbackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackView.swift; sourceTree = "<group>"; };
+		A20000000000000000000016 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A20000000000000000000017 /* TemplatesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemplatesView.swift; sourceTree = "<group>"; };
+		A20000000000000000000018 /* AutoCombo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AutoCombo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000019 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A20000000000000000000021 /* water.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = water.png; sourceTree = "<group>"; };
+		A20000000000000000000022 /* fire.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = fire.png; sourceTree = "<group>"; };
+		A20000000000000000000023 /* earth.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = earth.png; sourceTree = "<group>"; };
+		A20000000000000000000024 /* light.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = light.png; sourceTree = "<group>"; };
+		A20000000000000000000025 /* dark.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = dark.png; sourceTree = "<group>"; };
+		A20000000000000000000026 /* heart.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = heart.png; sourceTree = "<group>"; };
+		A20000000000000000000027 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A30000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A40000000000000000000001 = {isa = PBXGroup; children = (A40000000000000000000002, A40000000000000000000008); sourceTree = "<group>"; };
+		A40000000000000000000002 /* AutoCombo */ = {isa = PBXGroup; children = (A20000000000000000000001, A20000000000000000000002, A20000000000000000000019, A40000000000000000000003, A40000000000000000000004, A40000000000000000000005, A40000000000000000000006, A40000000000000000000007); path = AutoCombo; sourceTree = "<group>"; };
+		A40000000000000000000003 /* Models */ = {isa = PBXGroup; children = (A20000000000000000000003); path = Models; sourceTree = "<group>"; };
+		A40000000000000000000004 /* Core */ = {isa = PBXGroup; children = (A20000000000000000000004, A20000000000000000000005); path = Core; sourceTree = "<group>"; };
+		A40000000000000000000005 /* Services */ = {isa = PBXGroup; children = (A20000000000000000000006, A20000000000000000000007, A20000000000000000000008, A20000000000000000000009); path = Services; sourceTree = "<group>"; };
+		A40000000000000000000006 /* Views */ = {isa = PBXGroup; children = (A20000000000000000000010, A20000000000000000000011, A20000000000000000000012, A20000000000000000000013, A20000000000000000000014, A20000000000000000000015, A20000000000000000000016, A20000000000000000000017); path = Views; sourceTree = "<group>"; };
+		A40000000000000000000007 /* Resources */ = {isa = PBXGroup; children = (A20000000000000000000021, A20000000000000000000022, A20000000000000000000023, A20000000000000000000024, A20000000000000000000025, A20000000000000000000026, A20000000000000000000027); path = Resources; sourceTree = "<group>"; };
+		A40000000000000000000008 /* Products */ = {isa = PBXGroup; children = (A20000000000000000000018); name = Products; sourceTree = "<group>"; };
+		A40000000000000000000009 = {isa = PBXGroup; children = (A40000000000000000000003); path = Models; sourceTree = "<group>"; };
+		A40000000000000000000010 = {isa = PBXGroup; children = (A40000000000000000000004); path = Core; sourceTree = "<group>"; };
+		A40000000000000000000011 = {isa = PBXGroup; children = (A40000000000000000000005); path = Services; sourceTree = "<group>"; };
+		A40000000000000000000012 = {isa = PBXGroup; children = (A40000000000000000000006); path = Views; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A50000000000000000000001 /* AutoCombo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A60000000000000000000002 /* Build configuration list for PBXNativeTarget "AutoCombo" */;
+			buildPhases = (A30000000000000000000002, A30000000000000000000001, A30000000000000000000003);
+			buildRules = ();
+			dependencies = ();
+			name = AutoCombo;
+			productName = AutoCombo;
+			productReference = A20000000000000000000018 /* AutoCombo.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A70000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = { LastUpgradeCheck = 1600; ORGANIZATIONNAME = ComboAuto; TargetAttributes = { A50000000000000000000001 = { CreatedOnToolsVersion = 16.0; }; }; };
+			buildConfigurationList = A60000000000000000000001 /* Build configuration list for PBXProject "AutoCombo" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base);
+			mainGroup = A40000000000000000000001;
+			productRefGroup = A40000000000000000000008 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (A50000000000000000000001 /* AutoCombo */);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A30000000000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000018, A10000000000000000000019, A10000000000000000000020, A10000000000000000000021, A10000000000000000000022, A10000000000000000000023, A10000000000000000000024); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A30000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, A10000000000000000000002, A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, A10000000000000000000006, A10000000000000000000007, A10000000000000000000008, A10000000000000000000009, A10000000000000000000010, A10000000000000000000011, A10000000000000000000012, A10000000000000000000013, A10000000000000000000014, A10000000000000000000015, A10000000000000000000016, A10000000000000000000017); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A80000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; INFOPLIST_FILE = AutoCombo/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.comboauto.ios; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.9; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
+		A80000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; INFOPLIST_FILE = AutoCombo/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.comboauto.ios; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.9; SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule"; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
+		A80000000000000000000003 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; INFOPLIST_FILE = AutoCombo/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.comboauto.ios; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.9; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
+		A80000000000000000000004 /* Release */ = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; DEVELOPMENT_TEAM = ""; INFOPLIST_FILE = AutoCombo/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.comboauto.ios; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.9; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A60000000000000000000001 /* Build configuration list for PBXProject "AutoCombo" */ = {isa = XCConfigurationList; buildConfigurations = (A80000000000000000000001, A80000000000000000000002); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A60000000000000000000002 /* Build configuration list for PBXNativeTarget "AutoCombo" */ = {isa = XCConfigurationList; buildConfigurations = (A80000000000000000000003, A80000000000000000000004); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = A70000000000000000000001 /* Project object */;
+}

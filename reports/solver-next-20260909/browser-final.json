@@ -1,0 +1,112 @@
+{
+  "recordedAt": {
+    "current_time": "2026-09-09 12:37:03 UTC"
+  },
+  "sourceSha256": "9326b1bc2472004edefd81afad2d8bc03cdcd19477c521ffa026ac00fc9b85e2",
+  "bundle": "dist/assets/index-Be_cmFID.js",
+  "environment": {
+    "cpu": "Intel Core i5-9300H",
+    "browser": "Codex in-app browser; exact engine version not captured",
+    "url": "http://127.0.0.1:4173/AutoCombo/?round=2-final",
+    "production": true,
+    "visibleTab": true
+  },
+  "method": "Sequential real UI clicks; one first-page solve and six random-board solves. No simultaneous core benchmark. Read rendered data-solver-runtime-ms, delivered-ms, ready-ms attributes.",
+  "definitions": {
+    "core": "beamSolve entry to result",
+    "delivered": "solve request to caller receiving result",
+    "ready": "solve request to result DOM committed in useLayoutEffect"
+  },
+  "rows": [
+    {
+      "sample": "first",
+      "diagonal": true,
+      "skyfall": true,
+      "core": 126.40000003576279,
+      "delivered": 142.39999997615814,
+      "ready": 148.89999997615814
+    },
+    {
+      "sample": "warm-1",
+      "diagonal": true,
+      "skyfall": true,
+      "core": 131.4000000357628,
+      "delivered": 142.19999998807907,
+      "ready": 147.19999998807907
+    },
+    {
+      "sample": "warm-2",
+      "diagonal": true,
+      "skyfall": true,
+      "core": 130.9000000357628,
+      "delivered": 140.5,
+      "ready": 145.19999998807907
+    },
+    {
+      "sample": "no-diagonal-1",
+      "diagonal": false,
+      "skyfall": true,
+      "core": 130.5,
+      "delivered": 142.19999998807907,
+      "ready": 151.69999998807907
+    },
+    {
+      "sample": "no-diagonal-2",
+      "diagonal": false,
+      "skyfall": true,
+      "core": 127.40000003576279,
+      "delivered": 138,
+      "ready": 143.19999998807907
+    },
+    {
+      "sample": "no-skyfall-1",
+      "diagonal": false,
+      "skyfall": false,
+      "core": 120.29999995231628,
+      "delivered": 132,
+      "ready": 136
+    },
+    {
+      "sample": "no-skyfall-2",
+      "diagonal": false,
+      "skyfall": false,
+      "core": 117.80000001192093,
+      "delivered": 129.39999997615814,
+      "ready": 132.69999998807907
+    }
+  ],
+  "metrics": {
+    "core": {
+      "n": 7,
+      "min": 117.80000001192093,
+      "p50": 127.40000003576279,
+      "max": 131.4000000357628,
+      "over160": 0
+    },
+    "delivered": {
+      "n": 7,
+      "min": 129.39999997615814,
+      "p50": 140.5,
+      "max": 142.39999997615814,
+      "over160": 0
+    },
+    "ready": {
+      "n": 7,
+      "min": 132.69999998807907,
+      "p50": 145.19999998807907,
+      "max": 151.69999998807907,
+      "over160": 0
+    }
+  },
+  "verified": [
+    "Actual loaded bundle path read from document.scripts.",
+    "Diagonal and skyfall toggles operate; no-skyfall results show N+0.",
+    "Partial result status explicit; distinct groups shown without filling fake results."
+  ],
+  "limitations": [
+    "Seven non-seeded random UI boards are a smoke test, not a replayable controlled benchmark or p99 guarantee.",
+    "DOM commit is not physical screen paint.",
+    "Do not compare these random UI samples directly to previous-version random UI samples.",
+    "No cross-device or background-tab guarantee."
+  ]
+}

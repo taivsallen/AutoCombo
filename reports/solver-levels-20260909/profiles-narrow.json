@@ -1,0 +1,52 @@
+[
+  {
+    "level": 1,
+    "label": "極速",
+    "timeBudgetMs": 160,
+    "beamWidth": 64,
+    "maxNodes": 50000,
+    "repairReserveMs": 32,
+    "finalReserveMs": 18,
+    "repairMaxAttempts": 128
+  },
+  {
+    "level": 2,
+    "label": "輕量",
+    "timeBudgetMs": 400,
+    "beamWidth": 64,
+    "maxNodes": 90000,
+    "repairReserveMs": 64,
+    "finalReserveMs": 20,
+    "repairMaxAttempts": 256
+  },
+  {
+    "level": 3,
+    "label": "平衡",
+    "timeBudgetMs": 800,
+    "beamWidth": 64,
+    "maxNodes": 145000,
+    "repairReserveMs": 120,
+    "finalReserveMs": 24,
+    "repairMaxAttempts": 512
+  },
+  {
+    "level": 4,
+    "label": "高精",
+    "timeBudgetMs": 1600,
+    "beamWidth": 64,
+    "maxNodes": 240000,
+    "repairReserveMs": 220,
+    "finalReserveMs": 32,
+    "repairMaxAttempts": 768
+  },
+  {
+    "level": 5,
+    "label": "極限",
+    "timeBudgetMs": 3200,
+    "beamWidth": 64,
+    "maxNodes": 400000,
+    "repairReserveMs": 400,
+    "finalReserveMs": 40,
+    "repairMaxAttempts": 1024
+  }
+]
